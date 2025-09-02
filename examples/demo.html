@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GameWork Framework Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            max-width: 300px;
+            margin: 20px auto;
+        }
+        
+        .cell {
+            width: 80px;
+            height: 80px;
+            border: 2px solid #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2em;
+            font-weight: bold;
+            cursor: pointer;
+            background: white;
+            transition: background-color 0.2s;
+        }
+        
+        .cell:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .cell.x { color: #e74c3c; }
+        .cell.o { color: #3498db; }
+        
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 16px;
+        }
+        
+        button:hover {
+            background: #2980b9;
+        }
+        
+        button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            text-align: center;
+            font-size: 18px;
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 5px;
+            background: #ecf0f1;
+        }
+        
+        .player-list {
+            margin: 20px 0;
+        }
+        
+        .player-item {
+            padding: 5px 10px;
+            margin: 2px 0;
+            background: #ecf0f1;
+            border-radius: 3px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .host { background: #e8f5e8; }
+        .connected { color: #27ae60; }
+        .disconnected { color: #e74c3c; }
+        
+        .qr-code {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .qr-code img {
+            max-width: 200px;
+            border: 1px solid #ddd;
+        }
+        
+        .room-info {
+            background: #e8f5e8;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .room-code {
+            font-size: 24px;
+            font-weight: bold;
+            color: #27ae60;
+            font-family: monospace;
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎮 GameWork Framework Demo</h1>
+    
+    <div class="container">
+        <h2>Room Information</h2>
+        <div class="room-info">
+            <div>Room Code:</div>
+            <div class="room-code" id="roomCode">ABC123</div>
+            <div>Share this code with players to join!</div>
+        </div>
+        
+        <div class="qr-code">
+            <h3>QR Code for Easy Joining</h3>
+            <div id="qrCodeContainer">
+                <p>QR Code will appear here</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>Game Board</h2>
+        <div class="game-board" id="gameBoard">
+            <div class="cell" data-index="0"></div>
+            <div class="cell" data-index="1"></div>
+            <div class="cell" data-index="2"></div>
+            <div class="cell" data-index="3"></div>
+            <div class="cell" data-index="4"></div>
+            <div class="cell" data-index="5"></div>
+            <div class="cell" data-index="6"></div>
+            <div class="cell" data-index="7"></div>
+            <div class="cell" data-index="8"></div>
+        </div>
+        
+        <div class="status" id="gameStatus">
+            Waiting for players to join...
+        </div>
+        
+        <div class="controls">
+            <button id="startGame" disabled>Start Game</button>
+            <button id="resetGame" disabled>Reset Game</button>
+            <button id="exportState" disabled>Export State</button>
+            <button id="importState" disabled>Import State</button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>Players</h2>
+        <div class="player-list" id="playerList">
+            <div class="player-item host">
+                <span>Host (You)</span>
+                <span class="connected">Connected</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>Game Log</h2>
+        <div id="gameLog" style="max-height: 200px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 5px;">
+            <div>Game initialized...</div>
+        </div>
+    </div>
+
+    <script type="module">
+        // This is a demo that would work with the compiled framework
+        // In a real implementation, you would import from the compiled dist folder
+        
+        console.log('GameWork Framework Demo');
+        console.log('This demo shows the UI structure for the framework');
+        console.log('To see it in action, compile the TypeScript and import the actual classes');
+        
+        // Demo functionality
+        const gameBoard = document.getElementById('gameBoard');
+        const gameStatus = document.getElementById('gameStatus');
+        const playerList = document.getElementById('playerList');
+        const gameLog = document.getElementById('gameLog');
+        const startGame = document.getElementById('startGame');
+        const resetGame = document.getElementById('resetGame');
+        const exportState = document.getElementById('exportState');
+        const importState = document.getElementById('importState');
+        
+        // Simulate game state
+        let currentPlayer = 'X';
+        let gameState = Array(9).fill(null);
+        let gameActive = false;
+        
+        // Add click handlers to cells
+        gameBoard.addEventListener('click', (e) => {
+            if (!gameActive) return;
+            
+            const cell = e.target.closest('.cell');
+            if (!cell) return;
+            
+            const index = parseInt(cell.dataset.index);
+            if (gameState[index] !== null) return;
+            
+            // Make move
+            gameState[index] = currentPlayer;
+            cell.textContent = currentPlayer;
+            cell.classList.add(currentPlayer.toLowerCase());
+            
+            // Check for winner
+            if (checkWinner(gameState)) {
+                gameStatus.textContent = `Player ${currentPlayer} wins!`;
+                gameActive = false;
+                logGame(`Player ${currentPlayer} wins the game!`);
+                return;
+            }
+            
+            // Check for draw
+            if (gameState.every(cell => cell !== null)) {
+                gameStatus.textContent = "It's a draw!";
+                gameActive = false;
+                logGame("Game ended in a draw!");
+                return;
+            }
+            
+            // Switch players
+            currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+            gameStatus.textContent = `Player ${currentPlayer}'s turn`;
+            logGame(`Player ${currentPlayer} made a move at position ${index}`);
+        });
+        
+        // Button handlers
+        startGame.addEventListener('click', () => {
+            gameActive = true;
+            gameStatus.textContent = `Player ${currentPlayer}'s turn`;
+            startGame.disabled = true;
+            logGame('Game started!');
+        });
+        
+        resetGame.addEventListener('click', () => {
+            gameState = Array(9).fill(null);
+            currentPlayer = 'X';
+            gameActive = false;
+            
+            // Clear board
+            document.querySelectorAll('.cell').forEach(cell => {
+                cell.textContent = '';
+                cell.classList.remove('x', 'o');
+            });
+            
+            gameStatus.textContent = 'Game reset. Click Start Game to begin.';
+            startGame.disabled = false;
+            logGame('Game reset');
+        });
+        
+        exportState.addEventListener('click', () => {
+            const state = {
+                board: gameState,
+                currentPlayer,
+                gameActive
+            };
+            const stateStr = JSON.stringify(state, null, 2);
+            navigator.clipboard.writeText(stateStr);
+            logGame('Game state exported to clipboard');
+        });
+        
+        importState.addEventListener('click', () => {
+            const stateStr = prompt('Paste the exported game state:');
+            if (stateStr) {
+                try {
+                    const state = JSON.parse(stateStr);
+                    gameState = state.board;
+                    currentPlayer = state.currentPlayer;
+                    gameActive = state.gameActive;
+                    
+                    // Update board
+                    document.querySelectorAll('.cell').forEach((cell, index) => {
+                        cell.textContent = gameState[index] || '';
+                        cell.classList.remove('x', 'o');
+                        if (gameState[index]) {
+                            cell.classList.add(gameState[index].toLowerCase());
+                        }
+                    });
+                    
+                    gameStatus.textContent = gameActive ? 
+                        `Player ${currentPlayer}'s turn` : 
+                        'Game loaded. Click Start Game to continue.';
+                    
+                    startGame.disabled = gameActive;
+                    logGame('Game state imported');
+                } catch (error) {
+                    logGame('Failed to import game state: Invalid format');
+                }
+            }
+        });
+        
+        // Helper functions
+        function checkWinner(board) {
+            const lines = [
+                [0, 1, 2], [3, 4, 5], [6, 7, 8], // rows
+                [0, 3, 6], [1, 4, 7], [2, 5, 8], // columns
+                [0, 4, 8], [2, 4, 6] // diagonals
+            ];
+            
+            for (const [a, b, c] of lines) {
+                if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+                    return board[a];
+                }
+            }
+            return null;
+        }
+        
+        function logGame(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            gameLog.appendChild(logEntry);
+            gameLog.scrollTop = gameLog.scrollHeight;
+        }
+        
+        // Initialize demo
+        logGame('Demo initialized - this shows the UI structure');
+        logGame('In a real implementation, this would connect to the GameWork framework');
+        
+        // Enable buttons
+        resetGame.disabled = false;
+        exportState.disabled = false;
+        importState.disabled = false;
+    </script>
+</body>
+</html>
+
