@@ -1,0 +1,228 @@
+# GameWork Framework Components
+
+## Core Architecture
+
+The GameWork framework is built with a modular, host-authoritative architecture designed for minimal operational cost and maximum reusability.
+
+## Component Overview
+
+### 1. Core Game Engine (`src/core/GameEngine.ts`)
+**Purpose**: Manages game state and applies moves using a reducer pattern.
+
+**Key Features**:
+- State management with version control
+- Move validation and application
+- Game over detection
+- State export/import for persistence
+- Move history tracking
+
+**Key Methods**:
+- `applyMove(move: GameMove): GameState | null`
+- `getCurrentState(): GameState`
+- `isGameOver(): boolean`
+- `exportState(): string`
+- `importState(exportedState: string): boolean`
+
+### 2. WebRTC Manager (`src/networking/WebRTCManager.ts`)
+**Purpose**: Handles peer-to-peer connections and data channel communication.
+
+**Key Features**:
+- WebRTC connection management
+- Data channel setup and handling
+- Message broadcasting
+- Connection state monitoring
+- ICE candidate handling
+
+**Key Methods**:
+- `createOffer(peerId: string): Promise<RTCSessionDescriptionInit>`
+- `handleAnswer(peerId: string, answer: RTCSessionDescriptionInit): Promise<void>`
+- `sendMessage(peerId: string, message: any): boolean`
+- `broadcastMessage(message: any, excludePeerId?: string): void`
+
+### 3. Signaling Service (`src/networking/SignalingService.ts`)
+**Purpose**: Facilitates peer discovery and initial connection setup.
+
+**Implementations**:
+- `InMemorySignalingService`: For development and testing
+- `FirebaseSignalingService`: For production use (placeholder)
+
+**Key Methods**:
+- `connect(): Promise<void>`
+- `joinRoom(roomId: string, playerId: string): Promise<void>`
+- `sendMessage(message: SignalingMessage): Promise<void>`
+- `onMessage(callback: (message: SignalingMessage) => void): void`
+
+### 4. Game Host (`src/host/GameHost.ts`)
+**Purpose**: Orchestrates game sessions and manages player connections.
+
+**Key Features**:
+- Game session management
+- Player connection handling
+- State synchronization
+- Event-driven architecture
+- Room management
+
+**Key Methods**:
+- `start(): Promise<void>`
+- `stop(): Promise<void>`
+- `applyMove(move: GameMove): boolean`
+- `getPlayers(): Player[]`
+- `exportGameState(): string`
+
+### 5. Game Client (`src/client/GameClient.ts`)
+**Purpose**: Allows players to connect to hosts and participate in games.
+
+**Key Features**:
+- Host connection management
+- Move sending and state receiving
+- Reconnection handling
+- State synchronization
+- Error handling
+
+**Key Methods**:
+- `connect(): Promise<void>`
+- `disconnect(): Promise<void>`
+- `sendMove(moveType: string, moveData: any): boolean`
+- `requestResync(): void`
+- `getCurrentState(): GameState | undefined`
+
+### 6. Utilities (`src/utils/index.ts`)
+**Purpose**: Provides helper functions for common operations.
+
+**Key Functions**:
+- `generateRoomId(length?: number): string`
+- `generateQRCode(roomId: string, baseUrl?: string): Promise<string>`
+- `generateQRCodeSVG(roomId: string, baseUrl?: string): Promise<string>`
+- `isValidRoomId(roomId: string): boolean`
+- `formatRoomId(roomId: string): string`
+
+## Type System
+
+### Core Types (`src/types/index.ts`)
+
+**GameState**: Base interface for all game states
+```typescript
+interface GameState {
+  version: number;
+  timestamp: number;
+  [key: string]: any;
+}
+```
+
+**GameMove**: Represents a player action
+```typescript
+interface GameMove {
+  type: string;
+  playerId: string;
+  timestamp: number;
+  data: any;
+}
+```
+
+**GameRules**: Defines game logic
+```typescript
+interface GameRules {
+  applyMove: (state: GameState, move: GameMove) => GameState;
+  isValidMove: (state: GameState, move: GameMove) => boolean;
+  isGameOver: (state: GameState) => boolean;
+  getWinner?: (state: GameState) => string | null;
+}
+```
+
+**Player**: Represents a connected player
+```typescript
+interface Player {
+  id: string;
+  name: string;
+  isHost: boolean;
+  isConnected: boolean;
+  lastSeen: number;
+}
+```
+
+## Message Protocol
+
+### Game Messages
+- **Join**: Player connects and receives current state
+- **Input**: Player sends action/move to host
+- **State**: Host broadcasts updated game state
+- **Resync**: Client requests fresh state snapshot
+- **Player Join/Leave**: Player connection events
+- **Error**: Error messages and handling
+
+### Signaling Messages
+- **Offer**: WebRTC offer for connection
+- **Answer**: WebRTC answer for connection
+- **ICE Candidate**: Network connectivity information
+- **Room Info**: Room metadata and player list
+- **Join Request**: Request to join a room
+
+## Configuration
+
+### Host Configuration
+```typescript
+interface HostConfig {
+  roomId: string;
+  roomName: string;
+  gameConfig: GameConfig;
+  stunServers?: RTCIceServer[];
+  enableWakeLock?: boolean;
+  enablePWA?: boolean;
+}
+```
+
+### Client Configuration
+```typescript
+interface ClientConfig {
+  roomId: string;
+  playerName: string;
+  stunServers?: RTCIceServer[];
+}
+```
+
+## Architecture Benefits
+
+1. **Modularity**: Each component has a single responsibility
+2. **Extensibility**: Easy to add new signaling services or game types
+3. **Type Safety**: Full TypeScript support with comprehensive interfaces
+4. **Testability**: Components can be tested in isolation
+5. **Reusability**: Framework can be used for any board game
+6. **Performance**: Direct peer-to-peer communication minimizes latency
+7. **Cost-Effective**: Serverless architecture reduces operational costs
+
+## Usage Patterns
+
+### Creating a New Game
+1. Define game state interface extending `GameState`
+2. Implement `GameRules` with game logic
+3. Create `GameConfig` with initial state and rules
+4. Use `GameHost` and `GameClient` classes
+5. Implement UI rendering logic
+
+### Host Setup
+```typescript
+const host = new GameHost({
+  roomId: 'ABC123',
+  roomName: 'My Game Room',
+  gameConfig: myGameConfig
+});
+await host.start();
+```
+
+### Client Setup
+```typescript
+const client = new GameClient({
+  roomId: 'ABC123',
+  playerName: 'Player 1'
+});
+await client.connect();
+```
+
+## Future Extensions
+
+- Host migration support
+- Cloud persistence for replays
+- Advanced game templates
+- Mobile-optimized UI components
+- Analytics and logging
+- Tournament support

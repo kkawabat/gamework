@@ -9,22 +9,25 @@ interface TestGameState extends GameState {
 
 // Simple test game rules
 const testGameRules: GameRules = {
-  applyMove: (state: TestGameState, move: GameMove): TestGameState => {
+  applyMove: (state: GameState, move: GameMove): GameState => {
+    const testState = state as TestGameState;
     return {
-      ...state,
-      counter: state.counter + 1,
+      ...testState,
+      counter: testState.counter + 1,
       lastMove: move.type,
-      version: state.version + 1,
+      version: testState.version + 1,
       timestamp: Date.now()
     };
   },
   
-  isValidMove: (state: TestGameState, move: GameMove): boolean => {
-    return move.type === 'increment' && state.counter < 10;
+  isValidMove: (state: GameState, move: GameMove): boolean => {
+    const testState = state as TestGameState;
+    return move.type === 'increment' && testState.counter < 10;
   },
   
-  isGameOver: (state: TestGameState): boolean => {
-    return state.counter >= 10;
+  isGameOver: (state: GameState): boolean => {
+    const testState = state as TestGameState;
+    return testState.counter >= 10;
   }
 };
 
@@ -62,14 +65,17 @@ describe('GameEngine', () => {
   });
 
   test('should reject invalid moves', () => {
-    // Set counter to 10 to make moves invalid
-    engine.applyMove({
-      type: 'increment',
-      playerId: 'player1',
-      timestamp: Date.now(),
-      data: {}
-    });
+    // Apply 10 moves to reach the limit
+    for (let i = 0; i < 10; i++) {
+      engine.applyMove({
+        type: 'increment',
+        playerId: 'player1',
+        timestamp: Date.now(),
+        data: {}
+      });
+    }
 
+    // Now try to make another move (should be invalid)
     const invalidMove: GameMove = {
       type: 'increment',
       playerId: 'player1',

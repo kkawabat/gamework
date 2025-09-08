@@ -1,0 +1,114 @@
+name: Deploy Demo to GitHub Pages
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build framework
+      run: npm run build
+      
+    - name: Prepare demo files
+      run: |
+        # Create a directory for the demo
+        mkdir -p demo-build
+        
+        # Copy the demo HTML file
+        cp examples/demo.html demo-build/index.html
+        
+        # Copy the built framework files
+        cp -r dist demo-build/
+        
+        # Create a simple package.json for the demo
+        cat > demo-build/package.json << EOF
+        {
+          "name": "gamework-demo",
+          "version": "1.0.0",
+          "description": "GameWork Framework Demo",
+          "main": "index.html",
+          "scripts": {
+            "start": "python3 -m http.server 8000"
+          }
+        }
+        EOF
+        
+        # Create a README for the demo
+        cat > demo-build/README.md << EOF
+        # GameWork Framework Demo
+        
+        This is a live demo of the GameWork Framework.
+        
+        ## How to use
+        
+        1. Open \`index.html\` in your browser
+        2. The demo shows a Tic-Tac-Toe game interface
+        3. This demonstrates the UI structure for the framework
+        
+        ## Framework Files
+        
+        The compiled framework is available in the \`dist/\` directory.
+        
+        ## Live Demo
+        
+        This demo is automatically deployed to GitHub Pages when changes are pushed to the main branch.
+        EOF
+        
+    - name: Upload demo artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: demo-files
+        path: demo-build/
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+    - name: Download demo artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: demo-files
+        path: demo-build/
+        
+    - name: Setup Pages
+      uses: actions/configure-pages@v4
+      
+    - name: Upload to Pages
+      uses: actions/upload-pages-artifact@v2
+      with:
+        path: demo-build/
+        
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v3

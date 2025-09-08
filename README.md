@@ -263,13 +263,18 @@ The framework handles state synchronization automatically:
 - **Cloudflare Workers**: Very low cost, good performance
 - **Custom Server**: Full control over signaling logic
 
-## 📝 Examples
+## 📝 Examples & Documentation
 
 See the `examples/` directory for:
 
 - **Tic-Tac-Toe**: Complete game implementation
 - **Demo HTML**: UI demonstration
 - **Integration Examples**: How to use the framework
+
+See the `docs/` directory for:
+
+- **Framework Components**: Detailed component documentation
+- **Original Requirements**: Project specifications and requirements
 
 ## 🧪 Testing
 

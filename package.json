@@ -12,26 +12,31 @@
     "lint": "eslint src/**/*.ts",
     "clean": "rm -rf dist"
   },
-  "keywords": ["board-games", "webrtc", "p2p", "game-framework"],
+  "keywords": [
+    "board-games",
+    "webrtc",
+    "p2p",
+    "game-framework"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@types/jest": "^29.0.0",
     "@types/node": "^20.0.0",
+    "@types/uuid": "^10.0.0",
     "@types/webrtc": "^0.0.40",
-    "typescript": "^5.0.0",
-    "eslint": "^8.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
     "jest": "^29.0.0",
-    "@types/jest": "^29.0.0",
-    "ts-jest": "^29.0.0"
+    "ts-jest": "^29.0.0",
+    "typescript": "^5.0.0"
   },
   "dependencies": {
-    "uuid": "^9.0.0",
-    "qrcode": "^1.5.0"
+    "qrcode": "^1.5.0",
+    "uuid": "^9.0.0"
   },
   "peerDependencies": {
     "webrtc-adapter": "^8.0.0"
   }
 }
-
