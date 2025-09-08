@@ -111,7 +111,8 @@ export class GameClient {
       messageId: uuidv4()
     };
 
-    return this.webrtc.broadcastMessage(inputMessage);
+    this.webrtc.broadcastMessage(inputMessage);
+    return true;
   }
 
   requestResync(): void {

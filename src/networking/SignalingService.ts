@@ -87,9 +87,11 @@ export class InMemorySignalingService implements SignalingService {
       // If host leaves, assign new host
       if (room.hostId === playerId && room.players.size > 0) {
         const newHost = room.players.keys().next().value;
-        room.hostId = newHost;
-        const newHostPlayer = room.players.get(newHost)!;
-        newHostPlayer.isHost = true;
+        if (newHost) {
+          room.hostId = newHost;
+          const newHostPlayer = room.players.get(newHost)!;
+          newHostPlayer.isHost = true;
+        }
       }
 
       // Notify room update
