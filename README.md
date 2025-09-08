@@ -6,6 +6,16 @@ A general-purpose framework for online board games that runs with minimal operat
 
 GameWork is a serverless framework that enables real-time multiplayer board games using WebRTC DataChannels. The architecture is host-authoritative, where one device (typically an iPad) acts as the host and maintains the authoritative game state, while other devices act as controllers.
 
+## 🎮 Live Demo
+
+**Try the GameWork framework in action!**
+
+🚀 **[Play Tic-Tac-Toe Game](https://kkawabata.github.io/gamework/tic-tac-toe-build/)** - Complete multiplayer-ready Tic-Tac-Toe implementation
+
+🎯 **[Framework Demo](https://kkawabata.github.io/gamework/examples/demo.html)** - Basic framework demonstration
+
+*Note: The demos are automatically deployed to GitHub Pages when changes are pushed to the main branch.*
+
 ## 🏗️ Architecture
 
 ### Core Principles
