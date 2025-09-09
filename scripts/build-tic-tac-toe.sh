@@ -134,6 +134,10 @@ if [ -d "$BUILD_DIR/examples/examples" ]; then
     rmdir "$BUILD_DIR/examples/examples"
 fi
 
+# Fix TypeScript interface imports in HTML (interfaces don't exist at runtime)
+echo "🔧 Fixing TypeScript interface imports in HTML..."
+sed -i "s/import { ticTacToeConfig, TicTacToeState, TicTacToeMove }/import { ticTacToeConfig }/g" "$BUILD_DIR/index.html"
+
 # Create a package.json for the game
 cat > "$BUILD_DIR/package.json" << EOF
 {
