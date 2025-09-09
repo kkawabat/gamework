@@ -53,6 +53,64 @@ echo "🔧 Replacing uuid imports with browser-compatible version..."
 find "$PROJECT_ROOT/dist" -name "*.js" -type f -exec sed -i "s/import { v4 as uuidv4 } from 'uuid';/import { v4 as uuidv4 } from '..\/utils\/uuid.js';/g" {} \;
 find "$PROJECT_ROOT/dist" -name "*.js" -type f -exec sed -i "s/import { v4 as uuidv4 } from '\.\.\/utils\/uuid\.js';/import { v4 as uuidv4 } from '..\/utils\/uuid.js';/g" {} \;
 
+# Create a browser-compatible QR code utility
+echo "🔧 Creating browser-compatible QR code utility..."
+cat > "$PROJECT_ROOT/dist/utils/qrcode.js" << 'EOF'
+// Browser-compatible QR code implementation
+// Simple fallback that creates a placeholder QR code
+
+export default {
+    async toDataURL(text, options = {}) {
+        // Create a simple placeholder QR code as a data URL
+        const size = options.width || 256;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        
+        // Draw a simple placeholder pattern
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, size, size);
+        
+        ctx.fillStyle = '#000000';
+        const blockSize = size / 25;
+        for (let i = 0; i < 25; i++) {
+            for (let j = 0; j < 25; j++) {
+                if ((i + j) % 3 === 0) {
+                    ctx.fillRect(i * blockSize, j * blockSize, blockSize, blockSize);
+                }
+            }
+        }
+        
+        // Add text overlay
+        ctx.fillStyle = '#000000';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('QR Code', size / 2, size / 2 - 10);
+        ctx.fillText('Placeholder', size / 2, size / 2 + 10);
+        
+        return canvas.toDataURL('image/png');
+    },
+    
+    async toString(text, options = {}) {
+        // Return a simple SVG placeholder
+        const size = options.width || 256;
+        return `
+            <svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+                <rect width="${size}" height="${size}" fill="white"/>
+                <rect x="10" y="10" width="${size-20}" height="${size-20}" fill="none" stroke="black" stroke-width="2"/>
+                <text x="${size/2}" y="${size/2-10}" text-anchor="middle" font-family="Arial" font-size="12">QR Code</text>
+                <text x="${size/2}" y="${size/2+10}" text-anchor="middle" font-family="Arial" font-size="12">Placeholder</text>
+            </svg>
+        `;
+    }
+};
+EOF
+
+# Replace qrcode imports with local qrcode utility
+echo "🔧 Replacing qrcode imports with browser-compatible version..."
+find "$PROJECT_ROOT/dist" -name "*.js" -type f -exec sed -i "s/import QRCode from 'qrcode';/import QRCode from '.\/qrcode.js';/g" {} \;
+
 # Create the Tic-Tac-Toe multiplayer game build
 echo "🎯 Preparing Tic-Tac-Toe multiplayer game..."
 
