@@ -395,7 +395,9 @@
                 // Join room functionality
                 this.joinRoomInput = document.getElementById('joinRoomInput');
                 this.joinRoomBtn = document.getElementById('joinRoomBtn');
-                this.joinRoomBtn.addEventListener('click', () => this.joinExistingRoom());
+                if (this.joinRoomBtn) {
+                    this.joinRoomBtn.addEventListener('click', () => this.joinExistingRoom());
+                }
             }
 
             async initializeGame() {
@@ -495,19 +497,20 @@
                     const joinUrl = `${window.location.origin}${window.location.pathname}?room=${this.roomId}`;
                     const qrDataUrl = await generateQRCode(joinUrl);
                     
-                    const qrImg = document.createElement('img');
-                    qrImg.src = qrDataUrl;
-                    qrImg.alt = 'QR Code for joining game';
-                    qrImg.style.maxWidth = '200px';
-                    
-                    this.qrCodeContainer.innerHTML = '';
-                    this.qrCodeContainer.appendChild(qrImg);
+                    this.qrCodeContainer.innerHTML = `
+                        <img src="${qrDataUrl}" alt="QR Code for joining game" style="max-width: 200px; border: 1px solid #ddd; border-radius: 8px; display: block; margin: 0 auto;">
+                        <div style="text-align: center; margin-top: 10px;">
+                            <div style="font-size: 12px; color: #333; font-weight: bold;">Room: ${this.roomId}</div>
+                            <div style="font-size: 10px; color: #666; margin-top: 4px; word-break: break-all; max-width: 200px; margin-left: auto; margin-right: auto;">${joinUrl}</div>
+                        </div>
+                    `;
                     
                     this.log('QR code generated successfully', 'success');
                 } catch (error) {
                     this.log(`Failed to generate QR code: ${error.message}`, 'error');
                     
-                    // Fallback QR code display
+                    // Fallback QR code display with URL
+                    const joinUrl = `${window.location.origin}${window.location.pathname}?room=${this.roomId}`;
                     this.qrCodeContainer.innerHTML = `
                         <div style="width: 200px; height: 200px; border: 2px solid #ddd; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: #f8f9fa; margin: 0 auto;">
                             <div style="text-align: center;">
@@ -515,6 +518,10 @@
                                 <div style="font-size: 12px; color: #666;">QR Code</div>
                                 <div style="font-size: 10px; color: #999; margin-top: 5px;">${this.roomId}</div>
                             </div>
+                        </div>
+                        <div style="text-align: center; margin-top: 10px;">
+                            <div style="font-size: 12px; color: #333; font-weight: bold;">Room: ${this.roomId}</div>
+                            <div style="font-size: 10px; color: #666; margin-top: 4px; word-break: break-all; max-width: 200px; margin-left: auto; margin-right: auto;">${joinUrl}</div>
                         </div>
                     `;
                 }

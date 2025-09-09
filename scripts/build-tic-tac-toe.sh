@@ -149,6 +149,21 @@ sed -i '/<p>Share this code with players to join!<\/p>/a\
                     <button id="joinRoomBtn" style="padding: 8px 15px; margin: 5px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Join Room</button>\
                 </div>' "$BUILD_DIR/index.html"
 
+# Fix join button event handler
+echo "🔧 Fixing join button event handler..."
+sed -i 's/this\.joinRoomBtn\.addEventListener/if (this.joinRoomBtn) { this.joinRoomBtn.addEventListener/g' "$BUILD_DIR/index.html"
+sed -i 's/this\.joinRoomBtn\.addEventListener.*joinExistingRoom.*);/this.joinRoomBtn.addEventListener("click", () => this.joinExistingRoom()); }/g' "$BUILD_DIR/index.html"
+
+# Fix QR code to show actual URL
+echo "🔧 Fixing QR code to show actual URL..."
+sed -i 's/this\.qrCodeContainer\.innerHTML = "";/this.qrCodeContainer.innerHTML = `\
+                        <img src="${qrDataUrl}" alt="QR Code for joining game" style="max-width: 200px; border: 1px solid #ddd; border-radius: 8px; display: block; margin: 0 auto;">\
+                        <div style="text-align: center; margin-top: 10px;">\
+                            <div style="font-size: 12px; color: #333; font-weight: bold;">Room: ${this.roomId}<\/div>\
+                            <div style="font-size: 10px; color: #666; margin-top: 4px; word-break: break-all; max-width: 200px; margin-left: auto; margin-right: auto;">${joinUrl}<\/div>\
+                        <\/div>\
+                    `;/g' "$BUILD_DIR/index.html"
+
 # Create a package.json for the game
 cat > "$BUILD_DIR/package.json" << EOF
 {
