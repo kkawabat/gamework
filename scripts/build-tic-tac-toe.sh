@@ -35,6 +35,24 @@ find "$PROJECT_ROOT/dist" -name "*.js" -type f -exec sed -i "s/from '\.\.\/utils
 find "$PROJECT_ROOT/dist" -name "*.js" -type f -exec sed -i "s/from '\.\/types\.js'/from '.\/types\/index.js'/g" {} \;
 find "$PROJECT_ROOT/dist" -name "*.js" -type f -exec sed -i "s/from '\.\/utils\.js'/from '.\/utils\/index.js'/g" {} \;
 
+# Create a browser-compatible UUID utility
+echo "🔧 Creating browser-compatible UUID utility..."
+cat > "$PROJECT_ROOT/dist/utils/uuid.js" << 'EOF'
+// Browser-compatible UUID v4 implementation
+export function v4() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+EOF
+
+# Replace uuid imports with local uuid utility
+echo "🔧 Replacing uuid imports with browser-compatible version..."
+find "$PROJECT_ROOT/dist" -name "*.js" -type f -exec sed -i "s/import { v4 as uuidv4 } from 'uuid';/import { v4 as uuidv4 } from '..\/utils\/uuid.js';/g" {} \;
+find "$PROJECT_ROOT/dist" -name "*.js" -type f -exec sed -i "s/import { v4 as uuidv4 } from '\.\.\/utils\/uuid\.js';/import { v4 as uuidv4 } from '..\/utils\/uuid.js';/g" {} \;
+
 # Create the Tic-Tac-Toe multiplayer game build
 echo "🎯 Preparing Tic-Tac-Toe multiplayer game..."
 
