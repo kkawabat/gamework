@@ -1,0 +1,20 @@
+{
+  "name": "gamework-tic-tac-toe-multiplayer",
+  "version": "1.0.0",
+  "description": "Multiplayer Tic-Tac-Toe game built with GameWork framework",
+  "main": "index.html",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "serve": "npx serve ."
+  },
+  "keywords": [
+    "tic-tac-toe",
+    "multiplayer",
+    "gamework",
+    "webrtc",
+    "p2p"
+  ],
+  "author": "GameWork Framework",
+  "license": "MIT"
+}

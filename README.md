@@ -10,9 +10,9 @@ GameWork is a serverless framework that enables real-time multiplayer board game
 
 **Try the GameWork framework in action!**
 
-🚀 **[Play Tic-Tac-Toe Game](https://kkawabata.github.io/gamework/tic-tac-toe-build/)** - Complete multiplayer-ready Tic-Tac-Toe implementation
+🚀 **[Play Tic-Tac-Toe Game](https://kkawabata.github.io/gamework/)** - Complete Tic-Tac-Toe implementation with beautiful UI
 
-🎯 **[Framework Demo](https://kkawabata.github.io/gamework/examples/demo.html)** - Basic framework demonstration
+🎯 **[Framework Demo](https://kkawabata.github.io/gamework/)** - Interactive demo showing GameWork framework capabilities
 
 *Note: The demos are automatically deployed to GitHub Pages when changes are pushed to the main branch.*
 
