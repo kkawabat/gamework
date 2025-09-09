@@ -38,27 +38,32 @@ jobs:
         # Build the framework fresh with current TypeScript configuration
         npm run build
         echo "Framework built with ES6 modules"
-      
-    - name: Build Tic-Tac-Toe multiplayer game
-      run: |
-        # Run the Tic-Tac-Toe build script
-        chmod +x scripts/build-tic-tac-toe.sh
-        ./scripts/build-tic-tac-toe.sh
         
+    - name: Compile example files
+      run: |
+        # Compile TypeScript example files to JavaScript
+        npx tsc examples/simple-tic-tac-toe.ts --outDir examples --target es2020 --module es2020 --moduleResolution node
+        echo "Example files compiled to JavaScript"
+      
     - name: Prepare demo files
       run: |
         # Create a directory for the demo
         mkdir -p demo-build
         
-        # Copy the Tic-Tac-Toe game as the main demo
-        cp -r tic-tac-toe-build/* demo-build/
+        # Copy the entire project structure to match main branch
+        cp -r . demo-build/
         
-        # Also copy the original demo as a secondary demo
-        mkdir -p demo-build/demo
-        cp examples/demo.html demo-build/demo/index.html
+        # Remove unnecessary files from deployment
+        rm -rf demo-build/.git
+        rm -rf demo-build/node_modules
+        rm -rf demo-build/tic-tac-toe-build
+        rm -rf demo-build/.github
         
-        # The dist folder is already included in tic-tac-toe-build from the build script
-        # No need to copy it separately since it's already built fresh
+        # Copy the Tic-Tac-Toe game as the main index
+        cp examples/tic-tac-toe-multiplayer.html demo-build/index.html
+        
+        # Ensure the dist folder is fresh (from the build step)
+        # The dist folder should already be built and ready
         
         # Create a simple package.json for the demo
         cat > demo-build/package.json << EOF

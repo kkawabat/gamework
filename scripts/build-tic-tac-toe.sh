@@ -33,7 +33,10 @@ cp -r "$PROJECT_ROOT/dist" "$BUILD_DIR/"
 
 # Compile the Tic-Tac-Toe game rules to JavaScript
 echo "🔨 Compiling Tic-Tac-Toe game rules..."
-npx tsc "$PROJECT_ROOT/examples/simple-tic-tac-toe.ts" --outDir "$BUILD_DIR" --target es2020 --module es2020 --moduleResolution node
+# Create examples directory in build folder
+mkdir -p "$BUILD_DIR/examples"
+# Compile to the examples subdirectory to match import paths
+npx tsc "$PROJECT_ROOT/examples/simple-tic-tac-toe.ts" --outDir "$BUILD_DIR/examples" --target es2020 --module es2020 --moduleResolution node
 
 # Create a package.json for the game
 cat > "$BUILD_DIR/package.json" << EOF
