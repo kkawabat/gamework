@@ -271,6 +271,13 @@
                 <h3>Room Information</h3>
                 <div class="room-code" id="roomCode">Loading...</div>
                 <p>Share this code with players to join!</p>
+                
+                <!-- Join Room Section -->
+                <div style="margin-top: 20px; padding: 15px; background: #f0f8ff; border-radius: 8px;">
+                    <h4>Join Existing Room</h4>
+                    <input type="text" id="joinRoomInput" placeholder="Enter 6-character room code" maxlength="6" style="padding: 8px; margin: 5px; border: 1px solid #ccc; border-radius: 4px; width: 150px;">
+                    <button id="joinRoomBtn" style="padding: 8px 15px; margin: 5px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Join Room</button>
+                </div>
             </div>
             
             <div class="connection-status">
@@ -384,6 +391,11 @@
                 this.resetGame.addEventListener('click', () => this.resetGameState());
                 this.exportState.addEventListener('click', () => this.exportGameState());
                 this.importState.addEventListener('click', () => this.importGameState());
+                
+                // Join room functionality
+                this.joinRoomInput = document.getElementById('joinRoomInput');
+                this.joinRoomBtn = document.getElementById('joinRoomBtn');
+                this.joinRoomBtn.addEventListener('click', () => this.joinExistingRoom());
             }
 
             async initializeGame() {
@@ -684,6 +696,24 @@
             updateConnectionStatus(connected, status) {
                 this.connectionIndicator.className = `connection-indicator ${connected ? 'connected' : ''}`;
                 this.connectionStatus.textContent = status;
+            }
+            
+            async joinExistingRoom() {
+                const roomCode = this.joinRoomInput.value.trim().toUpperCase();
+                if (roomCode.length !== 6) {
+                    this.log('Please enter a valid 6-character room code', 'error');
+                    return;
+                }
+                
+                this.log(`Attempting to join room: ${roomCode}`, 'info');
+                this.roomId = roomCode;
+                this.roomCode.textContent = roomCode;
+                
+                try {
+                    await this.initializeAsClient();
+                } catch (error) {
+                    this.log(`Failed to join room ${roomCode}: ${error.message}`, 'error');
+                }
             }
 
             enableControls() {

@@ -138,6 +138,17 @@ fi
 echo "🔧 Fixing TypeScript interface imports in HTML..."
 sed -i "s/import { ticTacToeConfig, TicTacToeState, TicTacToeMove }/import { ticTacToeConfig }/g" "$BUILD_DIR/index.html"
 
+# Add join room functionality to HTML
+echo "🔧 Adding join room functionality..."
+sed -i '/<p>Share this code with players to join!<\/p>/a\
+                \
+                <!-- Join Room Section -->\
+                <div style="margin-top: 20px; padding: 15px; background: #f0f8ff; border-radius: 8px;">\
+                    <h4>Join Existing Room</h4>\
+                    <input type="text" id="joinRoomInput" placeholder="Enter 6-character room code" maxlength="6" style="padding: 8px; margin: 5px; border: 1px solid #ccc; border-radius: 4px; width: 150px;">\
+                    <button id="joinRoomBtn" style="padding: 8px 15px; margin: 5px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Join Room</button>\
+                </div>' "$BUILD_DIR/index.html"
+
 # Create a package.json for the game
 cat > "$BUILD_DIR/package.json" << EOF
 {
