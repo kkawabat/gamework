@@ -22,7 +22,7 @@ export const ticTacToeRules: GameRules = {
     // Create new state
     const newState: TicTacToeState = {
       ...ticTacToeState,
-      board: [...ticTacTacToeState.board],
+      board: [...ticTacToeState.board],
       currentPlayer: ticTacToeState.currentPlayer === 'X' ? 'O' : 'X'
     };
     
