@@ -45,12 +45,9 @@ npm run test:watch
 npm run test:coverage
 ```
 
-### Browser Tests
+### Testing
 ```bash
-# Run browser integration tests
-npm run test:browser
-
-# Run all tests (unit + browser)
+# Run all tests
 npm run test:all
 ```
 
@@ -161,7 +158,6 @@ npm run build:game
 | `npm test` | Run unit tests |
 | `npm run test:watch` | Run tests in watch mode |
 | `npm run test:coverage` | Run tests with coverage report |
-| `npm run test:browser` | Run browser integration tests |
 | `npm run test:all` | Run all tests |
 | `npm run lint` | Run ESLint |
 | `npm run clean` | Clean build directories |

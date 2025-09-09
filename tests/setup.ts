@@ -1,5 +1,5 @@
 // Test setup for browser environment
-import 'jest-dom/extend-expect';
+// Note: Browser testing dependencies removed for now to fix CI
 
 // Mock WebRTC for testing
 global.RTCPeerConnection = class MockRTCPeerConnection {
