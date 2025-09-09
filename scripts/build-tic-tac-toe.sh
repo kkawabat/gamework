@@ -149,13 +149,47 @@ sed -i '/<p>Share this code with players to join!<\/p>/a\
                     <button id="joinRoomBtn" style="padding: 8px 15px; margin: 5px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Join Room</button>\
                 </div>' "$BUILD_DIR/index.html"
 
-# Fix join button event handler
-echo "🔧 Fixing join button event handler..."
-sed -i 's/this\.joinRoomBtn\.addEventListener/if (this.joinRoomBtn) { this.joinRoomBtn.addEventListener/g' "$BUILD_DIR/index.html"
-sed -i 's/this\.joinRoomBtn\.addEventListener.*joinExistingRoom.*);/this.joinRoomBtn.addEventListener("click", () => this.joinExistingRoom()); }/g' "$BUILD_DIR/index.html"
+# Fix join button event handler with debugging
+echo "🔧 Fixing join button event handler with debugging..."
+sed -i 's/this\.joinRoomBtn = document\.getElementById/this.joinRoomBtn = document.getElementById/g' "$BUILD_DIR/index.html"
+sed -i '/this\.joinRoomBtn = document\.getElementById/a\
+                console.log("🔍 Join room elements found:", {\
+                    input: !!this.joinRoomInput,\
+                    button: !!this.joinRoomBtn\
+                });' "$BUILD_DIR/index.html"
+sed -i 's/if (this\.joinRoomBtn) {/if (this.joinRoomBtn) {/' "$BUILD_DIR/index.html"
+sed -i 's/this\.joinRoomBtn\.addEventListener("click", () => this\.joinExistingRoom());/this.joinRoomBtn.addEventListener("click", () => {\
+                        console.log("🖱️ Join room button clicked!");\
+                        this.joinExistingRoom();\
+                    });\
+                    console.log("✅ Join room button event listener added");/' "$BUILD_DIR/index.html"
+sed -i '/console.log("✅ Join room button event listener added");/a\
+                } else {\
+                    console.error("❌ Join room button not found!");\
+                }' "$BUILD_DIR/index.html"
 
-# Fix QR code to show actual URL
-echo "🔧 Fixing QR code to show actual URL..."
+# Add debugging to joinExistingRoom method
+echo "🔧 Adding debugging to joinExistingRoom method..."
+sed -i 's/async joinExistingRoom() {/async joinExistingRoom() {\
+                console.log("🎯 Join room button clicked!");/' "$BUILD_DIR/index.html"
+sed -i 's/const roomCode = this\.joinRoomInput\.value\.trim()\.toUpperCase();/const roomCode = this.joinRoomInput.value.trim().toUpperCase();\
+                console.log("📝 Room code entered:", roomCode);/' "$BUILD_DIR/index.html"
+sed -i 's/if (roomCode\.length !== 6) {/if (roomCode.length !== 6) {\
+                    console.log("❌ Invalid room code length:", roomCode.length);/' "$BUILD_DIR/index.html"
+sed -i 's/this\.log(`Attempting to join room: ${roomCode}`, '\''info'\'');/this.log(`Attempting to join room: ${roomCode}`, '\''info'\'');\
+                console.log("🔄 Setting room ID to:", roomCode);/' "$BUILD_DIR/index.html"
+sed -i 's/await this\.initializeAsClient();/await this.initializeAsClient();\
+                    console.log("✅ Successfully joined room as client");/' "$BUILD_DIR/index.html"
+sed -i 's/} catch (error) {/} catch (error) {\
+                    console.error("❌ Failed to join room:", error);/' "$BUILD_DIR/index.html"
+
+# Fix QR code to show actual URL with debugging
+echo "🔧 Fixing QR code to show actual URL with debugging..."
+sed -i 's/const joinUrl = `\${window\.location\.origin}\${window\.location\.pathname}\?room=\${this\.roomId}`;/const joinUrl = `${window.location.origin}${window.location.pathname}?room=${this.roomId}`;\
+                    console.log("🔗 Generating QR code for URL:", joinUrl);\
+                    console.log("🏠 Room ID:", this.roomId);/' "$BUILD_DIR/index.html"
+sed -i 's/const qrDataUrl = await generateQRCode(joinUrl);/const qrDataUrl = await generateQRCode(joinUrl);\
+                    console.log("📱 QR code generated successfully");/' "$BUILD_DIR/index.html"
 sed -i 's/this\.qrCodeContainer\.innerHTML = "";/this.qrCodeContainer.innerHTML = `\
                         <img src="${qrDataUrl}" alt="QR Code for joining game" style="max-width: 200px; border: 1px solid #ddd; border-radius: 8px; display: block; margin: 0 auto;">\
                         <div style="text-align: center; margin-top: 10px;">\
@@ -163,6 +197,21 @@ sed -i 's/this\.qrCodeContainer\.innerHTML = "";/this.qrCodeContainer.innerHTML 
                             <div style="font-size: 10px; color: #666; margin-top: 4px; word-break: break-all; max-width: 200px; margin-left: auto; margin-right: auto;">${joinUrl}<\/div>\
                         <\/div>\
                     `;/g' "$BUILD_DIR/index.html"
+sed -i 's/} catch (error) {/} catch (error) {\
+                    console.error("❌ QR code generation failed:", error);/' "$BUILD_DIR/index.html"
+sed -i 's/const joinUrl = `\${window\.location\.origin}\${window\.location\.pathname}\?room=\${this\.roomId}`;/const joinUrl = `${window.location.origin}${window.location.pathname}?room=${this.roomId}`;\
+                    console.log("🔄 Using fallback QR display for URL:", joinUrl);/' "$BUILD_DIR/index.html"
+
+# Add debugging to initializeAsClient method
+echo "🔧 Adding debugging to initializeAsClient method..."
+sed -i 's/this\.log('\''Initializing as game client\.\.\.'\'', '\''info'\'');/this.log('\''Initializing as game client...'\'', '\''info'\'');\
+                    console.log("🔌 Setting up client connection for room:", this.roomId);/' "$BUILD_DIR/index.html"
+sed -i 's/await this\.gameClient\.connect();/await this.gameClient.connect();\
+                    console.log("✅ Client connected successfully");/' "$BUILD_DIR/index.html"
+sed -i 's/} catch (error) {/} catch (error) {\
+                    console.error("❌ Client initialization failed:", error);/' "$BUILD_DIR/index.html"
+sed -i 's/if (error\.message\.includes('\''room'\'') || error\.message\.includes('\''not found'\'')) {/if (error.message.includes('\''room'\'') || error.message.includes('\''not found'\'')) {\
+                        console.log("🏠 Room not found error detected");/' "$BUILD_DIR/index.html"
 
 # Create a package.json for the game
 cat > "$BUILD_DIR/package.json" << EOF
