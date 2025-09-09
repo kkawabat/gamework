@@ -28,6 +28,13 @@ find "$PROJECT_ROOT/dist" -name "*.js" -type f -exec sed -i "s/from '\.\.\/\([^'
 find "$PROJECT_ROOT/dist" -name "*.js" -type f -exec sed -i "s/from '\.\/\([^']*\)'/from '.\/\1.js'/g" {} \;
 find "$PROJECT_ROOT/dist" -name "*.js" -type f -exec sed -i "s/from '\.\.\/\.\.\/\([^']*\)'/from '..\/..\/\1.js'/g" {} \;
 
+# Fix specific imports that need index.js
+echo "🔧 Fixing types and utils imports..."
+find "$PROJECT_ROOT/dist" -name "*.js" -type f -exec sed -i "s/from '\.\.\/types\.js'/from '..\/types\/index.js'/g" {} \;
+find "$PROJECT_ROOT/dist" -name "*.js" -type f -exec sed -i "s/from '\.\.\/utils\.js'/from '..\/utils\/index.js'/g" {} \;
+find "$PROJECT_ROOT/dist" -name "*.js" -type f -exec sed -i "s/from '\.\/types\.js'/from '.\/types\/index.js'/g" {} \;
+find "$PROJECT_ROOT/dist" -name "*.js" -type f -exec sed -i "s/from '\.\/utils\.js'/from '.\/utils\/index.js'/g" {} \;
+
 # Create the Tic-Tac-Toe multiplayer game build
 echo "🎯 Preparing Tic-Tac-Toe multiplayer game..."
 
@@ -43,6 +50,13 @@ echo "🔨 Compiling Tic-Tac-Toe game rules..."
 mkdir -p "$BUILD_DIR/examples"
 # Compile to the examples subdirectory to match import paths
 npx tsc "$PROJECT_ROOT/examples/simple-tic-tac-toe.ts" --outDir "$BUILD_DIR/examples" --target es2020 --module es2020 --moduleResolution node
+
+# Fix the nested examples directory issue
+if [ -d "$BUILD_DIR/examples/examples" ]; then
+    echo "🔧 Fixing nested examples directory..."
+    mv "$BUILD_DIR/examples/examples"/* "$BUILD_DIR/examples/"
+    rmdir "$BUILD_DIR/examples/examples"
+fi
 
 # Create a package.json for the game
 cat > "$BUILD_DIR/package.json" << EOF
