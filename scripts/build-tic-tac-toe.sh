@@ -22,6 +22,12 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Fix ES module imports by adding .js extensions
+echo "🔧 Fixing ES module imports..."
+find "$PROJECT_ROOT/dist" -name "*.js" -type f -exec sed -i "s/from '\.\.\/\([^']*\)'/from '..\/\1.js'/g" {} \;
+find "$PROJECT_ROOT/dist" -name "*.js" -type f -exec sed -i "s/from '\.\/\([^']*\)'/from '.\/\1.js'/g" {} \;
+find "$PROJECT_ROOT/dist" -name "*.js" -type f -exec sed -i "s/from '\.\.\/\.\.\/\([^']*\)'/from '..\/..\/\1.js'/g" {} \;
+
 # Create the Tic-Tac-Toe multiplayer game build
 echo "🎯 Preparing Tic-Tac-Toe multiplayer game..."
 
