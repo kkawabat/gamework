@@ -34,7 +34,10 @@ jobs:
       run: npm ci
       
     - name: Build framework
-      run: npm run build
+      run: |
+        # Build the framework fresh with current TypeScript configuration
+        npm run build
+        echo "Framework built with ES6 modules"
       
     - name: Build Tic-Tac-Toe multiplayer game
       run: |
@@ -47,15 +50,15 @@ jobs:
         # Create a directory for the demo
         mkdir -p demo-build
         
-        # Copy the Tic-Tac-Toe multiplayer game as the main demo
+        # Copy the Tic-Tac-Toe game as the main demo
         cp -r tic-tac-toe-build/* demo-build/
         
         # Also copy the original demo as a secondary demo
         mkdir -p demo-build/demo
         cp examples/demo.html demo-build/demo/index.html
         
-        # Copy the built framework files
-        cp -r dist demo-build/
+        # The dist folder is already included in tic-tac-toe-build from the build script
+        # No need to copy it separately since it's already built fresh
         
         # Create a simple package.json for the demo
         cat > demo-build/package.json << EOF
