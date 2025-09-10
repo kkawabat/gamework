@@ -271,13 +271,6 @@
                 <h3>Room Information</h3>
                 <div class="room-code" id="roomCode">Loading...</div>
                 <p>Share this code with players to join!</p>
-                
-                <!-- Join Room Section -->
-                <div style="margin-top: 20px; padding: 15px; background: #f0f8ff; border-radius: 8px;">
-                    <h4>Join Existing Room</h4>
-                    <input type="text" id="joinRoomInput" placeholder="Enter 6-character room code" maxlength="6" style="padding: 8px; margin: 5px; border: 1px solid #ccc; border-radius: 4px; width: 150px;">
-                    <button id="joinRoomBtn" style="padding: 8px 15px; margin: 5px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Join Room</button>
-                </div>
             </div>
             
             <div class="connection-status">
@@ -337,9 +330,9 @@
 
     <script type="module">
         // Import the GameWork framework
-        import { GameHost, GameClient, InMemorySignalingService } from './dist/index.js';
-        import { ticTacToeConfig } from './examples/simple-tic-tac-toe.js';
-        import { generateQRCode } from './dist/utils/index.js';
+        import { GameHost, GameClient, InMemorySignalingService } from '../index.ts';
+        import { ticTacToeConfig, TicTacToeState, TicTacToeMove } from './simple-tic-tac-toe.ts';
+        import { generateQRCode } from '../utils/index.ts';
 
         console.log('GameWork Tic-Tac-Toe Multiplayer Game');
         console.log('Loading GameWork framework...');
@@ -391,23 +384,6 @@
                 this.resetGame.addEventListener('click', () => this.resetGameState());
                 this.exportState.addEventListener('click', () => this.exportGameState());
                 this.importState.addEventListener('click', () => this.importGameState());
-                
-                // Join room functionality
-                this.joinRoomInput = document.getElementById('joinRoomInput');
-                this.joinRoomBtn = document.getElementById('joinRoomBtn');
-                console.log('🔍 Join room elements found:', {
-                    input: !!this.joinRoomInput,
-                    button: !!this.joinRoomBtn
-                });
-                if (this.joinRoomBtn) {
-                    this.joinRoomBtn.addEventListener('click', () => {
-                        console.log('🖱️ Join room button clicked!');
-                        this.joinExistingRoom();
-                    });
-                    console.log('✅ Join room button event listener added');
-                } else {
-                    console.error('❌ Join room button not found!');
-                }
             }
 
             async initializeGame() {
@@ -420,12 +396,8 @@
                     await this.initializeAsHost();
                     
                 } catch (error) {
-                    console.error("❌ Client initialization failed:", error);
-                    console.error("❌ QR code generation failed:", error);
-                    console.error("❌ Failed to join room:", error);
                     this.log('Failed to initialize as host, trying as client...', 'warning');
                     await this.initializeAsClient();
-                    console.log("✅ Successfully joined room as client");
                 }
             }
 
@@ -474,9 +446,6 @@
                     this.enableControls();
                     
                 } catch (error) {
-                    console.error("❌ Client initialization failed:", error);
-                    console.error("❌ QR code generation failed:", error);
-                    console.error("❌ Failed to join room:", error);
                     this.log(`Failed to initialize as host: ${error.message}`, 'error');
                     throw error;
                 }
@@ -485,54 +454,18 @@
             async initializeAsClient() {
                 try {
                     this.log('Initializing as game client...', 'info');
-                    console.log('🔌 Setting up client connection for room:', this.roomId);
                     this.isHost = false;
                     
-                    // Create signaling service
-                    const signalingService = new InMemorySignalingService();
-                    await signalingService.connect();
-                    
-                    // Create game client
-                    this.gameClient = new GameClient({
-                        roomId: this.roomId,
-                        gameConfig: ticTacToeConfig,
-                        signalingService: signalingService
-                    });
-
-                    // Set up client event handlers
-                    this.gameClient.onConnected = () => {
-                        this.log(`Connected to room ${this.roomId}`, 'success');
-                        this.updateConnectionStatus(true, `Client - Connected to ${this.roomId}`);
-                        this.enableControls();
-                    };
-
-                    this.gameClient.onStateUpdate = (state) => {
-                        this.handleStateUpdate(state);
-                    };
-
-                    this.gameClient.onError = (error) => {
-                        this.log(`Client error: ${error.message}`, 'error');
-                        console.error('Client error:', error);
-                    };
-
-                    // Connect to the room
-                    await this.gameClient.connect();
-                    this.gameActive = true;
-                    console.log('✅ Client connected successfully');
+                    // For demo purposes, we'll simulate a client connection
+                    // In a real implementation, you'd connect to an existing room
+                    this.log('Client mode - would connect to existing room', 'info');
+                    this.updateConnectionStatus(false, 'Client Mode - Demo');
                     
                     // Generate QR code for joining
                     await this.generateQRCode();
                     
                 } catch (error) {
                     this.log(`Failed to initialize as client: ${error.message}`, 'error');
-                    console.error('❌ Client initialization failed:', error);
-                    this.updateConnectionStatus(false, 'Client - Connection Failed');
-                    
-                    // Check if it's a room not found error
-                    if (error.message.includes('room') || error.message.includes('not found')) {
-                        this.log(`Room ${this.roomId} not found. Please check the room code.`, 'error');
-                        console.log('🏠 Room not found error detected');
-                    }
                 }
             }
 
@@ -548,10 +481,7 @@
             async generateQRCode() {
                 try {
                     const joinUrl = `${window.location.origin}${window.location.pathname}?room=${this.roomId}`;
-                    console.log('🔗 Generating QR code for URL:', joinUrl);
-                    console.log('🏠 Room ID:', this.roomId);
                     const qrDataUrl = await generateQRCode(joinUrl);
-                    console.log('📱 QR code generated successfully');
                     
                     const qrImg = document.createElement('img');
                     qrImg.src = qrDataUrl;
@@ -563,9 +493,6 @@
                     
                     this.log('QR code generated successfully', 'success');
                 } catch (error) {
-                    console.error("❌ Client initialization failed:", error);
-                    console.error("❌ QR code generation failed:", error);
-                    console.error("❌ Failed to join room:", error);
                     this.log(`Failed to generate QR code: ${error.message}`, 'error');
                     
                     // Fallback QR code display
@@ -594,9 +521,6 @@
                         this.log('Invalid move', 'warning');
                     }
                 } catch (error) {
-                    console.error("❌ Client initialization failed:", error);
-                    console.error("❌ QR code generation failed:", error);
-                    console.error("❌ Failed to join room:", error);
                     this.log(`Failed to make move: ${error.message}`, 'error');
                 }
             }
@@ -706,9 +630,6 @@
                     this.gameActive = true;
                     this.log('New game started!', 'success');
                 } catch (error) {
-                    console.error("❌ Client initialization failed:", error);
-                    console.error("❌ QR code generation failed:", error);
-                    console.error("❌ Failed to join room:", error);
                     this.log(`Failed to start new game: ${error.message}`, 'error');
                 }
             }
@@ -721,9 +642,6 @@
                     this.gameActive = false;
                     this.log('Game reset', 'info');
                 } catch (error) {
-                    console.error("❌ Client initialization failed:", error);
-                    console.error("❌ QR code generation failed:", error);
-                    console.error("❌ Failed to join room:", error);
                     this.log(`Failed to reset game: ${error.message}`, 'error');
                 }
             }
@@ -746,9 +664,6 @@
                         this.log('Game state exported to clipboard', 'success');
                     });
                 } catch (error) {
-                    console.error("❌ Client initialization failed:", error);
-                    console.error("❌ QR code generation failed:", error);
-                    console.error("❌ Failed to join room:", error);
                     this.log(`Failed to export game state: ${error.message}`, 'error');
                 }
             }
@@ -761,9 +676,6 @@
                         this.gameHost.importState(stateStr);
                         this.log('Game state imported successfully', 'success');
                     } catch (error) {
-                    console.error("❌ Client initialization failed:", error);
-                    console.error("❌ QR code generation failed:", error);
-                    console.error("❌ Failed to join room:", error);
                         this.log('Failed to import game state: Invalid format', 'error');
                     }
                 }
@@ -772,32 +684,6 @@
             updateConnectionStatus(connected, status) {
                 this.connectionIndicator.className = `connection-indicator ${connected ? 'connected' : ''}`;
                 this.connectionStatus.textContent = status;
-            }
-            
-            async joinExistingRoom() {
-                console.log('🎯 Join room button clicked!');
-                const roomCode = this.joinRoomInput.value.trim().toUpperCase();
-                console.log('📝 Room code entered:', roomCode);
-                
-                if (roomCode.length !== 6) {
-                    this.log('Please enter a valid 6-character room code', 'error');
-                    console.log('❌ Invalid room code length:', roomCode.length);
-                    return;
-                }
-                
-                this.log(`Attempting to join room: ${roomCode}`, 'info');
-                console.log('🔄 Setting room ID to:', roomCode);
-                this.roomId = roomCode;
-                this.roomCode.textContent = roomCode;
-                
-                try {
-                    console.log('🚀 Initializing as client for room:', roomCode);
-                    await this.initializeAsClient();
-                    console.log('✅ Successfully joined room as client');
-                } catch (error) {
-                    this.log(`Failed to join room ${roomCode}: ${error.message}`, 'error');
-                    console.error('❌ Failed to join room:', error);
-                }
             }
 
             enableControls() {

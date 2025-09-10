@@ -1,4 +1,4 @@
-import { GameConfig, GameRules, GameState, GameMove } from '../src/types';
+import { GameConfig, GameRules, GameState, GameMove } from '../types';
 
 // Tic-Tac-Toe game state
 export interface TicTacToeState extends GameState {
@@ -15,7 +15,7 @@ export interface TicTacToeMove {
 
 // Tic-Tac-Toe game rules
 export const ticTacToeRules: GameRules = {
-  applyMove: (state: TicTacToeState, move: GameMove): TicTacToeState => {
+  applyMove: (state: GameState, move: GameMove): GameState => {
     const ticTacToeState = state as TicTacToeState;
     const moveData = move.data as TicTacToeMove;
     

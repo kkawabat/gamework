@@ -1,5 +1,5 @@
 import { GameHost, GameClient, InMemorySignalingService } from '../src/index';
-import { ticTacToeConfig, TicTacToeState, TicTacToeMove } from '../examples/simple-tic-tac-toe';
+import { ticTacToeConfig, TicTacToeState, TicTacToeMove } from '../src/demos/simple-tic-tac-toe';
 
 describe('Tic-Tac-Toe Integration Tests', () => {
   let signalingService: InMemorySignalingService;

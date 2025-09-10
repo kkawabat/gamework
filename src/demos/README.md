@@ -32,11 +32,12 @@ This game demonstrates the GameWork framework's capabilities:
 
 ## Technical Details
 
-- **Framework**: GameWork (compiled in `dist/` folder)
+- **Framework**: GameWork (compiled and bundled with Vite)
 - **Game Logic**: TypeScript-based game rules
 - **UI**: Pure HTML/CSS/JavaScript with ES6 modules
 - **Deployment**: Static files ready for any hosting service
 - **Multiplayer**: WebRTC DataChannels for real-time communication
+- **Bundler**: Vite for optimal performance and compatibility
 
 ## Local Development
 
@@ -56,9 +57,9 @@ Then open http://localhost:8000 in your browser.
 
 ## Framework Files
 
-- `dist/`: Compiled GameWork framework
-- `simple-tic-tac-toe.ts`: Game rules and configuration
+- `assets/`: Bundled and optimized GameWork framework
 - `index.html`: Complete multiplayer game implementation
+- `README.md`: This documentation
 
 ## Live Demo
 
@@ -70,3 +71,11 @@ This game is automatically deployed to GitHub Pages when changes are pushed to t
 2. **Players**: Join using the room code or QR code
 3. **WebRTC**: Establishes direct peer-to-peer connections
 4. **Game State**: Synchronized across all players in real-time
+
+## Build Process
+
+This game is built using Vite, which provides:
+- Automatic module resolution
+- Tree shaking for smaller bundles
+- Modern browser compatibility
+- Optimized asset loading

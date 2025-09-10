@@ -6,7 +6,7 @@ This guide explains how to set up and use the development testbed for the GameWo
 
 ### 1. Development Server (Recommended)
 ```bash
-npm run dev:server
+npm run dev:game
 ```
 This starts an auto-reloading development server that:
 - ✅ Automatically rebuilds when you change TypeScript files
@@ -16,7 +16,7 @@ This starts an auto-reloading development server that:
 
 **Note**: If you encounter file watching issues on WSL2, use the simple server instead:
 ```bash
-npm run dev:simple
+npm run dev:game
 ```
 
 ### 2. Manual Build & Test
@@ -28,7 +28,7 @@ npm run build
 npm run build:game
 
 # Start a simple server
-cd tic-tac-toe-build && python3 -m http.server 8000
+cd demo-build/tic-tac-toe && python3 -m http.server 8000
 ```
 
 ## 🧪 Testing
@@ -52,7 +52,7 @@ npm run test:all
 ```
 
 ### Manual Testing
-1. Start the dev server: `npm run dev:server`
+1. Start the dev server: `npm run dev:game`
 2. Open `http://localhost:3000` in your browser
 3. Open browser dev tools to see console logs
 4. Test the Tic-Tac-Toe game functionality
@@ -75,10 +75,8 @@ gamework/
 │   ├── setup.ts          # Test environment setup
 │   └── *.integration.test.ts
 ├── scripts/               # Build and development scripts
-│   ├── dev-server.js     # Development server
-│   ├── test-browser.js   # Browser testing
-│   └── build-tic-tac-toe.sh
-├── tic-tac-toe-build/     # Built game (auto-generated)
+│   └── build-tic-tac-toe-vite.sh
+├── demo-build/            # Built demos (auto-generated)
 └── dist/                  # Built framework (auto-generated)
 ```
 
@@ -87,7 +85,7 @@ gamework/
 ### 1. Framework Development
 ```bash
 # Start development server
-npm run dev:server
+npm run dev:game
 
 # In another terminal, run tests in watch mode
 npm run test:watch
@@ -95,7 +93,7 @@ npm run test:watch
 
 ### 2. Game Development
 ```bash
-# Make changes to examples/simple-tic-tac-toe.ts
+# Make changes to src/demos/simple-tic-tac-toe.ts
 # The dev server will auto-rebuild
 
 # Test the game at http://localhost:3000
@@ -151,8 +149,7 @@ npm run build:game
 
 | Script | Description |
 |--------|-------------|
-| `npm run dev:server` | Start development server with auto-reload |
-| `npm run dev:simple` | Start simple server (WSL2 compatible) |
+| `npm run dev:game` | Start Vite development server |
 | `npm run build` | Build the framework |
 | `npm run build:game` | Build the Tic-Tac-Toe game |
 | `npm test` | Run unit tests |
@@ -185,13 +182,13 @@ For production deployment:
 # Build everything
 npm run build:game
 
-# The tic-tac-toe-build/ directory contains all files needed
+# The demo-build/ directory contains all files needed
 # Upload to your hosting service
 ```
 
 ## 📚 Additional Resources
 
 - [GameWork Framework Documentation](./README.md)
-- [Tic-Tac-Toe Game Guide](./tic-tac-toe-build/README.md)
+- [Tic-Tac-Toe Game Guide](./demo-build/tic-tac-toe/README.md)
 - [WebRTC Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API)
 - [TypeScript Documentation](https://www.typescriptlang.org/docs/)

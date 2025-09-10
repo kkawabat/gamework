@@ -13,7 +13,7 @@ elif command -v python &> /dev/null; then
     python -m SimpleHTTPServer 8000
 elif command -v node &> /dev/null; then
     echo "Using Node.js..."
-    node serve.js
+    npx serve .
 else
     echo "❌ No suitable server found. Please install Python or Node.js"
     echo "Or use any static file server to serve the files in this directory"
