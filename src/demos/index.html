@@ -273,6 +273,15 @@
                 <p>Share this code with players to join!</p>
             </div>
             
+            <div class="join-room-section">
+                <h3>Join Existing Room</h3>
+                <div class="join-controls">
+                    <input type="text" id="roomCodeInput" placeholder="Enter room code (e.g., SYSAAJ)" maxlength="6" style="padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; text-align: center; letter-spacing: 2px; font-family: monospace; width: 200px; margin-right: 10px;">
+                    <button id="joinRoomBtn" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;">Join Room</button>
+                </div>
+                <p style="font-size: 14px; color: #666; margin-top: 10px;">Enter a 6-character room code to join an existing game</p>
+            </div>
+            
             <div class="connection-status">
                 <div>
                     <span class="connection-indicator" id="connectionIndicator"></span>
@@ -365,6 +374,8 @@
                 this.connectionIndicator = document.getElementById('connectionIndicator');
                 this.connectionStatus = document.getElementById('connectionStatus');
                 this.playerCount = document.getElementById('playerCount');
+                this.roomCodeInput = document.getElementById('roomCodeInput');
+                this.joinRoomBtn = document.getElementById('joinRoomBtn');
             }
 
             setupEventListeners() {
@@ -384,16 +395,37 @@
                 this.resetGame.addEventListener('click', () => this.resetGameState());
                 this.exportState.addEventListener('click', () => this.exportGameState());
                 this.importState.addEventListener('click', () => this.importGameState());
+                this.joinRoomBtn.addEventListener('click', () => this.joinExistingRoom());
+                
+                // Room code input handler
+                this.roomCodeInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.joinExistingRoom();
+                    }
+                });
             }
 
             async initializeGame() {
                 try {
-                    // Generate room ID
-                    this.roomId = this.generateRoomId();
-                    this.roomCode.textContent = this.roomId;
+                    // Check if there's a room parameter in the URL
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const roomParam = urlParams.get('room');
                     
-                    // Try to become host first
-                    await this.initializeAsHost();
+                    if (roomParam) {
+                        // User is trying to join an existing room
+                        this.roomId = roomParam.toUpperCase();
+                        this.roomCode.textContent = this.roomId;
+                        this.roomCodeInput.value = this.roomId;
+                        this.log(`Joining room from URL: ${this.roomId}`, 'info');
+                        await this.initializeAsClient();
+                    } else {
+                        // Generate new room ID and become host
+                        this.roomId = this.generateRoomId();
+                        this.roomCode.textContent = this.roomId;
+                        
+                        // Try to become host first
+                        await this.initializeAsHost();
+                    }
                     
                 } catch (error) {
                     this.log('Failed to initialize as host, trying as client...', 'warning');
@@ -478,10 +510,37 @@
                 return result;
             }
 
+            async joinExistingRoom() {
+                const roomCode = this.roomCodeInput.value.trim().toUpperCase();
+                
+                if (!roomCode || roomCode.length !== 6) {
+                    this.log('Please enter a valid 6-character room code', 'error');
+                    return;
+                }
+                
+                try {
+                    this.log(`Attempting to join room: ${roomCode}`, 'info');
+                    this.joinRoomBtn.disabled = true;
+                    this.joinRoomBtn.textContent = 'Joining...';
+                    
+                    // Set the room ID to the entered code
+                    this.roomId = roomCode;
+                    this.roomCode.textContent = this.roomId;
+                    
+                    // Try to connect as a client to the existing room
+                    await this.initializeAsClient();
+                    
+                } catch (error) {
+                    this.log(`Failed to join room ${roomCode}: ${error.message}`, 'error');
+                    this.joinRoomBtn.disabled = false;
+                    this.joinRoomBtn.textContent = 'Join Room';
+                }
+            }
+
             async generateQRCode() {
                 try {
                     const joinUrl = `${window.location.origin}${window.location.pathname}?room=${this.roomId}`;
-                    const qrDataUrl = await generateQRCode(joinUrl);
+                    const qrDataUrl = await generateQRCode(this.roomId, window.location.origin + window.location.pathname);
                     
                     const qrImg = document.createElement('img');
                     qrImg.src = qrDataUrl;

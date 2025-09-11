@@ -22,7 +22,7 @@ export function generateRoomId(length: number = 6): string {
  */
 export async function generateQRCode(roomId: string, baseUrl?: string): Promise<string> {
   const url = baseUrl || window.location.origin;
-  const joinUrl = `${url}/join?room=${roomId}`;
+  const joinUrl = `${url}?room=${roomId}`;
   
   try {
     return await QRCode.toDataURL(joinUrl, {
@@ -47,7 +47,7 @@ export async function generateQRCode(roomId: string, baseUrl?: string): Promise<
  */
 export async function generateQRCodeSVG(roomId: string, baseUrl?: string): Promise<string> {
   const url = baseUrl || window.location.origin;
-  const joinUrl = `${url}/join?room=${roomId}`;
+  const joinUrl = `${url}?room=${roomId}`;
   
   try {
     return await QRCode.toString(joinUrl, {
