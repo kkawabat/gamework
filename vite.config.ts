@@ -9,11 +9,12 @@ export default defineConfig({
     })
   ],
   build: {
-    outDir: 'demo-build/tic-tac-toe',
+    outDir: 'demo-build',
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        index: 'src/demos/index.html'
+        index: 'src/demos/index.html',
+        'tic-tac-toe': 'src/demos/tic-tac-toe.html'
       },
       output: {
         // Keep modules separate for better caching

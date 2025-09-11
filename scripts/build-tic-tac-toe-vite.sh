@@ -30,32 +30,24 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Move the built HTML file to the correct location
-echo "📝 Moving HTML file to correct location..."
-mv "$BUILD_DIR/src/demos/index.html" "$BUILD_DIR/index.html"
+# Move the built HTML files to the correct locations
+echo "📝 Moving HTML files to correct locations..."
+mv "$PROJECT_ROOT/demo-build/src/demos/index.html" "$PROJECT_ROOT/demo-build/index.html"
+mv "$PROJECT_ROOT/demo-build/src/demos/tic-tac-toe.html" "$PROJECT_ROOT/demo-build/tic-tac-toe.html"
 
 # Remove the empty src directory structure
-rm -rf "$BUILD_DIR/src"
+rm -rf "$PROJECT_ROOT/demo-build/src"
 
-# Fix asset paths in the HTML file (change ../../assets/ to ./assets/)
-echo "📝 Fixing asset paths in HTML file..."
-sed -i 's|../../assets/|./assets/|g' "$BUILD_DIR/index.html"
+# Fix asset paths in the HTML files (change ../../assets/ to ./assets/)
+echo "📝 Fixing asset paths in HTML files..."
+sed -i 's|../../assets/|./assets/|g' "$PROJECT_ROOT/demo-build/index.html"
+sed -i 's|../../assets/|./assets/|g' "$PROJECT_ROOT/demo-build/tic-tac-toe.html"
 
-# Copy additional files from demo folder
-echo "📝 Copying additional files from demo folder..."
+# Pure production build - no development files needed
+echo "📝 Creating pure production build..."
 
-# Copy files from the demo folder
-cp "$PROJECT_ROOT/src/demos/package.json" "$BUILD_DIR/"
-cp "$PROJECT_ROOT/src/demos/README.md" "$BUILD_DIR/"
-cp "$PROJECT_ROOT/src/demos/start.sh" "$BUILD_DIR/"
-cp "$PROJECT_ROOT/src/demos/.gitignore" "$BUILD_DIR/"
-
-# Ensure start.sh is executable
-chmod +x "$BUILD_DIR/start.sh"
-
-# Copy the main demo index.html to the demo-build root
-echo "📝 Copying main demo index.html..."
-cp "$PROJECT_ROOT/src/demos/index.html" "$PROJECT_ROOT/demo-build/"
+# The main demo index.html is now built directly to demo-build root
+# No need to copy it since Vite now outputs it correctly
 
 # Display build summary
 echo ""
@@ -70,8 +62,8 @@ echo "📊 Demo build contents:"
 ls -la "$PROJECT_ROOT/demo-build"
 echo ""
 echo "🚀 To run the game locally:"
-echo "  cd $BUILD_DIR"
-echo "  ./start.sh"
+echo "  cd $PROJECT_ROOT/demo-build"
+echo "  python3 -m http.server 8000"
 echo ""
 echo "🌐 Or use any static file server:"
 echo "  python3 -m http.server 8000"
@@ -80,9 +72,8 @@ echo "  # Or any other static file server"
 echo ""
 echo "📦 Files ready for deployment:"
 echo "  - demo-build/index.html (main demo page)"
-echo "  - demo-build/tic-tac-toe/ (tic-tac-toe game)"
-echo "  - demo-build/tic-tac-toe/assets/ (bundled and optimized framework)"
-echo "  - demo-build/tic-tac-toe/README.md (documentation)"
+echo "  - demo-build/tic-tac-toe.html (tic-tac-toe game)"
+echo "  - demo-build/assets/ (bundled and optimized framework)"
 echo ""
 echo "🎉 GameWork Tic-Tac-Toe Multiplayer is ready for deployment!"
 echo "✨ Built with Vite for optimal performance and compatibility!"
