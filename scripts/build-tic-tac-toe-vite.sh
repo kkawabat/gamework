@@ -37,6 +37,10 @@ mv "$BUILD_DIR/src/demos/index.html" "$BUILD_DIR/index.html"
 # Remove the empty src directory structure
 rm -rf "$BUILD_DIR/src"
 
+# Fix asset paths in the HTML file (change ../../assets/ to ./assets/)
+echo "📝 Fixing asset paths in HTML file..."
+sed -i 's|../../assets/|./assets/|g' "$BUILD_DIR/index.html"
+
 # Copy additional files from demo folder
 echo "📝 Copying additional files from demo folder..."
 
