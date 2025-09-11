@@ -11,7 +11,9 @@ export default defineConfig({
     outDir: 'demo-build/tic-tac-toe',
     emptyOutDir: true,
     rollupOptions: {
-      input: 'src/demos/tic-tac-toe-multiplayer.html',
+      input: {
+        index: 'src/demos/index.html'
+      },
       output: {
         // Keep modules separate for better caching
         manualChunks: {

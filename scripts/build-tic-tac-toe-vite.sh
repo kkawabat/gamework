@@ -30,6 +30,13 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Move the built HTML file to the correct location
+echo "📝 Moving HTML file to correct location..."
+mv "$BUILD_DIR/src/demos/index.html" "$BUILD_DIR/index.html"
+
+# Remove the empty src directory structure
+rm -rf "$BUILD_DIR/src"
+
 # Copy additional files from demo folder
 echo "📝 Copying additional files from demo folder..."
 
