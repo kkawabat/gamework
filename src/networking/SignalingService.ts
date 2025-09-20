@@ -1,4 +1,5 @@
 import { SignalingMessage, GameRoom } from '../types';
+export { WebSocketSignalingService, WebSocketSignalingConfig } from './WebSocketSignalingService';
 
 export interface SignalingService {
   connect(): Promise<void>;
