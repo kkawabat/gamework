@@ -1,7 +1,8 @@
 // Import the GameWork framework
-import { GameHost, GameClient, InMemorySignalingService } from '../index';
+import { GameHost, GameClient, WebSocketSignalingService } from '../index';
 import { ticTacToeConfig, TicTacToeState, TicTacToeMove } from './simple-tic-tac-toe';
 import { generateQRCode } from '../utils';
+import { activeSignalingConfig } from './signaling-config';
 
 console.log('GameWork Tic-Tac-Toe Multiplayer Game');
 console.log('Loading GameWork framework...');
@@ -112,10 +113,11 @@ export class MultiplayerTicTacToe {
     private async initializeAsHost() {
         try {
             this.log('Initializing as game host...', 'info');
+            this.log(`Using signaling server: ${activeSignalingConfig.serverUrl}`, 'info');
             this.isHost = true;
             
-            // Create signaling service
-            const signalingService = new InMemorySignalingService();
+            // Create WebSocket signaling service
+            const signalingService = new WebSocketSignalingService(activeSignalingConfig);
             await signalingService.connect();
             
             // Create game host
@@ -161,18 +163,27 @@ export class MultiplayerTicTacToe {
     private async initializeAsClient() {
         try {
             this.log('Initializing as game client...', 'info');
+            this.log(`Using signaling server: ${activeSignalingConfig.serverUrl}`, 'info');
             this.isHost = false;
             
-            // For demo purposes, simulate client connection
-            // In a real implementation, this would connect to an actual host
-            this.log('Demo Mode: Simulating client connection', 'info');
-            this.log('Note: This is a demo. Real multiplayer requires a signaling server.', 'warning');
+            // Create WebSocket signaling service for client
+            const signalingService = new WebSocketSignalingService(activeSignalingConfig);
+            await signalingService.connect();
             
-            // Simulate connection delay
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Create game client
+            this.gameClient = new GameClient({
+                roomId: this.roomId!,
+                playerName: `Player_${Math.floor(Math.random() * 1000)}`
+            }, signalingService);
             
-            this.updateConnectionStatus(true, 'Client - Demo Mode');
-            this.log('Connected in demo mode. Ready to play!', 'success');
+            // Set up client event handlers
+            this.setupClientEventHandlers();
+            
+            // Connect to the game
+            await this.gameClient.connect();
+            
+            this.updateConnectionStatus(true, 'Client - Connected');
+            this.log('Successfully connected as game client', 'success');
             
             // Generate QR code for joining
             await this.generateQRCode();
@@ -290,16 +301,22 @@ export class MultiplayerTicTacToe {
     }
 
     private makeMove(index: number) {
-        if (!this.gameHost || !this.gameActive) return;
+        if (!this.gameActive) return;
         
         try {
             const move = {
                 type: 'place',
-                playerId: 'player1', // In a real implementation, this would be the actual player ID
+                playerId: this.playerId || 'player1',
                 timestamp: Date.now(),
                 data: { position: index } as TicTacToeMove
             };
-            const success = this.gameHost.applyMove(move);
+            
+            let success = false;
+            if (this.gameHost) {
+                success = this.gameHost.applyMove(move);
+            } else if (this.gameClient) {
+                success = this.gameClient.sendMove(move);
+            }
             
             if (success) {
                 this.log(`Made move at position ${index}`, 'info');
@@ -387,9 +404,12 @@ export class MultiplayerTicTacToe {
 
     private isMyTurn(): boolean {
         if (!this.currentState) return false;
-        // In a real implementation, you'd check if it's the current player's turn
-        // For demo purposes, we'll allow both players to make moves
-        return true;
+        
+        // Check if it's the current player's turn
+        const currentPlayer = this.currentState.currentPlayer;
+        const myPlayerSymbol = this.isHost ? 'X' : 'O';
+        
+        return currentPlayer === myPlayerSymbol;
     }
 
     private highlightWinningCells() {
