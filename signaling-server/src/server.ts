@@ -205,7 +205,9 @@ export class SignalingServer {
   private handleSignalingMessage(connectionId: string, message: ClientMessage): void {
     const connection = this.connections.get(connectionId);
     if (!connection || !connection.roomId) {
-      this.sendError(connection?.ws, 'Not in a room');
+      if (connection?.ws) {
+        this.sendError(connection.ws, 'Not in a room');
+      }
       return;
     }
 
