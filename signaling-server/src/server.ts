@@ -371,16 +371,7 @@ export class SignalingServer {
       res.end('Not Found');
     });
 
-    // Handle WebSocket upgrade requests
-    server.on('upgrade', (request: any, socket: any, head: any) => {
-      console.log(`[WebSocket] Upgrade request from ${request.headers.origin || 'unknown origin'}`);
-      console.log(`[WebSocket] Upgrade headers:`, request.headers);
-      
-      // Let the WebSocketServer handle the upgrade
-      this.wss.handleUpgrade(request, socket, head, (ws: WebSocket) => {
-        this.wss.emit('connection', ws, request);
-      });
-    });
+    // WebSocketServer automatically handles upgrades, no manual handler needed
   }
 }
 
