@@ -62,11 +62,16 @@ export class SignalingServer {
     this.connections.set(connectionId, connection);
 
     ws.on('message', (data: Buffer) => {
+      const rawMessage = data.toString();
+      console.log(`[WebSocket] 📨 Received message from ${connectionId}:`, rawMessage);
+      
       try {
-        const message: ClientMessage = JSON.parse(data.toString());
+        const message: ClientMessage = JSON.parse(rawMessage);
+        console.log(`[WebSocket] 📨 Parsed message from ${connectionId}:`, JSON.stringify(message, null, 2));
         this.handleMessage(connectionId, message);
       } catch (error) {
-        console.error(`Error parsing message from ${connectionId}:`, error);
+        console.error(`[WebSocket] ❌ Error parsing message from ${connectionId}:`, error);
+        console.error(`[WebSocket] ❌ Raw message that failed to parse:`, rawMessage);
         this.sendError(ws, 'Invalid message format');
       }
     });
@@ -84,16 +89,18 @@ export class SignalingServer {
     this.sendMessage(ws, {
       type: 'room_joined',
       payload: { message: 'Connected to GameWork signaling server' }
-    });
+    }, connectionId);
   }
 
   private handleMessage(connectionId: string, message: ClientMessage): void {
     const connection = this.connections.get(connectionId);
     if (!connection) {
+      console.warn(`[WebSocket] ⚠️ Received message for unknown connection: ${connectionId}`);
       return;
     }
 
     connection.lastPing = Date.now();
+    console.log(`[WebSocket] 🔄 Handling message type '${message.type}' from ${connectionId}`);
 
     switch (message.type) {
       case 'join_room':
@@ -109,7 +116,7 @@ export class SignalingServer {
         this.handlePing(connectionId, message);
         break;
       default:
-        console.warn(`Unknown message type: ${message.type}`);
+        console.warn(`[WebSocket] ⚠️ Unknown message type: ${message.type} from ${connectionId}`);
     }
   }
 
@@ -297,9 +304,12 @@ export class SignalingServer {
     }
   }
 
-  private sendMessage(ws: WebSocket, message: ServerMessage): void {
+  private sendMessage(ws: WebSocket, message: ServerMessage, connectionId?: string): void {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(message));
+      const messageStr = JSON.stringify(message);
+      const logPrefix = connectionId ? `[WebSocket] 📤 Sending message to ${connectionId}:` : `[WebSocket] 📤 Sending message:`;
+      console.log(logPrefix, messageStr);
+      ws.send(messageStr);
     }
   }
 
