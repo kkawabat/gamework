@@ -3,7 +3,7 @@ export { GameEngine } from './core/GameEngine';
 
 // Networking exports
 export { WebRTCManager } from './networking/WebRTCManager';
-export { SignalingService, InMemorySignalingService, FirebaseSignalingService } from './networking/SignalingService';
+export { SignalingService, InMemorySignalingService, FirebaseSignalingService, WebSocketSignalingService } from './networking/SignalingService';
 
 // Host and client exports
 export { GameHost } from './host/GameHost';

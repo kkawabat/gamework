@@ -315,7 +315,7 @@ export class MultiplayerTicTacToe {
             if (this.gameHost) {
                 success = this.gameHost.applyMove(move);
             } else if (this.gameClient) {
-                success = this.gameClient.sendMove(move);
+                success = this.gameClient.sendMove('place', { position: index });
             }
             
             if (success) {
