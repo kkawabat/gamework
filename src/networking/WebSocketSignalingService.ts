@@ -57,7 +57,7 @@ export class WebSocketSignalingService implements SignalingService {
           const connectionTime = Date.now() - this.connectionStartTime!;
           console.log(`[WebSocket] ✅ Connected successfully in ${connectionTime}ms`);
           console.log(`[WebSocket] Server URL: ${this.config.serverUrl}`);
-          console.log(`[WebSocket] Protocol: ${this.ws.protocol || 'none'}`);
+          console.log(`[WebSocket] Protocol: ${this.ws?.protocol || 'none'}`);
           console.log(`[WebSocket] Ready state: ${this.getConnectionState()}`);
           this.isConnected = true;
           this.reconnectAttempts = 0;
