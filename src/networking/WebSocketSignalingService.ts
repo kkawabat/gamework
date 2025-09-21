@@ -1,4 +1,5 @@
-import { SignalingMessage, GameRoom, SignalingService } from '../types';
+import { SignalingMessage, GameRoom } from '../types';
+import { SignalingService } from './SignalingService';
 
 export interface WebSocketSignalingConfig {
   serverUrl: string;

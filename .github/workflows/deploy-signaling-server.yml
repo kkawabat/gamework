@@ -46,22 +46,20 @@ jobs:
               echo -e "${RED}[ERROR]${NC} $1"
           }
           
-          # Navigate to the signaling server directory
-          cd /opt/gamework/signaling-server
-          
           # Check if directory exists, if not clone the repo
           if [ ! -d "/opt/gamework" ]; then
               print_status "Cloning GameWork repository..."
               mkdir -p /opt
               cd /opt
               git clone https://github.com/kkawabat/gamework.git
-              cd gamework/signaling-server
           else
               print_status "Updating GameWork repository..."
               cd /opt/gamework
               git pull
-              cd signaling-server
           fi
+          
+          # Navigate to the signaling server directory
+          cd /opt/gamework/signaling-server
           
           # Check if Docker is running
           if ! docker info > /dev/null 2>&1; then
