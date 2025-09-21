@@ -53,6 +53,24 @@ export class WebSocketSignalingService implements SignalingService {
         
         this.ws = new WebSocket(this.config.serverUrl);
         
+        // Add debugging for WebSocket state changes
+        console.log(`[WebSocket] WebSocket created, initial readyState: ${this.ws.readyState}`);
+        
+        // Monitor readyState changes
+        const checkReadyState = () => {
+          console.log(`[WebSocket] ReadyState changed to: ${this.ws?.readyState} (${this.getReadyStateName(this.ws?.readyState)})`);
+        };
+        
+        // Check readyState periodically during connection
+        const readyStateInterval = setInterval(() => {
+          if (this.ws) {
+            checkReadyState();
+            if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CLOSED) {
+              clearInterval(readyStateInterval);
+            }
+          }
+        }, 50);
+        
         this.ws.onopen = () => {
           const connectionTime = Date.now() - this.connectionStartTime!;
           console.log(`[WebSocket] ✅ Connected successfully in ${connectionTime}ms`);
@@ -350,6 +368,17 @@ export class WebSocketSignalingService implements SignalingService {
       case WebSocket.CLOSING: return 'closing';
       case WebSocket.CLOSED: return 'closed';
       default: return 'unknown';
+    }
+  }
+
+  private getReadyStateName(readyState?: number): string {
+    if (readyState === undefined) return 'undefined';
+    switch (readyState) {
+      case WebSocket.CONNECTING: return 'CONNECTING';
+      case WebSocket.OPEN: return 'OPEN';
+      case WebSocket.CLOSING: return 'CLOSING';
+      case WebSocket.CLOSED: return 'CLOSED';
+      default: return 'UNKNOWN';
     }
   }
 
