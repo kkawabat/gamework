@@ -66,23 +66,34 @@ else
     print_status "Git is already installed"
 fi
 
+# Set up deployment directory
+DEPLOY_DIR="/opt/gamework"
+
 # Clone repository if not already present
-if [ ! -d "gamework" ]; then
-    print_status "Cloning GameWork repository..."
-    git clone https://github.com/kkawabat/gamework.git
+if [ ! -d "$DEPLOY_DIR" ]; then
+    print_status "Cloning GameWork repository to $DEPLOY_DIR..."
+    sudo mkdir -p "$DEPLOY_DIR"
+    sudo chown -R $USER:$USER "$DEPLOY_DIR"
+    cd "$DEPLOY_DIR"
+    git clone https://github.com/kkawabat/gamework.git .
 else
     print_status "Repository already exists, updating..."
-    cd gamework
+    cd "$DEPLOY_DIR"
     git pull
-    cd ..
 fi
 
 # Navigate to signaling server directory
-cd gamework/signaling-server
+cd "$DEPLOY_DIR/signaling-server"
 
 # Check if docker-compose.yml exists
 if [ ! -f "docker-compose.yml" ]; then
     print_error "docker-compose.yml not found. Are you in the correct directory?"
+    exit 1
+fi
+
+# Check if the app_network exists (required for reverse proxy integration)
+if ! docker network ls | grep -q "app_network"; then
+    print_error "app_network does not exist. Please ensure your reverse proxy is running."
     exit 1
 fi
 
@@ -123,12 +134,8 @@ else
     exit 1
 fi
 
-# Configure firewall if ufw is available
-if command -v ufw &> /dev/null; then
-    print_status "Configuring firewall..."
-    sudo ufw allow 8080/tcp
-    print_status "Firewall rule added for port 8080"
-fi
+# Note: No firewall configuration needed since we're using reverse proxy
+print_status "Using reverse proxy - no direct port exposure needed"
 
 echo ""
 print_status "🎉 Deployment completed successfully!"
