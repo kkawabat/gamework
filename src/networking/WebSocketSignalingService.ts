@@ -20,6 +20,8 @@ export class WebSocketSignalingService implements SignalingService {
   private reconnectAttempts = 0;
   private reconnectTimer?: NodeJS.Timeout;
   private pingTimer?: NodeJS.Timeout;
+  private connectionStartTime?: number;
+  private lastError?: Error;
 
   constructor(config: WebSocketSignalingConfig) {
     this.config = {
@@ -28,17 +30,38 @@ export class WebSocketSignalingService implements SignalingService {
       pingInterval: 30000,
       ...config
     };
+    
+    // Log environment and configuration details
+    this.logDiagnosticInfo();
   }
 
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
+        this.connectionStartTime = Date.now();
+        console.log(`[WebSocket] Attempting to connect to: ${this.config.serverUrl}`);
+        console.log(`[WebSocket] Connection attempt #${this.reconnectAttempts + 1}`);
+        console.log(`[WebSocket] Current time: ${new Date().toISOString()}`);
+        
+        // Log WebSocket support
+        if (typeof WebSocket === 'undefined') {
+          const error = new Error('WebSocket is not supported in this environment');
+          console.error('[WebSocket] ERROR:', error.message);
+          reject(error);
+          return;
+        }
+        
         this.ws = new WebSocket(this.config.serverUrl);
         
         this.ws.onopen = () => {
-          console.log('Connected to WebSocket signaling server');
+          const connectionTime = Date.now() - this.connectionStartTime!;
+          console.log(`[WebSocket] ✅ Connected successfully in ${connectionTime}ms`);
+          console.log(`[WebSocket] Server URL: ${this.config.serverUrl}`);
+          console.log(`[WebSocket] Protocol: ${this.ws.protocol || 'none'}`);
+          console.log(`[WebSocket] Ready state: ${this.getConnectionState()}`);
           this.isConnected = true;
           this.reconnectAttempts = 0;
+          this.lastError = undefined;
           this.startPing();
           resolve();
         };
@@ -46,53 +69,83 @@ export class WebSocketSignalingService implements SignalingService {
         this.ws.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data);
+            console.log(`[WebSocket] 📨 Received message:`, message.type, message.payload);
             this.handleMessage(message);
           } catch (error) {
-            console.error('Error parsing WebSocket message:', error);
+            console.error('[WebSocket] ❌ Error parsing message:', error);
+            console.error('[WebSocket] Raw message data:', event.data);
             this.errorCallbacks.forEach(callback => callback(new Error('Invalid message format')));
           }
         };
 
         this.ws.onclose = (event) => {
-          console.log('WebSocket connection closed:', event.code, event.reason);
+          const connectionDuration = this.connectionStartTime ? Date.now() - this.connectionStartTime : 0;
+          console.log(`[WebSocket] 🔌 Connection closed after ${connectionDuration}ms`);
+          console.log(`[WebSocket] Close code: ${event.code}`);
+          console.log(`[WebSocket] Close reason: ${event.reason || 'No reason provided'}`);
+          console.log(`[WebSocket] Was clean: ${event.wasClean}`);
+          console.log(`[WebSocket] Reconnect attempts: ${this.reconnectAttempts}/${this.config.maxReconnectAttempts}`);
+          
           this.isConnected = false;
           this.stopPing();
           
           if (!event.wasClean && this.reconnectAttempts < this.config.maxReconnectAttempts!) {
+            console.log(`[WebSocket] 🔄 Scheduling reconnect...`);
             this.scheduleReconnect();
+          } else if (this.reconnectAttempts >= this.config.maxReconnectAttempts!) {
+            console.error(`[WebSocket] ❌ Max reconnect attempts (${this.config.maxReconnectAttempts}) reached`);
           }
         };
 
         this.ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
-          this.errorCallbacks.forEach(callback => callback(new Error('WebSocket connection error')));
+          const connectionTime = this.connectionStartTime ? Date.now() - this.connectionStartTime : 0;
+          console.error(`[WebSocket] ❌ Connection error after ${connectionTime}ms`);
+          console.error('[WebSocket] Error event:', error);
+          console.error('[WebSocket] Error type:', error.type);
+          console.error('[WebSocket] Target:', error.target);
+          console.error('[WebSocket] Current target:', error.currentTarget);
+          
+          // Try to get more specific error information
+          if (this.ws) {
+            console.error('[WebSocket] Ready state at error:', this.ws.readyState);
+            console.error('[WebSocket] URL at error:', this.ws.url);
+            console.error('[WebSocket] Protocol at error:', this.ws.protocol);
+          }
+          
+          this.lastError = new Error('WebSocket connection error');
+          this.errorCallbacks.forEach(callback => callback(this.lastError!));
           reject(new Error('Failed to connect to signaling server'));
         };
 
       } catch (error) {
+        console.error('[WebSocket] ❌ Exception during connection setup:', error);
         reject(error);
       }
     });
   }
 
   disconnect(): void {
+    console.log('[WebSocket] 🔌 Initiating disconnect...');
     this.stopPing();
     this.clearReconnectTimer();
     
     if (this.ws) {
+      console.log('[WebSocket] Closing WebSocket connection...');
       this.ws.close(1000, 'Client disconnect');
       this.ws = null;
     }
     
     this.isConnected = false;
-    console.log('Disconnected from WebSocket signaling server');
+    console.log('[WebSocket] ✅ Disconnected from WebSocket signaling server');
   }
 
   async joinRoom(roomId: string, playerId: string): Promise<void> {
     if (!this.isConnected || !this.ws) {
+      console.error('[WebSocket] ❌ Cannot join room - not connected to signaling service');
       throw new Error('Not connected to signaling service');
     }
 
+    console.log(`[WebSocket] 🚪 Joining room: ${roomId} as player: ${playerId}`);
     this.currentRoom = roomId;
     this.currentPlayerId = playerId;
 
@@ -105,6 +158,7 @@ export class WebSocketSignalingService implements SignalingService {
       }
     };
 
+    console.log('[WebSocket] 📤 Sending join room message:', message);
     this.ws.send(JSON.stringify(message));
   }
 
@@ -222,18 +276,27 @@ export class WebSocketSignalingService implements SignalingService {
     this.reconnectAttempts++;
     const delay = this.config.reconnectInterval! * Math.pow(2, this.reconnectAttempts - 1);
     
-    console.log(`Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`);
+    console.log(`[WebSocket] 🔄 Scheduling reconnect attempt ${this.reconnectAttempts}/${this.config.maxReconnectAttempts} in ${delay}ms`);
+    console.log(`[WebSocket] Last error:`, this.lastError?.message || 'None');
+    console.log(`[WebSocket] Current time: ${new Date().toISOString()}`);
     
     this.reconnectTimer = setTimeout(() => {
-      console.log(`Reconnect attempt ${this.reconnectAttempts}`);
+      console.log(`[WebSocket] 🔄 Executing reconnect attempt ${this.reconnectAttempts}`);
       this.connect().catch(error => {
-        console.error('Reconnect failed:', error);
+        console.error(`[WebSocket] ❌ Reconnect attempt ${this.reconnectAttempts} failed:`, error);
+        console.error(`[WebSocket] Error details:`, {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        });
+        
         if (this.reconnectAttempts < this.config.maxReconnectAttempts!) {
+          console.log(`[WebSocket] 🔄 Will retry (${this.reconnectAttempts}/${this.config.maxReconnectAttempts})`);
           this.scheduleReconnect();
         } else {
-          console.error('Max reconnect attempts reached');
+          console.error(`[WebSocket] ❌ Max reconnect attempts (${this.config.maxReconnectAttempts}) reached - giving up`);
           this.errorCallbacks.forEach(callback => 
-            callback(new Error('Failed to reconnect to signaling server'))
+            callback(new Error('Failed to reconnect to signaling server after maximum attempts'))
           );
         }
       });
@@ -248,8 +311,10 @@ export class WebSocketSignalingService implements SignalingService {
   }
 
   private startPing(): void {
+    console.log(`[WebSocket] 🏓 Starting ping interval: ${this.config.pingInterval}ms`);
     this.pingTimer = setInterval(() => {
       if (this.isConnected && this.ws) {
+        console.log('[WebSocket] 🏓 Sending ping...');
         this.ws.send(JSON.stringify({ type: 'ping', payload: {} }));
       }
     }, this.config.pingInterval);
@@ -257,6 +322,7 @@ export class WebSocketSignalingService implements SignalingService {
 
   private stopPing(): void {
     if (this.pingTimer) {
+      console.log('[WebSocket] 🏓 Stopping ping interval');
       clearInterval(this.pingTimer);
       this.pingTimer = undefined;
     }
@@ -276,6 +342,160 @@ export class WebSocketSignalingService implements SignalingService {
 
   isHealthy(): boolean {
     return this.isConnected && this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  // Diagnostic logging methods
+  private logDiagnosticInfo(): void {
+    console.log('[WebSocket] 🔍 DIAGNOSTIC INFORMATION');
+    console.log('[WebSocket] ======================================');
+    console.log('[WebSocket] Configuration:', {
+      serverUrl: this.config.serverUrl,
+      reconnectInterval: this.config.reconnectInterval,
+      maxReconnectAttempts: this.config.maxReconnectAttempts,
+      pingInterval: this.config.pingInterval
+    });
+    
+    // Browser/Environment info
+    if (typeof window !== 'undefined') {
+      console.log('[WebSocket] Browser Info:', {
+        userAgent: navigator.userAgent,
+        location: window.location.href,
+        protocol: window.location.protocol,
+        hostname: window.location.hostname,
+        port: window.location.port
+      });
+      
+      // Check for proxy indicators
+      const isHttps = window.location.protocol === 'https:';
+      const isWss = this.config.serverUrl.startsWith('wss:');
+      console.log('[WebSocket] Protocol Check:', {
+        pageProtocol: window.location.protocol,
+        wsProtocol: isWss ? 'wss' : 'ws',
+        protocolMatch: (isHttps && isWss) || (!isHttps && !isWss),
+        mixedContentWarning: isHttps && !isWss ? '⚠️ HTTPS page trying to connect to WS (insecure)' : 'OK'
+      });
+    }
+    
+    // WebSocket support check
+    console.log('[WebSocket] WebSocket Support:', {
+      supported: typeof WebSocket !== 'undefined',
+      constructor: typeof WebSocket !== 'undefined' ? WebSocket.name : 'undefined'
+    });
+    
+    // Network connectivity hints
+    if (typeof navigator !== 'undefined' && 'onLine' in navigator) {
+      console.log('[WebSocket] Network Status:', {
+        online: navigator.onLine,
+        connectionType: (navigator as any).connection?.effectiveType || 'unknown'
+      });
+    }
+    
+    console.log('[WebSocket] ======================================');
+  }
+
+  // Enhanced diagnostic method for troubleshooting
+  getDiagnosticInfo(): any {
+    return {
+      config: this.config,
+      connectionState: this.getConnectionState(),
+      isConnected: this.isConnected,
+      reconnectAttempts: this.reconnectAttempts,
+      lastError: this.lastError?.message || null,
+      currentRoom: this.currentRoom,
+      currentPlayerId: this.currentPlayerId,
+      connectionStartTime: this.connectionStartTime,
+      connectionDuration: this.connectionStartTime ? Date.now() - this.connectionStartTime : null,
+      wsReadyState: this.ws?.readyState,
+      wsUrl: this.ws?.url,
+      wsProtocol: this.ws?.protocol,
+      environment: {
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'N/A',
+        location: typeof window !== 'undefined' ? window.location.href : 'N/A',
+        online: typeof navigator !== 'undefined' ? navigator.onLine : 'N/A',
+        websocketSupported: typeof WebSocket !== 'undefined'
+      }
+    };
+  }
+
+  // Method to log current diagnostic info
+  logCurrentDiagnostics(): void {
+    console.log('[WebSocket] 🔍 CURRENT DIAGNOSTIC INFO');
+    console.log('[WebSocket] ======================================');
+    console.log('[WebSocket]', JSON.stringify(this.getDiagnosticInfo(), null, 2));
+    console.log('[WebSocket] ======================================');
+  }
+
+  // Static method to test WebSocket connectivity
+  static async testConnection(url: string): Promise<{ success: boolean; error?: string; details?: any }> {
+    return new Promise((resolve) => {
+      console.log(`[WebSocket] 🧪 Testing connection to: ${url}`);
+      
+      try {
+        const testWs = new WebSocket(url);
+        const startTime = Date.now();
+        
+        const timeout = setTimeout(() => {
+          testWs.close();
+          resolve({
+            success: false,
+            error: 'Connection timeout after 10 seconds',
+            details: { url, timeout: 10000 }
+          });
+        }, 10000);
+        
+        testWs.onopen = () => {
+          const connectionTime = Date.now() - startTime;
+          clearTimeout(timeout);
+          testWs.close();
+          resolve({
+            success: true,
+            details: {
+              url,
+              connectionTime,
+              protocol: testWs.protocol,
+              readyState: testWs.readyState
+            }
+          });
+        };
+        
+        testWs.onerror = (error) => {
+          clearTimeout(timeout);
+          testWs.close();
+          resolve({
+            success: false,
+            error: 'WebSocket connection failed',
+            details: {
+              url,
+              error: error.type,
+              readyState: testWs.readyState
+            }
+          });
+        };
+        
+        testWs.onclose = (event) => {
+          clearTimeout(timeout);
+          if (!testWs.onopen) {
+            resolve({
+              success: false,
+              error: `Connection closed with code ${event.code}`,
+              details: {
+                url,
+                code: event.code,
+                reason: event.reason,
+                wasClean: event.wasClean
+              }
+            });
+          }
+        };
+        
+      } catch (error) {
+        resolve({
+          success: false,
+          error: `Exception during connection: ${error}`,
+          details: { url, exception: error }
+        });
+      }
+    });
   }
 }
 
