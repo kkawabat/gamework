@@ -59,6 +59,8 @@ export class WebSocketSignalingService implements SignalingService {
           console.log(`[WebSocket] Server URL: ${this.config.serverUrl}`);
           console.log(`[WebSocket] Protocol: ${this.ws?.protocol || 'none'}`);
           console.log(`[WebSocket] Ready state: ${this.getConnectionState()}`);
+          console.log(`[WebSocket] WebSocket object:`, this.ws);
+          console.log(`[WebSocket] WebSocket readyState: ${this.ws?.readyState}`);
           this.isConnected = true;
           this.reconnectAttempts = 0;
           this.lastError = undefined;
@@ -142,9 +144,18 @@ export class WebSocketSignalingService implements SignalingService {
   }
 
   async joinRoom(roomId: string, playerId: string): Promise<void> {
+    console.log(`[WebSocket] 🚪 Attempting to join room: ${roomId} as player: ${playerId}`);
+    console.log(`[WebSocket] Connection status: isConnected=${this.isConnected}, ws=${!!this.ws}`);
+    console.log(`[WebSocket] WebSocket readyState: ${this.ws?.readyState}`);
+    
     if (!this.isConnected || !this.ws) {
       console.error('[WebSocket] ❌ Cannot join room - not connected to signaling service');
       throw new Error('Not connected to signaling service');
+    }
+
+    if (this.ws.readyState !== WebSocket.OPEN) {
+      console.error(`[WebSocket] ❌ Cannot join room - WebSocket not open (readyState: ${this.ws.readyState})`);
+      throw new Error('WebSocket not open');
     }
 
     console.log(`[WebSocket] 🚪 Joining room: ${roomId} as player: ${playerId}`);
