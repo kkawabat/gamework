@@ -20,7 +20,11 @@ export class SignalingServer {
 
   constructor(port: number = 8080) {
     const server = createServer();
-    this.wss = new WebSocketServer({ server });
+    this.wss = new WebSocketServer({ 
+      server,
+      path: '/',
+      perMessageDeflate: false
+    });
     this.roomManager = new RoomManager();
 
     this.wss.on('connection', (ws: WebSocket) => {
@@ -365,6 +369,17 @@ export class SignalingServer {
       // Handle other HTTP requests
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       res.end('Not Found');
+    });
+
+    // Handle WebSocket upgrade requests
+    server.on('upgrade', (request: any, socket: any, head: any) => {
+      console.log(`[WebSocket] Upgrade request from ${request.headers.origin || 'unknown origin'}`);
+      console.log(`[WebSocket] Upgrade headers:`, request.headers);
+      
+      // Let the WebSocketServer handle the upgrade
+      this.wss.handleUpgrade(request, socket, head, (ws: WebSocket) => {
+        this.wss.emit('connection', ws, request);
+      });
     });
   }
 }
