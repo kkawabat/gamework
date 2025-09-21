@@ -114,7 +114,9 @@ export class WebSocketSignalingService implements SignalingService {
           
           this.lastError = new Error('WebSocket connection error');
           this.errorCallbacks.forEach(callback => callback(this.lastError!));
-          reject(new Error('Failed to connect to signaling server'));
+          
+          // Don't reject immediately - let the connection attempt complete
+          // The onclose handler will handle the actual connection failure
         };
 
       } catch (error) {
