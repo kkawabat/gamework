@@ -105,6 +105,10 @@ export class RoomManager {
     return Array.from(this.rooms.values());
   }
 
+  getRoomCount(): number {
+    return this.rooms.size;
+  }
+
   storeMessage(roomId: string, message: SignalingMessage): void {
     if (!this.pendingMessages.has(roomId)) {
       this.pendingMessages.set(roomId, []);

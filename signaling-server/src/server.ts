@@ -27,6 +27,9 @@ export class SignalingServer {
       this.handleConnection(ws);
     });
 
+    // Add health check endpoint
+    this.addHealthEndpoint(server);
+
     server.listen(port, '::', () => {
       console.log(`Signaling server running on port ${port} (dual stack IPv4/IPv6)`);
     });
@@ -317,6 +320,42 @@ export class SignalingServer {
       gameType: room.gameType,
       createdAt: room.createdAt
     };
+  }
+
+  private addHealthEndpoint(server: any): void {
+    server.on('request', (req: any, res: any) => {
+      if (req.url === '/health') {
+        const isHealthy = this.wss && this.roomManager;
+        const activeConnections = this.connections.size;
+        const uptime = process.uptime();
+        
+        if (isHealthy) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            status: 'healthy', 
+            timestamp: Date.now(),
+            uptime: Math.floor(uptime),
+            connections: activeConnections,
+            rooms: this.roomManager.getRoomCount(),
+            version: '1.0.0',
+            service: 'gamework-signaling-server'
+          }));
+        } else {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            status: 'unhealthy', 
+            timestamp: Date.now(),
+            reason: 'WebSocket server not ready',
+            uptime: Math.floor(uptime)
+          }));
+        }
+        return;
+      }
+      
+      // Handle other HTTP requests
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not Found');
+    });
   }
 }
 
