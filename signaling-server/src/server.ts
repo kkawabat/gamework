@@ -27,8 +27,8 @@ export class SignalingServer {
       this.handleConnection(ws);
     });
 
-    server.listen(port, '0.0.0.0', () => {
-      console.log(`Signaling server running on port ${port}`);
+    server.listen(port, '::', () => {
+      console.log(`Signaling server running on port ${port} (dual stack IPv4/IPv6)`);
     });
 
     // Cleanup old rooms every hour
