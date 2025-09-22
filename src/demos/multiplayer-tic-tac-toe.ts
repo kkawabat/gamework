@@ -138,6 +138,11 @@ export class MultiplayerTicTacToe {
                 this.updatePlayerDisplay();
             });
 
+            this.gameHost.setRoomUpdateHandler((room) => {
+                this.log(`Room updated: ${room.players.size} players connected`, 'info');
+                this.updatePlayerDisplay();
+            });
+
             this.gameHost.setStateUpdateHandler((state) => {
                 this.handleStateUpdate(state as TicTacToeState);
             });
@@ -398,7 +403,18 @@ export class MultiplayerTicTacToe {
             const player1Status = document.getElementById('player1Status');
             const player2Status = document.getElementById('player2Status');
             if (player1Status) player1Status.textContent = 'Host - Connected';
-            if (player2Status) player2Status.textContent = 'Waiting for player...';
+            
+            // Check if there are actually players in the room
+            const players = this.gameHost?.getPlayers() || [];
+            const connectedPlayers = players.filter(p => p.isConnected);
+            
+            if (player2Status) {
+                if (connectedPlayers.length >= 2) {
+                    player2Status.textContent = 'Player 2 - Connected';
+                } else {
+                    player2Status.textContent = 'Waiting for player...';
+                }
+            }
         }
     }
 
@@ -500,6 +516,14 @@ export class MultiplayerTicTacToe {
         }
         if (this.connectionStatus) {
             this.connectionStatus.textContent = status;
+        }
+        
+        // Hide demo note when connected to real signaling server
+        if (connected) {
+            const demoNote = document.querySelector('.demo-note') as HTMLElement;
+            if (demoNote) {
+                demoNote.style.display = 'none';
+            }
         }
     }
 

@@ -26,6 +26,7 @@ export class GameHost {
   private onStateUpdate?: (state: GameState) => void;
   private onPlayerJoin?: (player: Player) => void;
   private onPlayerLeave?: (playerId: string) => void;
+  private onRoomUpdate?: (room: GameRoom) => void;
   private onGameOver?: (winner: string | null) => void;
   private onError?: (error: Error) => void;
 
@@ -164,6 +165,10 @@ export class GameHost {
     this.onPlayerLeave = handler;
   }
 
+  setRoomUpdateHandler(handler: (room: GameRoom) => void): void {
+    this.onRoomUpdate = handler;
+  }
+
   setGameOverHandler(handler: (winner: string | null) => void): void {
     this.onGameOver = handler;
   }
@@ -190,6 +195,10 @@ export class GameHost {
 
     this.signaling.onRoomUpdate((room) => {
       this.room = room;
+      // Notify about room updates for UI updates
+      if (this.onRoomUpdate) {
+        this.onRoomUpdate(room);
+      }
     });
 
     this.signaling.onError((error) => {
