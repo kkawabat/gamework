@@ -58,7 +58,7 @@ export class MultiplayerTicTacToe {
     private setupEventListeners() {
         // Board click handlers
         this.gameBoard?.addEventListener('click', (e) => {
-            if (!this.gameActive || !this.gameClient) return;
+            if (!this.gameActive) return;
             
             const cell = (e.target as HTMLElement).closest('.cell');
             if (!cell || cell.classList.contains('disabled')) return;
@@ -141,6 +141,11 @@ export class MultiplayerTicTacToe {
             this.gameHost.setRoomUpdateHandler((room) => {
                 this.log(`Room updated: ${room.players.size} players connected`, 'info');
                 this.updatePlayerDisplay();
+                
+                // Auto-start game when both players are connected
+                if (room.players.size >= 2 && !this.gameActive) {
+                    this.startNewGame();
+                }
             });
 
             this.gameHost.setStateUpdateHandler((state) => {
@@ -221,6 +226,11 @@ export class MultiplayerTicTacToe {
 
         // Set up client event handlers
         this.gameClient.setStateUpdateHandler((state) => {
+            // Auto-start game when client receives first state update
+            if (!this.gameActive) {
+                this.gameActive = true;
+                this.log('Game started!', 'success');
+            }
             this.handleStateUpdate(state as TicTacToeState);
         });
 
