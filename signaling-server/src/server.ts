@@ -34,8 +34,8 @@ export class SignalingServer {
     // Add health check endpoint
     this.addHealthEndpoint(server);
 
-    server.listen(port, '::', () => {
-      console.log(`Signaling server running on port ${port} (dual stack IPv4/IPv6)`);
+    server.listen(port, '0.0.0.0', () => {
+      console.log(`Signaling server running on port ${port} (IPv4 all interfaces)`);
     });
 
     // Cleanup old rooms every hour
