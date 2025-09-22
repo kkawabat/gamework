@@ -30,3 +30,7 @@ netstat -tlnp | grep 8080
 # Check if the server responds to HTTP requests
 telnet localhost 8080
 # Then send: GET / HTTP/1.1
+
+$ ssh kankawabata "docker logs gamework-signalling-server --tail=20"
+$ ssh kankawabata "docker logs reverse-proxy --tail=20"
+$ ssh kankawabata "docker exec reverse-proxy cat /etc/caddy/Caddyfile"

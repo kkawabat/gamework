@@ -19,7 +19,24 @@ export class SignalingServer {
   private cleanupInterval: NodeJS.Timeout;
 
   constructor(port: number = 8080) {
-    const server = createServer();
+    const server = createServer((req, res) => {
+      // Add CORS headers for all requests
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Max-Age', '86400');
+      
+      // Handle preflight requests
+      if (req.method === 'OPTIONS') {
+        res.writeHead(200);
+        res.end();
+        return;
+      }
+      
+      // Handle the request normally
+      this.handleRequest(req, res);
+    });
+    
     this.wss = new WebSocketServer({ 
       server,
       path: '/',
@@ -338,6 +355,19 @@ export class SignalingServer {
 
   private addHealthEndpoint(server: any): void {
     server.on('request', (req: any, res: any) => {
+      // Add CORS headers for all requests
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Max-Age', '86400');
+      
+      // Handle preflight requests
+      if (req.method === 'OPTIONS') {
+        res.writeHead(200);
+        res.end();
+        return;
+      }
+      
       if (req.url === '/health') {
         const isHealthy = this.wss && this.roomManager;
         const activeConnections = this.connections.size;
