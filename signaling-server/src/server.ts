@@ -34,7 +34,49 @@ export class SignalingServer {
       }
       
       // Handle the request normally
-      this.handleRequest(req, res);
+      if (req.url === '/health') {
+        const isHealthy = this.wss && this.roomManager;
+        const activeConnections = this.connections.size;
+        const uptime = process.uptime();
+        
+        if (isHealthy) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            status: 'healthy',
+            timestamp: Date.now(),
+            uptime: Math.floor(uptime),
+            connections: activeConnections,
+            rooms: this.roomManager.getRoomCount(),
+            version: '1.0.0',
+            service: 'gamework-signaling-server'
+          }));
+        } else {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            status: 'unhealthy',
+            timestamp: Date.now(),
+            error: 'Service not ready'
+          }));
+        }
+      } else if (req.url === '/') {
+        // Handle root path for WebSocket connections
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          status: 'ok',
+          service: 'gamework-signaling-server',
+          message: 'WebSocket signaling server is running',
+          timestamp: Date.now(),
+          version: '1.0.0'
+        }));
+      } else {
+        // Handle 404 for other paths
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          error: 'Not Found',
+          message: 'The requested resource was not found',
+          timestamp: Date.now()
+        }));
+      }
     });
     
     this.wss = new WebSocketServer({ 
@@ -48,8 +90,7 @@ export class SignalingServer {
       this.handleConnection(ws);
     });
 
-    // Add health check endpoint
-    this.addHealthEndpoint(server);
+    // Health check endpoint is now handled inline in the request handler above
 
     server.listen(port, '0.0.0.0', () => {
       console.log(`Signaling server running on port ${port} (IPv4 all interfaces)`);
@@ -353,69 +394,6 @@ export class SignalingServer {
     };
   }
 
-  private addHealthEndpoint(server: any): void {
-    server.on('request', (req: any, res: any) => {
-      // Add CORS headers for all requests
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-      res.setHeader('Access-Control-Max-Age', '86400');
-      
-      // Handle preflight requests
-      if (req.method === 'OPTIONS') {
-        res.writeHead(200);
-        res.end();
-        return;
-      }
-      
-      if (req.url === '/health') {
-        const isHealthy = this.wss && this.roomManager;
-        const activeConnections = this.connections.size;
-        const uptime = process.uptime();
-        
-        if (isHealthy) {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ 
-            status: 'healthy', 
-            timestamp: Date.now(),
-            uptime: Math.floor(uptime),
-            connections: activeConnections,
-            rooms: this.roomManager.getRoomCount(),
-            version: '1.0.0',
-            service: 'gamework-signaling-server'
-          }));
-        } else {
-          res.writeHead(503, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ 
-            status: 'unhealthy', 
-            timestamp: Date.now(),
-            reason: 'WebSocket server not ready',
-            uptime: Math.floor(uptime)
-          }));
-        }
-        return;
-      }
-      
-      // Handle root path for WebSocket connections
-      if (req.url === '/') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          status: 'ok',
-          service: 'gamework-signaling-server',
-          message: 'WebSocket signaling server is running',
-          timestamp: Date.now(),
-          version: '1.0.0'
-        }));
-        return;
-      }
-      
-      // Handle other HTTP requests
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
-      res.end('Not Found');
-    });
-
-    // WebSocketServer automatically handles upgrades, no manual handler needed
-  }
 }
 
 // Start server if this file is run directly
