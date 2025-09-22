@@ -11,7 +11,7 @@ services:
       - PORT=8080
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "const ws = require('ws'); const client = new ws.WebSocket('ws://localhost:8080'); client.on('open', () => { client.close(); process.exit(0); }); client.on('error', () => process.exit(1)); setTimeout(() => process.exit(1), 5000);"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
