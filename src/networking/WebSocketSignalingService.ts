@@ -129,69 +129,36 @@ export class WebSocketSignalingService implements SignalingService {
           console.error('[WebSocket] Current target:', error.currentTarget);
           
           // Enhanced error logging for CORS and security issues
-          console.error('[WebSocket] 🔍 DETAILED ERROR ANALYSIS:');
-          console.error('[WebSocket] Error event properties:', {
-            type: error.type,
-            bubbles: error.bubbles,
-            cancelable: error.cancelable,
-            composed: error.composed,
-            isTrusted: error.isTrusted,
-            timeStamp: error.timeStamp
-          });
+          console.error('[WebSocket] ERROR ANALYSIS:');
+          console.error('[WebSocket] Error type:', error.type);
+          console.error('[WebSocket] ReadyState:', this.ws?.readyState);
+          console.error('[WebSocket] URL:', this.ws?.url);
           
           // Check for CORS-related issues
           if (typeof window !== 'undefined') {
-            console.error('[WebSocket] 🌐 BROWSER SECURITY CHECK:');
-            console.error('[WebSocket] Current origin:', window.location.origin);
-            console.error('[WebSocket] Target URL:', this.config.serverUrl);
-            console.error('[WebSocket] Cross-origin check:', {
-              currentOrigin: window.location.origin,
-              targetHost: new URL(this.config.serverUrl).origin,
-              isCrossOrigin: window.location.origin !== new URL(this.config.serverUrl).origin
-            });
+            const currentOrigin = window.location.origin;
+            const targetOrigin = new URL(this.config.serverUrl).origin;
+            const isCrossOrigin = currentOrigin !== targetOrigin;
             
-            // Check for CSP violations
-            console.error('[WebSocket] 🛡️ CONTENT SECURITY POLICY:');
-            const cspMeta = document.querySelector('meta[http-equiv="Content-Security-Policy"]');
-            if (cspMeta) {
-              console.error('[WebSocket] CSP Meta tag found:', cspMeta.getAttribute('content'));
-            } else {
-              console.error('[WebSocket] No CSP meta tag found');
+            console.error('[WebSocket] CORS CHECK:');
+            console.error('[WebSocket] Current origin:', currentOrigin);
+            console.error('[WebSocket] Target origin:', targetOrigin);
+            console.error('[WebSocket] Is cross-origin:', isCrossOrigin);
+            
+            if (isCrossOrigin) {
+              console.error('[WebSocket] ❌ CORS ISSUE: Server must allow origin:', currentOrigin);
             }
             
             // Check for mixed content issues
             const isHttps = window.location.protocol === 'https:';
             const isWss = this.config.serverUrl.startsWith('wss:');
-            console.error('[WebSocket] 🔒 MIXED CONTENT CHECK:');
-            console.error('[WebSocket] Mixed content analysis:', {
-              pageProtocol: window.location.protocol,
-              wsProtocol: isWss ? 'wss' : 'ws',
-              isSecure: isHttps && isWss,
-              mixedContentWarning: isHttps && !isWss ? '⚠️ HTTPS page trying to connect to WS (insecure)' : 'OK'
-            });
-          }
-          
-          // Try to get more specific error information
-          if (this.ws) {
-            console.error('[WebSocket] Ready state at error:', this.ws.readyState);
-            console.error('[WebSocket] URL at error:', this.ws.url);
-            console.error('[WebSocket] Protocol at error:', this.ws.protocol);
-            console.error('[WebSocket] Extensions at error:', this.ws.extensions);
-            console.error('[WebSocket] Binary type at error:', this.ws.binaryType);
-          }
-          
-          // Check for network connectivity
-          if (typeof navigator !== 'undefined' && 'onLine' in navigator) {
-            console.error('[WebSocket] 📡 NETWORK STATUS:');
-            console.error('[WebSocket] Online status:', navigator.onLine);
-            if ('connection' in navigator) {
-              const connection = (navigator as any).connection;
-              console.error('[WebSocket] Connection details:', {
-                effectiveType: connection?.effectiveType,
-                downlink: connection?.downlink,
-                rtt: connection?.rtt,
-                saveData: connection?.saveData
-              });
+            console.error('[WebSocket] PROTOCOL CHECK:');
+            console.error('[WebSocket] Page protocol:', window.location.protocol);
+            console.error('[WebSocket] WS protocol:', isWss ? 'wss' : 'ws');
+            console.error('[WebSocket] Security match:', isHttps === isWss);
+            
+            if (isHttps && !isWss) {
+              console.error('[WebSocket] ❌ MIXED CONTENT: HTTPS page cannot connect to WS');
             }
           }
           
@@ -532,7 +499,7 @@ export class WebSocketSignalingService implements SignalingService {
 
   // Pre-connection security and CORS checks
   private performPreConnectionChecks(): void {
-    console.log('[WebSocket] 🔍 PRE-CONNECTION SECURITY CHECKS:');
+    console.log('[WebSocket] PRE-CONNECTION CHECKS:');
     
     if (typeof window !== 'undefined') {
       // CORS analysis
@@ -541,78 +508,27 @@ export class WebSocketSignalingService implements SignalingService {
       const targetOrigin = targetUrl.origin;
       const isCrossOrigin = currentOrigin !== targetOrigin;
       
-      console.log('[WebSocket] 🌐 CORS ANALYSIS:');
-      console.log('[WebSocket] Current origin:', currentOrigin);
-      console.log('[WebSocket] Target origin:', targetOrigin);
-      console.log('[WebSocket] Is cross-origin:', isCrossOrigin);
+      console.log('[WebSocket] CORS: Current origin:', currentOrigin);
+      console.log('[WebSocket] CORS: Target origin:', targetOrigin);
+      console.log('[WebSocket] CORS: Is cross-origin:', isCrossOrigin);
       
       if (isCrossOrigin) {
         console.warn('[WebSocket] ⚠️ CROSS-ORIGIN CONNECTION DETECTED');
-        console.warn('[WebSocket] This may require CORS headers on the server');
         console.warn('[WebSocket] Server must allow origin:', currentOrigin);
       }
       
       // Protocol security check
       const isHttps = window.location.protocol === 'https:';
       const isWss = this.config.serverUrl.startsWith('wss:');
-      console.log('[WebSocket] 🔒 PROTOCOL SECURITY:');
-      console.log('[WebSocket] Page protocol:', window.location.protocol);
-      console.log('[WebSocket] WebSocket protocol:', isWss ? 'wss' : 'ws');
-      console.log('[WebSocket] Security match:', isHttps === isWss);
+      console.log('[WebSocket] PROTOCOL: Page:', window.location.protocol, 'WS:', isWss ? 'wss' : 'ws');
+      console.log('[WebSocket] PROTOCOL: Security match:', isHttps === isWss);
       
       if (isHttps && !isWss) {
-        console.error('[WebSocket] ❌ MIXED CONTENT BLOCKED');
-        console.error('[WebSocket] HTTPS page cannot connect to WS (insecure)');
-        console.error('[WebSocket] Use WSS for secure connections');
-      }
-      
-      // Content Security Policy check
-      console.log('[WebSocket] 🛡️ CONTENT SECURITY POLICY:');
-      const cspMeta = document.querySelector('meta[http-equiv="Content-Security-Policy"]');
-      if (cspMeta) {
-        const cspContent = cspMeta.getAttribute('content') || '';
-        console.log('[WebSocket] CSP found:', cspContent);
-        
-        // Check for connect-src directive
-        const connectSrcMatch = cspContent.match(/connect-src\s+([^;]+)/);
-        if (connectSrcMatch) {
-          console.log('[WebSocket] CSP connect-src:', connectSrcMatch[1]);
-          const allowedSources = connectSrcMatch[1].split(/\s+/);
-          const targetHost = targetUrl.hostname;
-          const isAllowed = allowedSources.some(source => 
-            source === '*' || 
-            source === targetHost || 
-            source === targetUrl.origin ||
-            (source.startsWith('*.') && targetHost.endsWith(source.slice(2)))
-          );
-          console.log('[WebSocket] CSP allows target:', isAllowed);
-          if (!isAllowed) {
-            console.error('[WebSocket] ❌ CSP BLOCKING CONNECTION');
-            console.error('[WebSocket] Target not allowed by connect-src directive');
-          }
-        } else {
-          console.warn('[WebSocket] ⚠️ No connect-src directive in CSP');
-        }
-      } else {
-        console.log('[WebSocket] No CSP meta tag found');
-      }
-      
-      // Network connectivity check
-      console.log('[WebSocket] 📡 NETWORK CONNECTIVITY:');
-      console.log('[WebSocket] Online status:', navigator.onLine);
-      if ('connection' in navigator) {
-        const connection = (navigator as any).connection;
-        console.log('[WebSocket] Connection type:', connection?.effectiveType || 'unknown');
-        console.log('[WebSocket] Connection details:', {
-          effectiveType: connection?.effectiveType,
-          downlink: connection?.downlink,
-          rtt: connection?.rtt,
-          saveData: connection?.saveData
-        });
+        console.error('[WebSocket] ❌ MIXED CONTENT: HTTPS page cannot connect to WS');
       }
     }
     
-    console.log('[WebSocket] 🔍 PRE-CONNECTION CHECKS COMPLETE');
+    console.log('[WebSocket] PRE-CONNECTION CHECKS COMPLETE');
   }
 
   // Static method to test WebSocket connectivity
