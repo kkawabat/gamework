@@ -366,6 +366,19 @@ export class SignalingServer {
         return;
       }
       
+      // Handle root path for WebSocket connections
+      if (req.url === '/') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          status: 'ok',
+          service: 'gamework-signaling-server',
+          message: 'WebSocket signaling server is running',
+          timestamp: Date.now(),
+          version: '1.0.0'
+        }));
+        return;
+      }
+      
       // Handle other HTTP requests
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       res.end('Not Found');
