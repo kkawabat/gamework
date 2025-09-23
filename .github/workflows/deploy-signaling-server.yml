@@ -33,6 +33,11 @@ jobs:
               echo -e "\033[0;32m[INFO]\033[0m $1"
           }
           
+          print_status "Ensuring we have the latest code (handles force pushes)..."
+          cd /var/www/gamework
+          git fetch --all
+          git reset --hard origin/main
+          
           print_status "Downloading deployment script..."
           curl -fsSL https://raw.githubusercontent.com/kkawabat/gamework/main/signaling-server/deploy.sh -o /tmp/deploy.sh
           chmod +x /tmp/deploy.sh

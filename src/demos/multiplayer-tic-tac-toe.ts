@@ -317,6 +317,12 @@ export class MultiplayerTicTacToe {
                 this.log('Connected to host!', 'success');
                 this.updatePlayerDisplay();
                 
+                // Update join room button to show connected status
+                if (this.joinRoomBtn) {
+                    this.joinRoomBtn.disabled = false;
+                    this.joinRoomBtn.textContent = 'Joined!';
+                }
+                
                 // Delay WebSocket disconnection to allow ICE candidates to complete
                 setTimeout(() => {
                     console.log('[Client] Delaying WebSocket disconnect to allow ICE completion');
@@ -351,6 +357,15 @@ export class MultiplayerTicTacToe {
             console.log('[Client] About to call initializeAsClient()');
             await this.initializeAsClient();
             console.log('[Client] initializeAsClient() completed successfully');
+            
+            // Set a timeout to reset button if connection takes too long
+            setTimeout(() => {
+                if (this.joinRoomBtn && this.joinRoomBtn.textContent === 'Joining...') {
+                    this.joinRoomBtn.disabled = false;
+                    this.joinRoomBtn.textContent = 'Join Room';
+                    this.log('Connection timeout - please try again', 'warning');
+                }
+            }, 10000); // 10 second timeout
             
         } catch (error) {
             this.log(`Failed to join room ${roomCode}: ${(error as Error).message}`, 'error');
