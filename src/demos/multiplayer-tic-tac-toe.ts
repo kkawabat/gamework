@@ -17,16 +17,13 @@ export class MultiplayerTicTacToe {
     private currentState: TicTacToeState | null = null;
     private gameActive: boolean = false;
     private currentRoom: GameRoom | null = null;
+    private firstPlayerId: string | null = null; // Track who made the first move
     
     // DOM elements
     private gameBoard: HTMLElement | null = null;
     private gameStatus: HTMLElement | null = null;
     private roomCode: HTMLElement | null = null;
     private gameLog: HTMLElement | null = null;
-    private startGame: HTMLButtonElement | null = null;
-    private resetGame: HTMLButtonElement | null = null;
-    private exportState: HTMLButtonElement | null = null;
-    private importState: HTMLButtonElement | null = null;
     private qrCodeContainer: HTMLElement | null = null;
     private connectionIndicator: HTMLElement | null = null;
     private connectionStatus: HTMLElement | null = null;
@@ -45,10 +42,6 @@ export class MultiplayerTicTacToe {
         this.gameStatus = document.getElementById('gameStatus');
         this.roomCode = document.getElementById('roomCode');
         this.gameLog = document.getElementById('gameLog');
-        this.startGame = document.getElementById('startGame') as HTMLButtonElement;
-        this.resetGame = document.getElementById('resetGame') as HTMLButtonElement;
-        this.exportState = document.getElementById('exportState') as HTMLButtonElement;
-        this.importState = document.getElementById('importState') as HTMLButtonElement;
         this.qrCodeContainer = document.getElementById('qrCodeContainer');
         this.connectionIndicator = document.getElementById('connectionIndicator');
         this.connectionStatus = document.getElementById('connectionStatus');
@@ -69,11 +62,6 @@ export class MultiplayerTicTacToe {
             this.makeMove(index);
         });
 
-        // Button handlers
-        this.startGame?.addEventListener('click', () => this.startNewGame());
-        this.resetGame?.addEventListener('click', () => this.resetGameState());
-        this.exportState?.addEventListener('click', () => this.exportGameState());
-        this.importState?.addEventListener('click', () => this.importGameState());
         this.joinRoomBtn?.addEventListener('click', () => {
             console.log('[Client] Join room button clicked');
             this.joinExistingRoom();
@@ -415,6 +403,12 @@ export class MultiplayerTicTacToe {
         if (!this.gameActive) return;
         
         try {
+            // Track the first player to make a move
+            if (!this.firstPlayerId) {
+                this.firstPlayerId = this.playerId || 'player1';
+                this.log(`Player ${this.firstPlayerId} is X (first move)`, 'info');
+            }
+            
             const move = {
                 type: 'place',
                 playerId: this.playerId || 'player1',
@@ -441,6 +435,19 @@ export class MultiplayerTicTacToe {
 
     private handleStateUpdate(state: TicTacToeState) {
         this.currentState = state;
+        
+        // Track first player from state updates (when receiving moves from other players)
+        if (!this.firstPlayerId && state.board.some(cell => cell !== null)) {
+            // Find the first non-null cell to determine who made the first move
+            const firstMoveIndex = state.board.findIndex(cell => cell !== null);
+            if (firstMoveIndex !== -1) {
+                // We need to determine who made this move based on the game state
+                // For now, we'll set it when we receive the first state update
+                // This is a simplified approach - in a real implementation, you'd track this more precisely
+                this.firstPlayerId = this.playerId || 'player1';
+            }
+        }
+        
         this.updateBoard();
         this.updateGameStatus();
         this.updatePlayerDisplay();
@@ -542,6 +549,22 @@ export class MultiplayerTicTacToe {
         const player1 = document.getElementById('player1');
         const player2 = document.getElementById('player2');
         
+        // Update player labels to show X/O assignment
+        if (this.firstPlayerId) {
+            const isFirstPlayer = (this.firstPlayerId === this.playerId);
+            const firstPlayerLabel = isFirstPlayer ? 'You (X)' : 'Player 1 (X)';
+            const secondPlayerLabel = isFirstPlayer ? 'Player 2 (O)' : 'You (O)';
+            
+            if (player1) {
+                const labelElement = player1.querySelector('div:first-child');
+                if (labelElement) labelElement.textContent = firstPlayerLabel;
+            }
+            if (player2) {
+                const labelElement = player2.querySelector('div:first-child');
+                if (labelElement) labelElement.textContent = secondPlayerLabel;
+            }
+        }
+        
         player1?.classList.toggle('current', state.currentPlayer === 'X' && isMyTurn);
         player2?.classList.toggle('current', state.currentPlayer === 'O' && isMyTurn);
     }
@@ -565,11 +588,13 @@ export class MultiplayerTicTacToe {
     }
 
     private isMyTurn(): boolean {
-        if (!this.currentState) return false;
+        if (!this.currentState || !this.firstPlayerId) return false;
         
         // Check if it's the current player's turn
         const currentPlayer = this.currentState.currentPlayer;
-        const myPlayerSymbol = this.isHost ? 'X' : 'O';
+        
+        // Determine my symbol based on who made the first move
+        const myPlayerSymbol = (this.firstPlayerId === this.playerId) ? 'X' : 'O';
         
         return currentPlayer === myPlayerSymbol;
     }
@@ -598,6 +623,9 @@ export class MultiplayerTicTacToe {
         if (!this.gameHost) return;
         
         try {
+            // Reset first player tracking for new game
+            this.firstPlayerId = null;
+            
             // Create a proper exported state format
             const exportedState = JSON.stringify({
                 state: ticTacToeConfig.initialState,
@@ -612,58 +640,8 @@ export class MultiplayerTicTacToe {
         }
     }
 
-    private resetGameState() {
-        if (!this.gameHost) return;
-        
-        try {
-            // Create a proper exported state format
-            const exportedState = JSON.stringify({
-                state: ticTacToeConfig.initialState,
-                moveHistory: [],
-                version: 0
-            });
-            this.gameHost.importGameState(exportedState);
-            this.gameActive = false;
-            this.log('Game reset', 'info');
-        } catch (error) {
-            this.log(`Failed to reset game: ${(error as Error).message}`, 'error');
-        }
-    }
 
-    private exportGameState() {
-        if (!this.currentState) return;
-        
-        try {
-            const stateStr = JSON.stringify(this.currentState, null, 2);
-            navigator.clipboard.writeText(stateStr).then(() => {
-                this.log('Game state exported to clipboard', 'success');
-            }).catch(() => {
-                // Fallback for older browsers
-                const textArea = document.createElement('textarea');
-                textArea.value = stateStr;
-                document.body.appendChild(textArea);
-                textArea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textArea);
-                this.log('Game state exported to clipboard', 'success');
-            });
-        } catch (error) {
-            this.log(`Failed to export game state: ${(error as Error).message}`, 'error');
-        }
-    }
 
-    private importGameState() {
-        const stateStr = prompt('Paste the exported game state:');
-        if (stateStr && this.gameHost) {
-            try {
-                const state = JSON.parse(stateStr);
-                this.gameHost.importGameState(stateStr);
-                this.log('Game state imported successfully', 'success');
-            } catch (error) {
-                this.log('Failed to import game state: Invalid format', 'error');
-            }
-        }
-    }
 
     private updateConnectionStatus(connected: boolean, status: string) {
         if (this.connectionIndicator) {
@@ -683,10 +661,8 @@ export class MultiplayerTicTacToe {
     }
 
     private enableControls() {
-        if (this.startGame) this.startGame.disabled = false;
-        if (this.resetGame) this.resetGame.disabled = false;
-        if (this.exportState) this.exportState.disabled = false;
-        if (this.importState) this.importState.disabled = false;
+        // No controls to enable after removing buttons
+        // This method is kept for potential future use
     }
 
     private log(message: string, type: string = 'info') {

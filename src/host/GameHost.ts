@@ -21,6 +21,7 @@ export class GameHost {
   private room: GameRoom;
   private hostPlayer: Player;
   private isRunning = false;
+  private firstPlayerId: string | null = null; // Track who made the first move
 
   // Event callbacks
   private onStateUpdate?: (state: GameState) => void;
@@ -146,6 +147,8 @@ export class GameHost {
   importGameState(exportedState: string): boolean {
     const success = this.engine.importState(exportedState);
     if (success) {
+      // Reset first player tracking for new game
+      this.firstPlayerId = null;
       this.broadcastState(true);
     }
     return success;
@@ -306,23 +309,31 @@ export class GameHost {
       return;
     }
     
+    // Track the first player to make a move
+    if (!this.firstPlayerId) {
+      this.firstPlayerId = peerId;
+      console.log(`[GameHost] Player ${peerId} is X (first move)`);
+    }
+    
     // Validate that it's the correct player's turn
     const currentState = this.engine.getCurrentState();
     const ticTacToeState = currentState as any;
     const currentPlayerSymbol = ticTacToeState.currentPlayer; // 'X' or 'O'
     
-    // Determine which player should be making the move
-    const isHostTurn = currentPlayerSymbol === 'X';
-    const isClientTurn = currentPlayerSymbol === 'O';
-    const isCorrectPlayer = (isHostTurn && player.isHost) || (isClientTurn && !player.isHost);
+    // Determine which player should be making the move based on who went first
+    const isFirstPlayerTurn = currentPlayerSymbol === 'X';
+    const isSecondPlayerTurn = currentPlayerSymbol === 'O';
+    const isCorrectPlayer = (isFirstPlayerTurn && peerId === this.firstPlayerId) || 
+                           (isSecondPlayerTurn && peerId !== this.firstPlayerId);
     
     if (!isCorrectPlayer) {
       const debugInfo = {
         movePlayerId: move.playerId,
         currentPlayer: currentPlayerSymbol,
         playerIsHost: player.isHost,
-        isHostTurn,
-        isClientTurn,
+        firstPlayerId: this.firstPlayerId,
+        isFirstPlayerTurn,
+        isSecondPlayerTurn,
         isCorrectPlayer,
         board: ticTacToeState.board,
         gameOver: ticTacToeState.gameOver,
