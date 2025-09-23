@@ -18,6 +18,8 @@ export class MultiplayerTicTacToe {
     private gameActive: boolean = false;
     private currentRoom: GameRoom | null = null;
     private firstPlayerId: string | null = null; // Track who made the first move
+    private websocketDisconnected: boolean = false; // Track if WebSocket was disconnected
+    private webrtcConnected: boolean = false; // Track WebRTC connection state
     
     // DOM elements
     private gameBoard: HTMLElement | null = null;
@@ -158,9 +160,18 @@ export class MultiplayerTicTacToe {
 
             // Set up connection change handler for host
             this.gameHost.setConnectionChangeHandler((peerId, isConnected) => {
-                if (isConnected) {
-                    // Disconnect WebSocket after WebRTC is established
+                this.webrtcConnected = isConnected;
+                
+                if (isConnected && !this.websocketDisconnected) {
+                    // WebRTC is established, disconnect WebSocket to minimize signaling server load
+                    console.log('[Host] WebRTC connected, disconnecting WebSocket');
                     this.gameHost?.disconnectSignaling();
+                    this.websocketDisconnected = true;
+                    this.log('WebRTC connection established - WebSocket disconnected', 'success');
+                } else if (!isConnected && this.websocketDisconnected) {
+                    // WebRTC dropped, need to reconnect WebSocket
+                    console.log('[Host] WebRTC dropped, reconnecting WebSocket');
+                    this.handleWebRTCDisconnection();
                 }
             });
 
@@ -300,6 +311,8 @@ export class MultiplayerTicTacToe {
 
         // Set up connection change handler to activate game when WebRTC connects
         this.gameClient.setConnectionChangeHandler((peerId, isConnected) => {
+            this.webrtcConnected = isConnected;
+            
             if (isConnected && !this.gameActive) {
                 this.gameActive = true;
                 this.log('Connected to host!', 'success');
@@ -310,12 +323,20 @@ export class MultiplayerTicTacToe {
                     this.joinRoomBtn.disabled = false;
                     this.joinRoomBtn.textContent = 'Joined!';
                 }
-                
-                // Delay WebSocket disconnection to allow ICE candidates to complete
+            }
+            
+            if (isConnected && !this.websocketDisconnected) {
+                // WebRTC is established, disconnect WebSocket to minimize signaling server load
+                console.log('[Client] WebRTC connected, disconnecting WebSocket');
                 setTimeout(() => {
-                    console.log('[Client] Delaying WebSocket disconnect to allow ICE completion');
                     this.gameClient?.disconnectSignaling();
-                }, 2000); // 2 second delay
+                    this.websocketDisconnected = true;
+                    this.log('WebRTC connection established - WebSocket disconnected', 'success');
+                }, 2000); // 2 second delay to allow ICE candidates to complete
+            } else if (!isConnected && this.websocketDisconnected) {
+                // WebRTC dropped, need to reconnect WebSocket
+                console.log('[Client] WebRTC dropped, reconnecting WebSocket');
+                this.handleWebRTCDisconnection();
             }
         });
     }
@@ -663,6 +684,34 @@ export class MultiplayerTicTacToe {
     private enableControls() {
         // No controls to enable after removing buttons
         // This method is kept for potential future use
+    }
+
+    private async handleWebRTCDisconnection() {
+        this.log('WebRTC connection lost, attempting to reconnect...', 'warning');
+        this.websocketDisconnected = false;
+        this.webrtcConnected = false;
+        
+        try {
+            if (this.isHost && this.gameHost) {
+                // Reconnect host WebSocket
+                const signalingService = new WebSocketSignalingService(activeSignalingConfig);
+                await signalingService.connect();
+                this.gameHost.setSignalingService(signalingService);
+                this.log('Host WebSocket reconnected', 'success');
+            } else if (!this.isHost && this.gameClient) {
+                // Reconnect client WebSocket
+                const signalingService = new WebSocketSignalingService(activeSignalingConfig);
+                await signalingService.connect();
+                this.gameClient.setSignalingService(signalingService);
+                this.log('Client WebSocket reconnected', 'success');
+            }
+        } catch (error) {
+            this.log(`Failed to reconnect WebSocket: ${(error as Error).message}`, 'error');
+            // Retry after a delay
+            setTimeout(() => {
+                this.handleWebRTCDisconnection();
+            }, 5000);
+        }
     }
 
     private log(message: string, type: string = 'info') {

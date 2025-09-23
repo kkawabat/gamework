@@ -184,6 +184,12 @@ export class GameClient {
     this.signaling.disconnect();
   }
 
+  setSignalingService(signalingService: SignalingService): void {
+    console.log('[GameClient] Setting new signaling service');
+    this.signaling = signalingService;
+    this.setupEventHandlers();
+  }
+
   getPlayerId(): string {
     return this.playerId;
   }

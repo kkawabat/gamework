@@ -475,5 +475,11 @@ export class GameHost {
     console.log('[GameHost] Disconnecting WebSocket signaling service');
     this.signaling.disconnect();
   }
+
+  setSignalingService(signalingService: SignalingService): void {
+    console.log('[GameHost] Setting new signaling service');
+    this.signaling = signalingService;
+    this.setupEventHandlers();
+  }
 }
 
