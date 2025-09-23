@@ -34,7 +34,7 @@ jobs:
           }
           
           print_status "Ensuring we have the latest code (handles force pushes)..."
-          cd /var/www/gamework
+          cd /opt/gamework
           git fetch --all
           git reset --hard origin/main
           
