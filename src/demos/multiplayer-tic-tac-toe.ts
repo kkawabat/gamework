@@ -55,12 +55,21 @@ export class MultiplayerTicTacToe {
     private setupEventListeners() {
         // Board click handlers
         this.gameBoard?.addEventListener('click', (e) => {
-            if (!this.gameActive) return;
+            console.log('[Debug] Tile clicked, gameActive:', this.gameActive, 'currentState:', !!this.currentState, 'firstPlayerId:', this.firstPlayerId);
+            
+            if (!this.gameActive) {
+                console.log('[Debug] Click ignored - game not active');
+                return;
+            }
             
             const cell = (e.target as HTMLElement).closest('.cell');
-            if (!cell || cell.classList.contains('disabled')) return;
+            if (!cell || cell.classList.contains('disabled')) {
+                console.log('[Debug] Click ignored - cell not found or disabled');
+                return;
+            }
             
             const index = parseInt((cell as HTMLElement).dataset.index || '0');
+            console.log('[Debug] Making move at index:', index);
             this.makeMove(index);
         });
 
@@ -570,24 +579,49 @@ export class MultiplayerTicTacToe {
         const player1 = document.getElementById('player1');
         const player2 = document.getElementById('player2');
         
-        // Update player labels to show X/O assignment
+        // Update player labels to show dynamic Player 1/2 assignment
         if (this.firstPlayerId) {
             const isFirstPlayer = (this.firstPlayerId === this.playerId);
-            const firstPlayerLabel = isFirstPlayer ? 'You (X)' : 'Player 1 (X)';
-            const secondPlayerLabel = isFirstPlayer ? 'Player 2 (O)' : 'You (O)';
+            
+            // First player (who made first move) is always Player 1
+            // Second player is always Player 2
+            const player1Label = isFirstPlayer ? 'You (Player 1)' : 'Player 1';
+            const player2Label = isFirstPlayer ? 'Player 2' : 'You (Player 2)';
             
             if (player1) {
                 const labelElement = player1.querySelector('div:first-child');
-                if (labelElement) labelElement.textContent = firstPlayerLabel;
+                if (labelElement) labelElement.textContent = player1Label;
             }
             if (player2) {
                 const labelElement = player2.querySelector('div:first-child');
-                if (labelElement) labelElement.textContent = secondPlayerLabel;
+                if (labelElement) labelElement.textContent = player2Label;
+            }
+        } else {
+            // Before first move, show generic labels
+            if (player1) {
+                const labelElement = player1.querySelector('div:first-child');
+                if (labelElement) labelElement.textContent = this.isHost ? 'You (Host)' : 'Player 1';
+            }
+            if (player2) {
+                const labelElement = player2.querySelector('div:first-child');
+                if (labelElement) labelElement.textContent = this.isHost ? 'Player 2' : 'You (Client)';
             }
         }
         
-        player1?.classList.toggle('current', state.currentPlayer === 'X' && isMyTurn);
-        player2?.classList.toggle('current', state.currentPlayer === 'O' && isMyTurn);
+        // Update current player highlighting based on X/O symbols
+        if (this.firstPlayerId) {
+            const isFirstPlayer = (this.firstPlayerId === this.playerId);
+            const isMyTurn = this.isMyTurn();
+            
+            // First player (Player 1) is X, Second player (Player 2) is O
+            player1?.classList.toggle('current', state.currentPlayer === 'X' && isMyTurn && isFirstPlayer);
+            player2?.classList.toggle('current', state.currentPlayer === 'O' && isMyTurn && !isFirstPlayer);
+        } else {
+            // Before first move, allow both players to make first move
+            const isMyTurn = this.isMyTurn();
+            player1?.classList.toggle('current', isMyTurn && this.isHost);
+            player2?.classList.toggle('current', isMyTurn && !this.isHost);
+        }
     }
 
     private updatePlayerCount() {
@@ -609,15 +643,29 @@ export class MultiplayerTicTacToe {
     }
 
     private isMyTurn(): boolean {
-        if (!this.currentState || !this.firstPlayerId) return false;
+        if (!this.currentState) {
+            console.log('[Debug] isMyTurn: false - no current state');
+            return false;
+        }
+        
+        // If no one has made the first move yet, allow any player to make the first move
+        if (!this.firstPlayerId) {
+            console.log('[Debug] isMyTurn: true - first move allowed');
+            return true; // Allow first move from any player
+        }
         
         // Check if it's the current player's turn
         const currentPlayer = this.currentState.currentPlayer;
         
         // Determine my symbol based on who made the first move
-        const myPlayerSymbol = (this.firstPlayerId === this.playerId) ? 'X' : 'O';
+        // First player (Player 1) is X, Second player (Player 2) is O
+        const isFirstPlayer = (this.firstPlayerId === this.playerId);
+        const myPlayerSymbol = isFirstPlayer ? 'X' : 'O';
+        const isMyTurn = currentPlayer === myPlayerSymbol;
         
-        return currentPlayer === myPlayerSymbol;
+        console.log('[Debug] isMyTurn:', isMyTurn, 'currentPlayer:', currentPlayer, 'myPlayerSymbol:', myPlayerSymbol, 'isFirstPlayer:', isFirstPlayer, 'firstPlayerId:', this.firstPlayerId, 'playerId:', this.playerId);
+        
+        return isMyTurn;
     }
 
     private highlightWinningCells() {
