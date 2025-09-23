@@ -1,5 +1,6 @@
 // Import the GameWork framework
 import { GameHost, GameClient, WebSocketSignalingService } from '../index';
+import { GameRoom } from '../types';
 import { ticTacToeConfig, TicTacToeState, TicTacToeMove } from './simple-tic-tac-toe';
 import { generateQRCode } from '../utils';
 import { activeSignalingConfig } from './signaling-config';
@@ -15,6 +16,7 @@ export class MultiplayerTicTacToe {
     private playerId: string | null = null;
     private currentState: TicTacToeState | null = null;
     private gameActive: boolean = false;
+    private currentRoom: GameRoom | null = null;
     
     // DOM elements
     private gameBoard: HTMLElement | null = null;
@@ -72,7 +74,10 @@ export class MultiplayerTicTacToe {
         this.resetGame?.addEventListener('click', () => this.resetGameState());
         this.exportState?.addEventListener('click', () => this.exportGameState());
         this.importState?.addEventListener('click', () => this.importGameState());
-        this.joinRoomBtn?.addEventListener('click', () => this.joinExistingRoom());
+        this.joinRoomBtn?.addEventListener('click', () => {
+            console.log('[Client] Join room button clicked');
+            this.joinExistingRoom();
+        });
         
         // Room code input handler
         this.roomCodeInput?.addEventListener('keypress', (e) => {
@@ -94,6 +99,7 @@ export class MultiplayerTicTacToe {
                 if (this.roomCode) this.roomCode.textContent = this.roomId;
                 if (this.roomCodeInput) this.roomCodeInput.value = this.roomId;
                 this.log(`Joining room from URL: ${this.roomId}`, 'info');
+                console.log('[Game] About to call initializeAsClient() from URL param');
                 await this.initializeAsClient();
             } else {
                 // Generate new room ID and become host
@@ -106,15 +112,18 @@ export class MultiplayerTicTacToe {
             
         } catch (error) {
             this.log('Failed to initialize as host, trying as client...', 'warning');
+            console.log('[Game] About to call initializeAsClient() from catch block');
             await this.initializeAsClient();
         }
     }
 
     private async initializeAsHost() {
         try {
+            console.log('[Game] initializeAsHost called');
             this.log('Initializing as game host...', 'info');
             this.log(`Using signaling server: ${activeSignalingConfig.serverUrl}`, 'info');
             this.isHost = true;
+            console.log('[Game] isHost set to true');
             
             // Create WebSocket signaling service
             const signalingService = new WebSocketSignalingService(activeSignalingConfig);
@@ -136,14 +145,21 @@ export class MultiplayerTicTacToe {
             this.gameHost.setPlayerLeaveHandler((playerId) => {
                 this.log(`Player ${playerId} left the game`, 'warning');
                 this.updatePlayerDisplay();
+                
+                // Reset game when a player leaves
+                this.gameActive = false;
+                this.log('Game paused - waiting for player to rejoin', 'warning');
             });
 
             this.gameHost.setRoomUpdateHandler((room) => {
+                console.log('[Host] Room update handler called with room:', room);
                 this.log(`Room updated: ${room.players.size} players connected`, 'info');
+                this.currentRoom = room; // Store the room data
                 this.updatePlayerDisplay();
                 
                 // Auto-start game when both players are connected
                 if (room.players.size >= 2 && !this.gameActive) {
+                    console.log('[Host] Auto-starting game because room has 2+ players');
                     this.startNewGame();
                 }
             });
@@ -152,11 +168,26 @@ export class MultiplayerTicTacToe {
                 this.handleStateUpdate(state as TicTacToeState);
             });
 
+            // Set up connection change handler for host
+            this.gameHost.setConnectionChangeHandler((peerId, isConnected) => {
+                if (isConnected) {
+                    // Disconnect WebSocket after WebRTC is established
+                    this.gameHost?.disconnectSignaling();
+                }
+            });
+
             // Start the host
             await this.gameHost.start();
             
             this.updateConnectionStatus(true, 'Host - Connected');
             this.log('Successfully initialized as game host', 'success');
+            
+            // Check if we already have 2 players and start the game
+            const players = this.gameHost.getPlayers();
+            if (players.length >= 2) {
+                console.log('[Host] Already have 2+ players, starting game immediately');
+                this.startNewGame();
+            }
             
             // Generate QR code
             await this.generateQRCode();
@@ -172,19 +203,37 @@ export class MultiplayerTicTacToe {
 
     private async initializeAsClient() {
         try {
+            console.log('[Game] initializeAsClient called');
+            console.log('[Game] Room ID:', this.roomId);
             this.log('Initializing as game client...', 'info');
             this.log(`Using signaling server: ${activeSignalingConfig.serverUrl}`, 'info');
+            
+            // Clean up any existing host state
+            if (this.gameHost) {
+                console.log('[Client] Cleaning up existing gameHost');
+                await this.gameHost.disconnectSignaling();
+                this.gameHost = null;
+            }
+            
             this.isHost = false;
+            console.log('[Game] isHost set to false');
             
             // Create WebSocket signaling service for client
+            console.log('[Client] Creating WebSocket signaling service');
             const signalingService = new WebSocketSignalingService(activeSignalingConfig);
+            console.log('[Client] Connecting to signaling service');
             await signalingService.connect();
+            console.log('[Client] Signaling service connected');
             
             // Create game client
             this.gameClient = new GameClient({
                 roomId: this.roomId!,
                 playerName: `Player_${Math.floor(Math.random() * 1000)}`
             }, signalingService);
+            
+            // Set playerId from GameClient
+            this.playerId = this.gameClient.getPlayerId();
+            
             
             // Set up client event handlers
             this.setupClientEventHandlers();
@@ -194,6 +243,9 @@ export class MultiplayerTicTacToe {
             
             this.updateConnectionStatus(true, 'Client - Connected');
             this.log('Successfully connected as game client', 'success');
+            
+            // Update player display for client
+            this.updatePlayerDisplay();
             
             // Generate QR code for joining
             await this.generateQRCode();
@@ -226,10 +278,14 @@ export class MultiplayerTicTacToe {
 
         // Set up client event handlers
         this.gameClient.setStateUpdateHandler((state) => {
+            console.log('[Client] State update received:', state);
             // Auto-start game when client receives first state update
             if (!this.gameActive) {
+                console.log('[Client] Setting gameActive to true');
                 this.gameActive = true;
                 this.log('Game started!', 'success');
+                // Update display when game becomes active
+                this.updatePlayerDisplay();
             }
             this.handleStateUpdate(state as TicTacToeState);
         });
@@ -244,13 +300,36 @@ export class MultiplayerTicTacToe {
             this.updatePlayerDisplay();
         });
 
+        this.gameClient.setRoomUpdateHandler((room) => {
+            this.currentRoom = room;
+            this.log(`Room updated: ${room.players.size} players connected`, 'info');
+            this.updatePlayerDisplay();
+        });
+
         this.gameClient.setErrorHandler((error) => {
             this.log(`Client error: ${error.message}`, 'error');
+        });
+
+        // Set up connection change handler to activate game when WebRTC connects
+        this.gameClient.setConnectionChangeHandler((peerId, isConnected) => {
+            if (isConnected && !this.gameActive) {
+                this.gameActive = true;
+                this.log('Connected to host!', 'success');
+                this.updatePlayerDisplay();
+                
+                // Delay WebSocket disconnection to allow ICE candidates to complete
+                setTimeout(() => {
+                    console.log('[Client] Delaying WebSocket disconnect to allow ICE completion');
+                    this.gameClient?.disconnectSignaling();
+                }, 2000); // 2 second delay
+            }
         });
     }
 
     private async joinExistingRoom() {
+        console.log('[Client] joinExistingRoom called');
         const roomCode = this.roomCodeInput?.value.trim().toUpperCase() || '';
+        console.log('[Client] Room code:', roomCode);
         
         if (!roomCode || roomCode.length !== 6) {
             this.log('Please enter a valid 6-character room code', 'error');
@@ -269,7 +348,9 @@ export class MultiplayerTicTacToe {
             if (this.roomCode) this.roomCode.textContent = this.roomId;
             
             // Try to connect as a client to the existing room
+            console.log('[Client] About to call initializeAsClient()');
             await this.initializeAsClient();
+            console.log('[Client] initializeAsClient() completed successfully');
             
         } catch (error) {
             this.log(`Failed to join room ${roomCode}: ${(error as Error).message}`, 'error');
@@ -397,16 +478,9 @@ export class MultiplayerTicTacToe {
     }
 
     private updatePlayerDisplay() {
-        if (!this.currentState) return;
         
-        const state = this.currentState;
-        const isMyTurn = this.isMyTurn();
-        
-        const player1 = document.getElementById('player1');
-        const player2 = document.getElementById('player2');
-        
-        player1?.classList.toggle('current', state.currentPlayer === 'X' && isMyTurn);
-        player2?.classList.toggle('current', state.currentPlayer === 'O' && isMyTurn);
+        // Update player count display
+        this.updatePlayerCount();
         
         // Update player status
         if (this.isHost) {
@@ -425,7 +499,54 @@ export class MultiplayerTicTacToe {
                     player2Status.textContent = 'Waiting for player...';
                 }
             }
+        } else {
+            // Client display logic
+            const player1Status = document.getElementById('player1Status');
+            const player2Status = document.getElementById('player2Status');
+            
+            if (player1Status) {
+                // For client, player 1 is the host
+                // Check if WebRTC connection is established, not room player count
+                const hostText = this.gameActive ? 'Host - Connected' : 'Host - Connecting...';
+                player1Status.textContent = hostText;
+            }
+            
+            if (player2Status) {
+                // For client, player 2 is themselves
+                const clientText = this.gameActive ? 'You - Connected' : 'You - Connecting...';
+                player2Status.textContent = clientText;
+            }
         }
+        
+        // Only update game-specific display if we have a current state
+        if (!this.currentState) return;
+        
+        const state = this.currentState;
+        const isMyTurn = this.isMyTurn();
+        
+        const player1 = document.getElementById('player1');
+        const player2 = document.getElementById('player2');
+        
+        player1?.classList.toggle('current', state.currentPlayer === 'X' && isMyTurn);
+        player2?.classList.toggle('current', state.currentPlayer === 'O' && isMyTurn);
+    }
+
+    private updatePlayerCount() {
+        if (!this.playerCount) return;
+        
+        let playerCount = 0;
+        if (this.isHost && this.gameHost) {
+            const players = this.gameHost.getPlayers();
+            playerCount = players.filter(p => p.isConnected).length;
+        } else if (!this.isHost && this.currentRoom) {
+            // For client, show 2 players when WebRTC is connected, 1 when not
+            playerCount = this.gameActive ? 2 : this.currentRoom.players.size;
+        } else if (!this.isHost && this.gameClient) {
+            // Fallback estimation
+            playerCount = this.gameActive ? 2 : 1;
+        }
+        
+        this.playerCount.textContent = `Players: ${playerCount}`;
     }
 
     private isMyTurn(): boolean {
@@ -462,9 +583,13 @@ export class MultiplayerTicTacToe {
         if (!this.gameHost) return;
         
         try {
-            // Reset the game state by importing the initial state
-            const initialState = JSON.stringify(ticTacToeConfig.initialState);
-            this.gameHost.importGameState(initialState);
+            // Create a proper exported state format
+            const exportedState = JSON.stringify({
+                state: ticTacToeConfig.initialState,
+                moveHistory: [],
+                version: 0
+            });
+            this.gameHost.importGameState(exportedState);
             this.gameActive = true;
             this.log('New game started!', 'success');
         } catch (error) {
@@ -476,8 +601,13 @@ export class MultiplayerTicTacToe {
         if (!this.gameHost) return;
         
         try {
-            const initialState = JSON.stringify(ticTacToeConfig.initialState);
-            this.gameHost.importGameState(initialState);
+            // Create a proper exported state format
+            const exportedState = JSON.stringify({
+                state: ticTacToeConfig.initialState,
+                moveHistory: [],
+                version: 0
+            });
+            this.gameHost.importGameState(exportedState);
             this.gameActive = false;
             this.log('Game reset', 'info');
         } catch (error) {

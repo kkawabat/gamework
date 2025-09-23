@@ -69,8 +69,7 @@ export class GameHost {
     }
 
     try {
-      // Connect to signaling service
-      await this.signaling.connect();
+      // Join room (signaling service is already connected)
       await this.signaling.joinRoom(this.room.id, this.hostPlayer.id);
       
       this.isRunning = true;
@@ -188,13 +187,32 @@ export class GameHost {
       this.handlePeerConnectionChange(peerId, isConnected);
     });
 
+    this.webrtc.setIceCandidateHandler((peerId, candidate) => {
+      this.handleIceCandidate(peerId, candidate);
+    });
+
     // Signaling service message handling
     this.signaling.onMessage((message) => {
       this.handleSignalingMessage(message);
     });
 
     this.signaling.onRoomUpdate((room) => {
+      console.log(`[GameHost] Room update received: ${room.players.size} players`);
+      const previousPlayerCount = this.room.players.size;
       this.room = room;
+      
+      // Check if new players were added
+      if (room.players.size > previousPlayerCount) {
+        console.log(`[GameHost] New players detected! Previous: ${previousPlayerCount}, Current: ${room.players.size}`);
+        // Find the new players and create WebRTC offers for them
+        for (const [playerId, player] of room.players) {
+          if (!this.webrtc.isPeerConnected(playerId) && playerId !== this.hostPlayer.id) {
+            console.log(`[GameHost] Creating WebRTC offer for new player: ${playerId}`);
+            this.createWebRTCOffer(playerId);
+          }
+        }
+      }
+      
       // Notify about room updates for UI updates
       if (this.onRoomUpdate) {
         this.onRoomUpdate(room);
@@ -232,8 +250,26 @@ export class GameHost {
     }
   }
 
+  private async createWebRTCOffer(playerId: string): Promise<void> {
+    console.log(`[GameHost] Creating WebRTC offer for player ${playerId}`);
+    try {
+      const offer = await this.webrtc.createOffer(playerId);
+      await this.signaling.sendMessage({
+        to: playerId,
+        type: 'offer',
+        payload: offer,
+        from: this.hostPlayer.id,
+        roomId: this.room.id
+      });
+      console.log(`[GameHost] Sent WebRTC offer to player ${playerId}`);
+    } catch (error) {
+      console.error(`[GameHost] Failed to create offer for player ${playerId}:`, error);
+    }
+  }
+
   private async handlePlayerJoin(joinData: any): Promise<void> {
     const { playerId, playerName } = joinData;
+    console.log(`[GameHost] Player join request from ${playerId} (${playerName})`);
     
     // Create new player
     const newPlayer: Player = {
@@ -246,14 +282,20 @@ export class GameHost {
     
     // Add to room
     this.room.players.set(playerId, newPlayer);
+    console.log(`[GameHost] Added player to room, total players: ${this.room.players.size}`);
     
     // Notify callback
     if (this.onPlayerJoin) {
       this.onPlayerJoin(newPlayer);
     }
     
+    // Create WebRTC connection to new player
+    await this.createWebRTCOffer(playerId);
+    
     // Send current state to new player
+    console.log(`[GameHost] Sending state to new player ${playerId}`);
     this.sendStateToPeer(playerId, true);
+    console.log(`[GameHost] Connected peers: ${this.webrtc.getConnectedPeers().length}`);
   }
 
   private async handlePlayerInput(peerId: string, move: GameMove): Promise<void> {
@@ -264,10 +306,43 @@ export class GameHost {
       return;
     }
     
+    // Validate that it's the correct player's turn
+    const currentState = this.engine.getCurrentState();
+    const ticTacToeState = currentState as any;
+    const currentPlayerSymbol = ticTacToeState.currentPlayer; // 'X' or 'O'
+    
+    // Determine which player should be making the move
+    const isHostTurn = currentPlayerSymbol === 'X';
+    const isClientTurn = currentPlayerSymbol === 'O';
+    const isCorrectPlayer = (isHostTurn && player.isHost) || (isClientTurn && !player.isHost);
+    
+    if (!isCorrectPlayer) {
+      const debugInfo = {
+        movePlayerId: move.playerId,
+        currentPlayer: currentPlayerSymbol,
+        playerIsHost: player.isHost,
+        isHostTurn,
+        isClientTurn,
+        isCorrectPlayer,
+        board: ticTacToeState.board,
+        gameOver: ticTacToeState.gameOver,
+        position: (move.data as any).position
+      };
+      this.sendErrorToPeer(peerId, 'INVALID_MOVE', `Not your turn. Debug: ${JSON.stringify(debugInfo)}`);
+      return;
+    }
+
     // Apply the move
     const success = this.applyMove(move);
     if (!success) {
-      this.sendErrorToPeer(peerId, 'INVALID_MOVE', 'Move is not valid for current game state');
+      const debugInfo = {
+        movePlayerId: move.playerId,
+        currentPlayer: currentPlayerSymbol,
+        board: ticTacToeState.board,
+        gameOver: ticTacToeState.gameOver,
+        position: (move.data as any).position
+      };
+      this.sendErrorToPeer(peerId, 'INVALID_MOVE', `Move is not valid for current game state. Debug: ${JSON.stringify(debugInfo)}`);
     }
   }
 
@@ -276,6 +351,22 @@ export class GameHost {
     
     // Send full state snapshot for resync
     this.sendStateToPeer(peerId, true);
+  }
+
+  private async handleIceCandidate(peerId: string, candidate: RTCIceCandidate): Promise<void> {
+    console.log(`[GameHost] Sending ICE candidate to ${peerId}`);
+    try {
+      await this.signaling.sendMessage({
+        to: peerId,
+        type: 'ice_candidate',
+        payload: candidate,
+        from: this.hostPlayer.id,
+        roomId: this.room.id
+      });
+      console.log(`[GameHost] Sent ICE candidate to ${peerId}`);
+    } catch (error) {
+      console.error(`[GameHost] Failed to send ICE candidate to ${peerId}:`, error);
+    }
   }
 
   private async handleSignalingMessage(message: SignalingMessage): Promise<void> {
@@ -292,6 +383,11 @@ export class GameHost {
           });
           break;
           
+        case 'answer':
+          console.log(`[GameHost] Received WebRTC answer from ${message.from}`);
+          await this.webrtc.handleAnswer(message.from, message.payload);
+          break;
+          
         case 'ice_candidate':
           await this.webrtc.handleIceCandidate(message.from, message.payload);
           break;
@@ -305,6 +401,9 @@ export class GameHost {
   }
 
   private handlePeerConnectionChange(peerId: string, isConnected: boolean): void {
+    console.log(`[GameHost] Peer ${peerId} connection changed: ${isConnected ? 'connected' : 'disconnected'}`);
+    console.log(`[GameHost] Total connected peers: ${this.webrtc.getConnectedPeers().length}`);
+    
     const player = this.room.players.get(peerId);
     if (player) {
       player.isConnected = isConnected;
@@ -355,6 +454,15 @@ export class GameHost {
 
   getGameVersion(): number {
     return this.engine.getCurrentVersion();
+  }
+
+  setConnectionChangeHandler(handler: (peerId: string, isConnected: boolean) => void): void {
+    this.webrtc.setConnectionChangeHandler(handler);
+  }
+
+  disconnectSignaling(): void {
+    console.log('[GameHost] Disconnecting WebSocket signaling service');
+    this.signaling.disconnect();
   }
 }
 

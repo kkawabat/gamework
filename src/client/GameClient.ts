@@ -6,7 +6,8 @@ import {
   GameMessage, 
   ClientConfig,
   SignalingMessage,
-  Player
+  Player,
+  GameRoom
 } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -27,6 +28,7 @@ export class GameClient {
   private onError?: (error: Error) => void;
   private onPlayerJoin?: (player: Player) => void;
   private onPlayerLeave?: (playerId: string) => void;
+  private onRoomUpdate?: (room: GameRoom) => void;
 
   constructor(config: ClientConfig, signalingService?: SignalingService) {
     this.config = config;
@@ -54,7 +56,8 @@ export class GameClient {
       await this.sendJoinMessage();
       
       this.isConnected = true;
-      console.log(`Game client connected to room: ${this.roomId}`);
+      console.log(`[GameClient] Game client connected to room: ${this.roomId}`);
+      console.log(`[GameClient] Connected peers: ${this.webrtc.getConnectedPeers().length}`);
       
       if (this.onConnect) {
         this.onConnect();
@@ -167,6 +170,24 @@ export class GameClient {
     this.onPlayerLeave = handler;
   }
 
+  setRoomUpdateHandler(handler: (room: GameRoom) => void): void {
+    console.log('[GameClient] Setting room update handler');
+    this.onRoomUpdate = handler;
+  }
+
+  setConnectionChangeHandler(handler: (peerId: string, isConnected: boolean) => void): void {
+    this.webrtc.setConnectionChangeHandler(handler);
+  }
+
+  disconnectSignaling(): void {
+    console.log('[GameClient] Disconnecting WebSocket signaling service');
+    this.signaling.disconnect();
+  }
+
+  getPlayerId(): string {
+    return this.playerId;
+  }
+
   // Private methods
   private setupEventHandlers(): void {
     // WebRTC message handling
@@ -178,9 +199,23 @@ export class GameClient {
       this.handlePeerConnectionChange(peerId, isConnected);
     });
 
+    this.webrtc.setIceCandidateHandler((peerId, candidate) => {
+      this.handleIceCandidate(peerId, candidate);
+    });
+
     // Signaling service message handling
     this.signaling.onMessage((message) => {
       this.handleSignalingMessage(message);
+    });
+
+    this.signaling.onRoomUpdate((room) => {
+      console.log('[GameClient] Room update received from signaling service:', room);
+      if (this.onRoomUpdate) {
+        console.log('[GameClient] Calling onRoomUpdate callback');
+        this.onRoomUpdate(room);
+      } else {
+        console.log('[GameClient] No onRoomUpdate callback set!');
+      }
     });
 
     this.signaling.onError((error) => {
@@ -191,9 +226,11 @@ export class GameClient {
   }
 
   private async handlePeerMessage(peerId: string, message: GameMessage): Promise<void> {
+    console.log(`[GameClient] Received peer message from ${peerId}:`, message.type);
     try {
       switch (message.type) {
         case 'state':
+          console.log(`[GameClient] State message received from ${peerId}`);
           this.handleStateUpdate(message.payload);
           break;
           
@@ -238,12 +275,31 @@ export class GameClient {
     console.log(`State updated (${isFullSnapshot ? 'full' : 'partial'}): version ${state.version}`);
   }
 
+  private async handleIceCandidate(peerId: string, candidate: RTCIceCandidate): Promise<void> {
+    console.log(`[GameClient] Sending ICE candidate to ${peerId}`);
+    try {
+      await this.signaling.sendMessage({
+        to: peerId,
+        type: 'ice_candidate',
+        payload: candidate,
+        from: this.playerId,
+        roomId: this.roomId
+      });
+      console.log(`[GameClient] Sent ICE candidate to ${peerId}`);
+    } catch (error) {
+      console.error(`[GameClient] Failed to send ICE candidate to ${peerId}:`, error);
+    }
+  }
+
   private async handleSignalingMessage(message: SignalingMessage): Promise<void> {
+    console.log(`[GameClient] Received signaling message: ${message.type} from ${message.from}`);
     try {
       switch (message.type) {
         case 'offer':
+          console.log(`[GameClient] Handling WebRTC offer from ${message.from}`);
           // This is from the host, we need to create an answer
           const answer = await this.webrtc.handleOffer(message.from, message.payload);
+          console.log(`[GameClient] Created answer, sending back to ${message.from}`);
           await this.signaling.sendMessage({
             type: 'answer',
             payload: answer,
@@ -254,23 +310,25 @@ export class GameClient {
           break;
           
         case 'ice_candidate':
+          console.log(`[GameClient] Handling ICE candidate from ${message.from}`);
           await this.webrtc.handleIceCandidate(message.from, message.payload);
           break;
           
         default:
-          console.warn('Unknown signaling message type:', message.type);
+          console.warn('[GameClient] Unknown signaling message type:', message.type);
       }
     } catch (error) {
-      console.error('Error handling signaling message:', error);
+      console.error('[GameClient] Error handling signaling message:', error);
     }
   }
 
   private handlePeerConnectionChange(peerId: string, isConnected: boolean): void {
-    console.log(`Peer ${peerId} connection changed: ${isConnected ? 'connected' : 'disconnected'}`);
+    console.log(`[GameClient] Peer ${peerId} connection changed: ${isConnected ? 'connected' : 'disconnected'}`);
+    console.log(`[GameClient] Total connected peers: ${this.webrtc.getConnectedPeers().length}`);
     
     if (!isConnected && this.isConnected) {
       // If we lose connection to the host, try to reconnect
-      console.log('Lost connection to host, attempting to reconnect...');
+      console.log('[GameClient] Lost connection to host, attempting to reconnect...');
       setTimeout(() => {
         if (this.isConnected) {
           this.requestResync();
@@ -299,10 +357,6 @@ export class GameClient {
   // Utility methods
   isConnectedToHost(): boolean {
     return this.isConnected && this.webrtc.getConnectedPeers().length > 0;
-  }
-
-  getPlayerId(): string {
-    return this.playerId;
   }
 
   getRoomId(): string {

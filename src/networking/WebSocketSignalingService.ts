@@ -259,6 +259,7 @@ export class WebSocketSignalingService implements SignalingService {
   }
 
   onRoomUpdate(callback: (room: GameRoom) => void): void {
+    console.log('[WebSocketSignalingService] Adding room update callback, total callbacks:', this.roomUpdateCallbacks.length + 1);
     this.roomUpdateCallbacks.push(callback);
   }
 
@@ -303,7 +304,11 @@ export class WebSocketSignalingService implements SignalingService {
         createdAt: message.payload.room.createdAt
       };
       
-      this.roomUpdateCallbacks.forEach(callback => callback(room));
+      console.log('[WebSocketSignalingService] Calling room update callbacks, count:', this.roomUpdateCallbacks.length);
+      this.roomUpdateCallbacks.forEach((callback, index) => {
+        console.log(`[WebSocketSignalingService] Calling callback ${index}`);
+        callback(room);
+      });
     }
   }
 

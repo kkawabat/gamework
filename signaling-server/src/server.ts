@@ -142,16 +142,12 @@ export class SignalingServer {
       this.handleDisconnection(connectionId);
     });
 
-    ws.on('error', (error) => {
+    ws.on('error', (error: Error) => {
       console.error(`WebSocket error for ${connectionId}:`, error);
       this.handleDisconnection(connectionId);
     });
 
-    // Send welcome message
-    this.sendMessage(ws, {
-      type: 'room_joined',
-      payload: { message: 'Connected to GameWork signaling server' }
-    }, connectionId);
+    // Connection established - no welcome message needed
   }
 
   private handleMessage(connectionId: string, message: ClientMessage): void {
