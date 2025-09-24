@@ -32,6 +32,7 @@ export class MultiplayerTicTacToe {
     private playerCount: HTMLElement | null = null;
     private roomCodeInput: HTMLInputElement | null = null;
     private joinRoomBtn: HTMLButtonElement | null = null;
+    private resetGame: HTMLButtonElement | null = null;
 
     constructor() {
         this.initializeElements();
@@ -50,6 +51,7 @@ export class MultiplayerTicTacToe {
         this.playerCount = document.getElementById('playerCount');
         this.roomCodeInput = document.getElementById('roomCodeInput') as HTMLInputElement;
         this.joinRoomBtn = document.getElementById('joinRoomBtn') as HTMLButtonElement;
+        this.resetGame = document.getElementById('resetGame') as HTMLButtonElement;
     }
 
     private setupEventListeners() {
@@ -76,6 +78,11 @@ export class MultiplayerTicTacToe {
         this.joinRoomBtn?.addEventListener('click', () => {
             console.log('[Client] Join room button clicked');
             this.joinExistingRoom();
+        });
+        
+        this.resetGame?.addEventListener('click', () => {
+            console.log('[Game] Reset game button clicked');
+            this.resetGameState();
         });
         
         // Room code input handler
@@ -705,6 +712,30 @@ export class MultiplayerTicTacToe {
         }
     }
 
+    private resetGameState() {
+        if (!this.gameHost) {
+            this.log('Only the host can reset the game', 'warning');
+            return;
+        }
+        
+        try {
+            // Reset first player tracking
+            this.firstPlayerId = null;
+            
+            // Create a proper exported state format
+            const exportedState = JSON.stringify({
+                state: ticTacToeConfig.initialState,
+                moveHistory: [],
+                version: 0
+            });
+            this.gameHost.importGameState(exportedState);
+            this.gameActive = true;
+            this.log('Game reset - board cleared!', 'success');
+        } catch (error) {
+            this.log(`Failed to reset game: ${(error as Error).message}`, 'error');
+        }
+    }
+
 
 
 
@@ -726,8 +757,7 @@ export class MultiplayerTicTacToe {
     }
 
     private enableControls() {
-        // No controls to enable after removing buttons
-        // This method is kept for potential future use
+        if (this.resetGame) this.resetGame.disabled = false;
     }
 
     private async handleWebRTCDisconnection() {
