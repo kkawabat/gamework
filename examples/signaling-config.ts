@@ -17,7 +17,9 @@ const getSignalingServerUrl = (): string => {
 };
 
 export const activeSignalingConfig = {
-  url: getSignalingServerUrl(),
+  get url() {
+    return getSignalingServerUrl();
+  },
   reconnectAttempts: 10,
   reconnectInterval: 3000
 };
