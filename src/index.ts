@@ -9,6 +9,9 @@ export { SignalingService, InMemorySignalingService, FirebaseSignalingService, W
 export { GameHost } from './host/GameHost';
 export { GameClient } from './client/GameClient';
 
+// Multiplayer base class
+export { BaseMultiplayerGame } from './multiplayer/BaseMultiplayerGame';
+
 // Type exports
 export * from './types';
 
