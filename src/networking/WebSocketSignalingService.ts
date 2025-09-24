@@ -134,33 +134,33 @@ export class WebSocketSignalingService implements SignalingService {
           console.error('[WebSocket] ReadyState:', this.ws?.readyState);
           console.error('[WebSocket] URL:', this.ws?.url);
           
-          // Check for CORS-related issues
-          if (typeof window !== 'undefined') {
-            const currentOrigin = window.location.origin;
-            const targetOrigin = new URL(this.config.serverUrl).origin;
-            const isCrossOrigin = currentOrigin !== targetOrigin;
-            
-            console.error('[WebSocket] CORS CHECK:');
-            console.error('[WebSocket] Current origin:', currentOrigin);
-            console.error('[WebSocket] Target origin:', targetOrigin);
-            console.error('[WebSocket] Is cross-origin:', isCrossOrigin);
-            
-            if (isCrossOrigin) {
-              console.error('[WebSocket] ❌ CORS ISSUE: Server must allow origin:', currentOrigin);
-            }
-            
-            // Check for mixed content issues
-            const isHttps = window.location.protocol === 'https:';
-            const isWss = this.config.serverUrl.startsWith('wss:');
-            console.error('[WebSocket] PROTOCOL CHECK:');
-            console.error('[WebSocket] Page protocol:', window.location.protocol);
-            console.error('[WebSocket] WS protocol:', isWss ? 'wss' : 'ws');
-            console.error('[WebSocket] Security match:', isHttps === isWss);
-            
-            if (isHttps && !isWss) {
-              console.error('[WebSocket] ❌ MIXED CONTENT: HTTPS page cannot connect to WS');
-            }
-          }
+      // Check for CORS-related issues
+      if (typeof window !== 'undefined') {
+        const currentOrigin = window.location.origin;
+        const targetOrigin = new URL(this.config.serverUrl).origin;
+        const isCrossOrigin = currentOrigin !== targetOrigin;
+        
+        console.error('[WebSocket] CORS CHECK:');
+        console.error('[WebSocket] Current origin:', currentOrigin);
+        console.error('[WebSocket] Target origin:', targetOrigin);
+        console.error('[WebSocket] Is cross-origin:', isCrossOrigin);
+        
+        if (isCrossOrigin) {
+          console.error('[WebSocket] ❌ CORS ISSUE: Server must allow origin:', currentOrigin);
+        }
+        
+        // Check for mixed content issues
+        const isHttps = window.location.protocol === 'https:';
+        const isWss = this.config.serverUrl.startsWith('wss:');
+        console.error('[WebSocket] PROTOCOL CHECK:');
+        console.error('[WebSocket] Page protocol:', window.location.protocol);
+        console.error('[WebSocket] WS protocol:', isWss ? 'wss' : 'ws');
+        console.error('[WebSocket] Security match:', isHttps === isWss);
+        
+        if (isHttps && !isWss) {
+          console.error('[WebSocket] ❌ MIXED CONTENT: HTTPS page cannot connect to WS');
+        }
+      }
           
           this.lastError = new Error('WebSocket connection error');
           this.errorCallbacks.forEach(callback => callback(this.lastError!));
