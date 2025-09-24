@@ -1,8 +1,8 @@
 {
-  "name": "tic-tac-toe-gamework",
+  "name": "chess-gamework",
   "version": "1.0.0",
-  "description": "Tic-Tac-Toe game using GameWork framework",
-  "main": "src/multiplayer-tic-tac-toe.ts",
+  "description": "Chess game using GameWork framework",
+  "main": "src/multiplayer-chess.ts",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",

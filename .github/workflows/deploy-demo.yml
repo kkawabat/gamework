@@ -42,11 +42,13 @@ jobs:
     - name: Build framework
       run: npm run build
       
-    - name: Build Tic-Tac-Toe game with Vite
+    - name: Build demo games with Vite
       run: |
-        # Run the Tic-Tac-Toe build script with Vite
-        chmod +x scripts/build-tic-tac-toe-vite.sh
-        ./scripts/build-tic-tac-toe-vite.sh
+        # Run the demo games build script with Vite
+        chmod +x scripts/build-demos-vite.sh
+        ./scripts/build-demos-vite.sh
+      env:
+        SIGNALING_SERVER_URL: ${{ secrets.SIGNALING_SERVER_URL }}
         
     - name: Upload demo artifacts
       uses: actions/upload-artifact@v4

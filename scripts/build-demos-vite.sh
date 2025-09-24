@@ -1,11 +1,11 @@
 #!/bin/bash
 
-echo "🎮 Building GameWork Tic-Tac-Toe Multiplayer Game with Vite..."
+echo "🎮 Building GameWork Demo Games with Vite..."
 
 # Set script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-BUILD_DIR="$PROJECT_ROOT/demo-build/tic-tac-toe"
+BUILD_DIR="$PROJECT_ROOT/demo-build"
 
 # Clean previous build
 echo "🧹 Cleaning previous build..."
@@ -32,8 +32,11 @@ fi
 
 # Move the built HTML files to the correct locations
 echo "📝 Moving HTML files to correct locations..."
-mv "$PROJECT_ROOT/demo-build/examples/tic-tac-toe/index.html" "$PROJECT_ROOT/demo-build/index.html"
+mv "$PROJECT_ROOT/demo-build/examples/index.html" "$PROJECT_ROOT/demo-build/index.html"
 mv "$PROJECT_ROOT/demo-build/examples/tic-tac-toe/tic-tac-toe.html" "$PROJECT_ROOT/demo-build/tic-tac-toe.html"
+mv "$PROJECT_ROOT/demo-build/examples/connect-four/connect-four.html" "$PROJECT_ROOT/demo-build/connect-four.html"
+mv "$PROJECT_ROOT/demo-build/examples/simple-card-game/card-game.html" "$PROJECT_ROOT/demo-build/card-game.html"
+mv "$PROJECT_ROOT/demo-build/examples/simple-chess/chess.html" "$PROJECT_ROOT/demo-build/chess.html"
 
 # Remove the empty examples directory structure
 rm -rf "$PROJECT_ROOT/demo-build/examples"
@@ -42,6 +45,22 @@ rm -rf "$PROJECT_ROOT/demo-build/examples"
 echo "📝 Fixing asset paths in HTML files..."
 sed -i 's|../../assets/|./assets/|g' "$PROJECT_ROOT/demo-build/index.html"
 sed -i 's|../../assets/|./assets/|g' "$PROJECT_ROOT/demo-build/tic-tac-toe.html"
+sed -i 's|../../assets/|./assets/|g' "$PROJECT_ROOT/demo-build/connect-four.html"
+sed -i 's|../../assets/|./assets/|g' "$PROJECT_ROOT/demo-build/card-game.html"
+sed -i 's|../../assets/|./assets/|g' "$PROJECT_ROOT/demo-build/chess.html"
+
+# Inject signaling server URL into HTML files
+echo "📝 Injecting signaling server URL..."
+SIGNALING_URL="${SIGNALING_SERVER_URL:-wss://gamework.kankawabata.com}"
+echo "Using signaling server URL: $SIGNALING_URL"
+
+# Add script tag to inject the URL before the main script
+for html_file in "$PROJECT_ROOT/demo-build/index.html" "$PROJECT_ROOT/demo-build/tic-tac-toe.html" "$PROJECT_ROOT/demo-build/connect-four.html" "$PROJECT_ROOT/demo-build/card-game.html" "$PROJECT_ROOT/demo-build/chess.html"; do
+  if [ -f "$html_file" ]; then
+    # Insert the signaling server URL script before the closing </body> tag
+    sed -i "s|</body>|<script>window.SIGNALING_SERVER_URL = '$SIGNALING_URL';</script></body>|g" "$html_file"
+  fi
+done
 
 # Pure production build - no development files needed
 echo "📝 Creating pure production build..."
@@ -51,7 +70,7 @@ echo "📝 Creating pure production build..."
 
 # Display build summary
 echo ""
-echo "✅ Tic-Tac-Toe multiplayer game build completed with Vite!"
+echo "✅ GameWork demo games build completed with Vite!"
 echo "📁 Build directory: $BUILD_DIR"
 echo "📁 Demo build directory: $PROJECT_ROOT/demo-build"
 echo ""
@@ -73,7 +92,10 @@ echo ""
 echo "📦 Files ready for deployment:"
 echo "  - demo-build/index.html (main demo page)"
 echo "  - demo-build/tic-tac-toe.html (tic-tac-toe game)"
+echo "  - demo-build/connect-four.html (connect four game)"
+echo "  - demo-build/card-game.html (card game)"
+echo "  - demo-build/chess.html (chess game)"
 echo "  - demo-build/assets/ (bundled and optimized framework)"
 echo ""
-echo "🎉 GameWork Tic-Tac-Toe Multiplayer is ready for deployment!"
+echo "🎉 GameWork Multiplayer Games are ready for deployment!"
 echo "✨ Built with Vite for optimal performance and compatibility!"

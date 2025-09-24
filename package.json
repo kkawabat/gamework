@@ -12,7 +12,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:all": "npm test",
-    "build:game": "chmod +x scripts/build-tic-tac-toe-vite.sh && ./scripts/build-tic-tac-toe-vite.sh",
+    "build:game": "chmod +x scripts/build-demos-vite.sh && ./scripts/build-demos-vite.sh",
     "dev:game": "vite",
     "preview:game": "vite preview",
     "lint": "eslint src/**/*.ts",

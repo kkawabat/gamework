@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GameWork Chess - Multiplayer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .game-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+
+        .game-info {
+            margin-bottom: 30px;
+        }
+
+        .room-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .room-code {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+            font-family: monospace;
+            letter-spacing: 3px;
+            margin: 10px 0;
+        }
+
+        .status {
+            font-size: 1.2em;
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 10px;
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .status.connected { background: #e8f5e8; color: #2e7d32; }
+        .status.disconnected { background: #ffebee; color: #c62828; }
+        .status.waiting { background: #fff3e0; color: #ef6c00; }
+
+        .chess-board {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 2px;
+            max-width: 400px;
+            margin: 30px auto;
+            background: #8B4513;
+            padding: 10px;
+            border-radius: 10px;
+            border: 3px solid #654321;
+        }
+
+        .square {
+            width: 45px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            border-radius: 3px;
+        }
+
+        .square.light {
+            background: #f0d9b5;
+        }
+
+        .square.dark {
+            background: #b58863;
+        }
+
+        .square:hover {
+            background: #4caf50;
+            transform: scale(1.05);
+        }
+
+        .square.selected {
+            background: #ffeb3b;
+            box-shadow: 0 0 10px rgba(255, 235, 59, 0.8);
+        }
+
+        .square.possible-move {
+            background: #81c784;
+            animation: pulse 1s infinite;
+        }
+
+        .square.last-move {
+            background: #ff9800;
+        }
+
+        .square.check {
+            background: #f44336;
+            animation: checkPulse 0.5s infinite alternate;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes checkPulse {
+            0% { background: #f44336; }
+            100% { background: #d32f2f; }
+        }
+
+        .controls {
+            margin: 30px 0;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            margin: 10px;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        button:hover {
+            background: #5a6fd8;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .players {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+
+        .player {
+            padding: 15px;
+            border-radius: 10px;
+            background: #f8f9fa;
+            min-width: 120px;
+        }
+
+        .player.current {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+        }
+
+        .game-log {
+            max-height: 200px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            text-align: left;
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-radius: 5px;
+        }
+
+        .log-entry.info { background: #d1ecf1; }
+        .log-entry.success { background: #d4edda; }
+        .log-entry.warning { background: #fff3cd; }
+        .log-entry.error { background: #f8d7da; }
+
+        .connection-status {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 20px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .connection-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #dc3545;
+            margin-right: 10px;
+        }
+
+        .connection-indicator.connected {
+            background: #28a745;
+        }
+
+        .captured-pieces {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
+        }
+
+        .captured-pieces div {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 10px;
+            min-height: 60px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .captured-pieces .piece {
+            font-size: 1.2em;
+        }
+
+        @media (max-width: 600px) {
+            .game-container {
+                padding: 20px;
+                margin: 10px;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+            
+            .square {
+                width: 35px;
+                height: 35px;
+                font-size: 1.4em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>♔ GameWork Chess</h1>
+        
+        <div class="game-info">
+            <div class="room-info">
+                <h3>Room Information</h3>
+                <div class="room-code" id="roomCode">Loading...</div>
+                <p>Share this code with players to join!</p>
+            </div>
+            
+            <div class="connection-status">
+                <div>
+                    <span class="connection-indicator" id="connectionIndicator"></span>
+                    <span id="connectionStatus">Connecting...</span>
+                </div>
+                <div id="playerCount">Players: 0</div>
+            </div>
+        </div>
+
+        <div class="status waiting" id="gameStatus">
+            Connecting to GameWork framework...
+        </div>
+
+        <div class="players">
+            <div class="player" id="player1">
+                <div>Player 1 (White)</div>
+                <div id="player1Status">Host - Connecting...</div>
+            </div>
+            <div class="player" id="player2">
+                <div>Player 2 (Black)</div>
+                <div id="player2Status">Waiting for player...</div>
+            </div>
+        </div>
+
+        <div class="chess-board" id="chessBoard">
+            <!-- 8x8 chess board will be generated by JavaScript -->
+        </div>
+
+        <div class="captured-pieces">
+            <div>
+                <strong>White Captured:</strong>
+                <div id="whiteCaptured"></div>
+            </div>
+            <div>
+                <strong>Black Captured:</strong>
+                <div id="blackCaptured"></div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="resetGame" disabled>Reset Game</button>
+        </div>
+
+        <div class="game-log" id="gameLog">
+            <div class="log-entry info">Initializing GameWork framework...</div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Chess game implementation would go here
+        console.log('Chess Game - Coming soon!');
+        
+        // Initialize chess board
+        const board = document.getElementById('chessBoard');
+        const pieces = {
+            'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙',
+            'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟'
+        };
+        
+        // Create 8x8 board
+        for (let row = 0; row < 8; row++) {
+            for (let col = 0; col < 8; col++) {
+                const square = document.createElement('div');
+                square.className = `square ${(row + col) % 2 === 0 ? 'light' : 'dark'}`;
+                square.dataset.row = row;
+                square.dataset.col = col;
+                
+                // Add initial pieces
+                if (row === 0) {
+                    const pieceOrder = ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'];
+                    square.textContent = pieces[pieceOrder[col]];
+                } else if (row === 1) {
+                    square.textContent = pieces['p'];
+                } else if (row === 6) {
+                    square.textContent = pieces['P'];
+                } else if (row === 7) {
+                    const pieceOrder = ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'];
+                    square.textContent = pieces[pieceOrder[col]];
+                }
+                
+                board.appendChild(square);
+            }
+        }
+    </script>
+</body>
+</html>

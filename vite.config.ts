@@ -13,8 +13,11 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        index: 'examples/tic-tac-toe/index.html',
-        'tic-tac-toe': 'examples/tic-tac-toe/tic-tac-toe.html'
+        index: 'examples/index.html',
+        'tic-tac-toe': 'examples/tic-tac-toe/tic-tac-toe.html',
+        'connect-four': 'examples/connect-four/connect-four.html',
+        'card-game': 'examples/simple-card-game/card-game.html',
+        'chess': 'examples/simple-chess/chess.html'
       },
       output: {
         // Keep modules separate for better caching
