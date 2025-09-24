@@ -153,6 +153,8 @@ export class MultiplayerTicTacToe {
 
             this.gameHost.setRoomUpdateHandler((room) => {
                 console.log('[Host] Room update handler called with room:', room);
+                console.log('[Host] Room players count:', room.players.size);
+                console.log('[Host] Current gameActive:', this.gameActive);
                 this.log(`Room updated: ${room.players.size} players connected`, 'info');
                 this.currentRoom = room; // Store the room data
                 this.updatePlayerDisplay();
@@ -161,6 +163,8 @@ export class MultiplayerTicTacToe {
                 if (room.players.size >= 2 && !this.gameActive) {
                     console.log('[Host] Auto-starting game because room has 2+ players');
                     this.startNewGame();
+                } else {
+                    console.log('[Host] Not auto-starting - players:', room.players.size, 'gameActive:', this.gameActive);
                 }
             });
 
@@ -690,8 +694,12 @@ export class MultiplayerTicTacToe {
     }
 
     private startNewGame() {
-        if (!this.gameHost) return;
+        if (!this.gameHost) {
+            console.log('[Host] startNewGame called but no gameHost');
+            return;
+        }
         
+        console.log('[Host] startNewGame called - setting gameActive to true');
         try {
             // Reset first player tracking for new game
             this.firstPlayerId = null;
@@ -704,8 +712,10 @@ export class MultiplayerTicTacToe {
             });
             this.gameHost.importGameState(exportedState);
             this.gameActive = true;
+            console.log('[Host] Game started successfully, gameActive:', this.gameActive);
             this.log('New game started!', 'success');
         } catch (error) {
+            console.log('[Host] Failed to start new game:', error);
             this.log(`Failed to start new game: ${(error as Error).message}`, 'error');
         }
     }

@@ -232,9 +232,16 @@ export class SignalingServer {
     this.roomManager.clearPendingMessages(roomId, playerId);
 
     // Broadcast room update to all players in the room
+    console.log(`[Server] Broadcasting room update for room ${roomId}`);
+    console.log(`[Server] Room state before broadcast - players: ${room.players.size}`);
+    console.log(`[Server] Excluding player: ${playerId}`);
+    
+    const serializedRoom = this.serializeRoom(room);
+    console.log(`[Server] Serialized room players count: ${serializedRoom.players.length}`);
+    
     this.broadcastToRoom(roomId, {
       type: 'room_update',
-      payload: { room: this.serializeRoom(room) },
+      payload: { room: serializedRoom },
       roomId
     }, playerId);
 
@@ -355,11 +362,22 @@ export class SignalingServer {
   }
 
   private broadcastToRoom(roomId: string, message: ServerMessage, excludePlayerId?: string): void {
+    console.log(`[Server] broadcastToRoom called - roomId: ${roomId}, excludePlayerId: ${excludePlayerId}`);
+    let sentCount = 0;
+    
     for (const [connectionId, connection] of this.connections.entries()) {
+      console.log(`[Server] Checking connection ${connectionId} - roomId: ${connection.roomId}, playerId: ${connection.playerId}`);
+      
       if (connection.roomId === roomId && connection.playerId !== excludePlayerId) {
+        console.log(`[Server] Sending room update to player ${connection.playerId}`);
         this.sendMessage(connection.ws, message);
+        sentCount++;
+      } else {
+        console.log(`[Server] Skipping connection - roomId match: ${connection.roomId === roomId}, not excluded: ${connection.playerId !== excludePlayerId}`);
       }
     }
+    
+    console.log(`[Server] Broadcast complete - sent to ${sentCount} connections`);
   }
 
   private sendMessage(ws: WebSocket, message: ServerMessage, connectionId?: string): void {
