@@ -93,13 +93,9 @@ export class MultiplayerTicTacToe {
             const roomParam = urlParams.get('room');
             
             if (roomParam) {
-                // User is trying to join an existing room
-                this.roomId = roomParam.toUpperCase();
-                if (this.roomCode) this.roomCode.textContent = this.roomId;
-                if (this.roomCodeInput) this.roomCodeInput.value = this.roomId;
-                this.log(`Joining room from URL: ${this.roomId}`, 'info');
-                console.log('[Game] About to call initializeAsClient() from URL param');
-                await this.initializeAsClient();
+                // User is trying to join an existing room via QR code
+                const roomCode = roomParam.toUpperCase();
+                await this.joinRoomAsClient(roomCode, 'qr');
             } else {
                 // Generate new room ID and become host
                 this.roomId = this.generateRoomId();
@@ -285,8 +281,8 @@ export class MultiplayerTicTacToe {
         if (!this.gameClient) return;
 
         // Set up client event handlers
-        this.gameClient.setStateUpdateHandler((state) => {
-            console.log('[Client] State update received:', state);
+        this.gameClient.setStateUpdateHandler((state, firstPlayerId) => {
+            console.log('[Client] State update received:', state, 'firstPlayerId:', firstPlayerId);
             // Auto-start game when client receives first state update
             if (!this.gameActive) {
                 console.log('[Client] Setting gameActive to true');
@@ -295,7 +291,7 @@ export class MultiplayerTicTacToe {
                 // Update display when game becomes active
                 this.updatePlayerDisplay();
             }
-            this.handleStateUpdate(state as TicTacToeState);
+            this.handleStateUpdate(state as TicTacToeState, firstPlayerId);
         });
 
         this.gameClient.setPlayerJoinHandler((player) => {
@@ -360,38 +356,50 @@ export class MultiplayerTicTacToe {
             return;
         }
         
+        await this.joinRoomAsClient(roomCode, 'manual');
+    }
+
+    private async joinRoomAsClient(roomCode: string, source: 'qr' | 'manual' = 'manual') {
         try {
-            this.log(`Attempting to join room: ${roomCode}`, 'info');
-            if (this.joinRoomBtn) {
+            this.log(`Attempting to join room: ${roomCode} (${source})`, 'info');
+            
+            // Update UI for manual joining
+            if (source === 'manual' && this.joinRoomBtn) {
                 this.joinRoomBtn.disabled = true;
                 this.joinRoomBtn.textContent = 'Joining...';
             }
             
-            // Set the room ID to the entered code
+            // Set the room ID
             this.roomId = roomCode;
             if (this.roomCode) this.roomCode.textContent = this.roomId;
+            if (this.roomCodeInput) this.roomCodeInput.value = roomCode;
             
             // Try to connect as a client to the existing room
-            console.log('[Client] About to call initializeAsClient()');
+            console.log(`[Client] About to call initializeAsClient() from ${source}`);
             await this.initializeAsClient();
-            console.log('[Client] initializeAsClient() completed successfully');
+            console.log(`[Client] initializeAsClient() completed successfully from ${source}`);
             
-            // Set a timeout to reset button if connection takes too long
-            setTimeout(() => {
-                if (this.joinRoomBtn && this.joinRoomBtn.textContent === 'Joining...') {
-                    this.joinRoomBtn.disabled = false;
-                    this.joinRoomBtn.textContent = 'Join Room';
-                    this.log('Connection timeout - please try again', 'warning');
-                }
-            }, 10000); // 10 second timeout
+            // Set a timeout to reset button if connection takes too long (manual only)
+            if (source === 'manual') {
+                setTimeout(() => {
+                    if (this.joinRoomBtn && this.joinRoomBtn.textContent === 'Joining...') {
+                        this.joinRoomBtn.disabled = false;
+                        this.joinRoomBtn.textContent = 'Join Room';
+                        this.log('Connection timeout - please try again', 'warning');
+                    }
+                }, 10000); // 10 second timeout
+            }
             
         } catch (error) {
-            this.log(`Failed to join room ${roomCode}: ${(error as Error).message}`, 'error');
-            if (this.joinRoomBtn) {
+            this.log(`Failed to join room ${roomCode} (${source}): ${(error as Error).message}`, 'error');
+            
+            // Reset UI for manual joining
+            if (source === 'manual' && this.joinRoomBtn) {
                 this.joinRoomBtn.disabled = false;
                 this.joinRoomBtn.textContent = 'Join Room';
             }
-            this.updateConnectionStatus(false, 'Connection Failed');
+            
+            this.updateConnectionStatus(false, `${source === 'qr' ? 'QR Code' : 'Connection'} Join Failed`);
         }
     }
 
@@ -433,12 +441,6 @@ export class MultiplayerTicTacToe {
         if (!this.gameActive) return;
         
         try {
-            // Track the first player to make a move
-            if (!this.firstPlayerId) {
-                this.firstPlayerId = this.playerId || 'player1';
-                this.log(`Player ${this.firstPlayerId} is X (first move)`, 'info');
-            }
-            
             const move = {
                 type: 'place',
                 playerId: this.playerId || 'player1',
@@ -463,19 +465,13 @@ export class MultiplayerTicTacToe {
         }
     }
 
-    private handleStateUpdate(state: TicTacToeState) {
+    private handleStateUpdate(state: TicTacToeState, firstPlayerId?: string) {
         this.currentState = state;
         
-        // Track first player from state updates (when receiving moves from other players)
-        if (!this.firstPlayerId && state.board.some(cell => cell !== null)) {
-            // Find the first non-null cell to determine who made the first move
-            const firstMoveIndex = state.board.findIndex(cell => cell !== null);
-            if (firstMoveIndex !== -1) {
-                // We need to determine who made this move based on the game state
-                // For now, we'll set it when we receive the first state update
-                // This is a simplified approach - in a real implementation, you'd track this more precisely
-                this.firstPlayerId = this.playerId || 'player1';
-            }
+        // Use the firstPlayerId from the GameHost if provided
+        if (firstPlayerId && !this.firstPlayerId) {
+            this.firstPlayerId = firstPlayerId;
+            console.log('[Client] Received firstPlayerId from host:', firstPlayerId);
         }
         
         this.updateBoard();

@@ -428,6 +428,8 @@ export class GameHost {
 
   private broadcastState(isFullSnapshot: boolean): void {
     const stateMessage = this.engine.createStateMessage(isFullSnapshot);
+    // Add first player information to the state message
+    (stateMessage.payload as any).firstPlayerId = this.firstPlayerId;
     
     // Send to all connected peers
     this.webrtc.broadcastMessage(stateMessage);
@@ -440,6 +442,8 @@ export class GameHost {
 
   private sendStateToPeer(peerId: string, isFullSnapshot: boolean): void {
     const stateMessage = this.engine.createStateMessage(isFullSnapshot);
+    // Add first player information to the state message
+    (stateMessage.payload as any).firstPlayerId = this.firstPlayerId;
     this.webrtc.sendMessage(peerId, stateMessage);
   }
 

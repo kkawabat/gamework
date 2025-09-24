@@ -22,7 +22,7 @@ export class GameClient {
   private hostConnection?: RTCPeerConnection;
 
   // Event callbacks
-  private onStateUpdate?: (state: GameState) => void;
+  private onStateUpdate?: (state: GameState, firstPlayerId?: string) => void;
   private onConnect?: () => void;
   private onDisconnect?: () => void;
   private onError?: (error: Error) => void;
@@ -146,7 +146,7 @@ export class GameClient {
   }
 
   // Event handlers
-  setStateUpdateHandler(handler: (state: GameState) => void): void {
+  setStateUpdateHandler(handler: (state: GameState, firstPlayerId?: string) => void): void {
     this.onStateUpdate = handler;
   }
 
@@ -268,17 +268,17 @@ export class GameClient {
   }
 
   private handleStateUpdate(stateData: any): void {
-    const { state, isFullSnapshot } = stateData;
+    const { state, isFullSnapshot, firstPlayerId } = stateData;
     
     // Update current state
     this.currentState = state;
     
-    // Notify callback
+    // Notify callback with firstPlayerId if available
     if (this.onStateUpdate) {
-      this.onStateUpdate(state);
+      this.onStateUpdate(state, firstPlayerId);
     }
     
-    console.log(`State updated (${isFullSnapshot ? 'full' : 'partial'}): version ${state.version}`);
+    console.log(`State updated (${isFullSnapshot ? 'full' : 'partial'}): version ${state.version}, firstPlayerId: ${firstPlayerId}`);
   }
 
   private async handleIceCandidate(peerId: string, candidate: RTCIceCandidate): Promise<void> {
