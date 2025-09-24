@@ -49,18 +49,9 @@ sed -i 's|../../assets/|./assets/|g' "$PROJECT_ROOT/demo-build/connect-four.html
 sed -i 's|../../assets/|./assets/|g' "$PROJECT_ROOT/demo-build/card-game.html"
 sed -i 's|../../assets/|./assets/|g' "$PROJECT_ROOT/demo-build/chess.html"
 
-# Inject signaling server URL into HTML files
-echo "📝 Injecting signaling server URL..."
-SIGNALING_URL="${SIGNALING_SERVER_URL:-wss://gamework.kankawabata.com}"
-echo "Using signaling server URL: $SIGNALING_URL"
-
-# Add script tag to inject the URL before the main script
-for html_file in "$PROJECT_ROOT/demo-build/index.html" "$PROJECT_ROOT/demo-build/tic-tac-toe.html" "$PROJECT_ROOT/demo-build/connect-four.html" "$PROJECT_ROOT/demo-build/card-game.html" "$PROJECT_ROOT/demo-build/chess.html"; do
-  if [ -f "$html_file" ]; then
-    # Insert the signaling server URL script before the closing </body> tag
-    sed -i "s|</body>|<script>window.SIGNALING_SERVER_URL = '$SIGNALING_URL';</script></body>|g" "$html_file"
-  fi
-done
+# Environment variables are handled by Vite's loadEnv and define config
+echo "📝 Using Vite environment variable injection..."
+echo "SIGNALING_SERVER_URL: ${SIGNALING_SERVER_URL:-<from-.env-file>}"
 
 # Pure production build - no development files needed
 echo "📝 Creating pure production build..."

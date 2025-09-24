@@ -1,18 +1,16 @@
-// Signaling server configuration
-// This can be overridden by environment variables during deployment
+// Signaling server configuration for examples
+// Uses Vite-injected environment variable
 
 const getSignalingServerUrl = (): string => {
-  // Check for environment variable first (used in deployment)
-  if (typeof process !== 'undefined' && process.env.SIGNALING_SERVER_URL) {
-    return process.env.SIGNALING_SERVER_URL;
+  // Use Vite-injected environment variable (replaced at build time)
+  // @ts-ignore - This is defined by Vite's define config
+  if (typeof __SIGNALING_SERVER_URL__ !== 'undefined') {
+    console.log('[SignalingConfig] Using Vite-injected URL:', __SIGNALING_SERVER_URL__);
+    return __SIGNALING_SERVER_URL__;
   }
   
-  // Check for window.SIGNALING_SERVER_URL (set by build process)
-  if (typeof window !== 'undefined' && (window as any).SIGNALING_SERVER_URL) {
-    return (window as any).SIGNALING_SERVER_URL;
-  }
-  
-  // Default to production server
+  // Fallback (should not happen in production)
+  console.warn('[SignalingConfig] No URL injected, using fallback');
   return 'wss://gamework.kankawabata.com';
 };
 

@@ -79,7 +79,7 @@ async function testWebSocketConnection(url: string) {
 
 // Test the signaling server specifically
 async function testSignalingServer(url?: string) {
-  const testUrl = url || 'wss://gamework.kankawabata.com';
+  const testUrl = url || 'wss://gamework.kankawabata.com'; // TODO: Use centralized config
   console.log(`Testing signaling server at: ${testUrl}`);
   
   const networkInfo = getNetworkInfo();

@@ -39,6 +39,11 @@ jobs:
     - name: Install dependencies
       run: npm ci
       
+    - name: Create .env file
+      run: |
+        echo "SIGNALING_SERVER_URL=${{ secrets.SIGNALING_SERVER_URL }}" > .env
+        echo "Created .env file with signaling server URL"
+        
     - name: Build framework
       run: npm run build
       
@@ -47,8 +52,6 @@ jobs:
         # Run the demo games build script with Vite
         chmod +x scripts/build-demos-vite.sh
         ./scripts/build-demos-vite.sh
-      env:
-        SIGNALING_SERVER_URL: ${{ secrets.SIGNALING_SERVER_URL }}
         
     - name: Upload demo artifacts
       uses: actions/upload-artifact@v4
