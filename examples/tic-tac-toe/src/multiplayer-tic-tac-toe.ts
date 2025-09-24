@@ -1,8 +1,6 @@
 // Import the GameWork framework
-import { GameHost, GameClient, WebSocketSignalingService } from '../index';
-import { GameRoom } from '../types';
+import { GameHost, GameClient, WebSocketSignalingService, GameRoom, generateQRCode } from '../../../src/index';
 import { ticTacToeConfig, TicTacToeState, TicTacToeMove } from './simple-tic-tac-toe';
-import { generateQRCode } from '../utils';
 import { activeSignalingConfig } from './signaling-config';
 
 console.log('GameWork Tic-Tac-Toe Multiplayer Game');

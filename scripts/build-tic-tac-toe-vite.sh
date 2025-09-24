@@ -32,11 +32,11 @@ fi
 
 # Move the built HTML files to the correct locations
 echo "📝 Moving HTML files to correct locations..."
-mv "$PROJECT_ROOT/demo-build/src/demos/index.html" "$PROJECT_ROOT/demo-build/index.html"
-mv "$PROJECT_ROOT/demo-build/src/demos/tic-tac-toe.html" "$PROJECT_ROOT/demo-build/tic-tac-toe.html"
+mv "$PROJECT_ROOT/demo-build/examples/tic-tac-toe/index.html" "$PROJECT_ROOT/demo-build/index.html"
+mv "$PROJECT_ROOT/demo-build/examples/tic-tac-toe/tic-tac-toe.html" "$PROJECT_ROOT/demo-build/tic-tac-toe.html"
 
-# Remove the empty src directory structure
-rm -rf "$PROJECT_ROOT/demo-build/src"
+# Remove the empty examples directory structure
+rm -rf "$PROJECT_ROOT/demo-build/examples"
 
 # Fix asset paths in the HTML files (change ../../assets/ to ./assets/)
 echo "📝 Fixing asset paths in HTML files..."

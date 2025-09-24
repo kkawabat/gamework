@@ -1,0 +1,13 @@
+{
+  "name": "simple-card-gamework",
+  "version": "1.0.0",
+  "description": "A simple card game using GameWork framework",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "gamework": "file:../../"
+  }
+}
