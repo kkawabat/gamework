@@ -184,8 +184,8 @@ export class SignalingServer {
 
     const { roomId, playerId, playerName } = message.payload;
     
-    if (!roomId || !playerId || !playerName) {
-      this.sendError(connection.ws, 'Missing required fields: roomId, playerId, playerName');
+    if (!roomId || !playerId) {
+      this.sendError(connection.ws, 'Missing required fields: roomId, playerId');
       return;
     }
 
@@ -195,7 +195,7 @@ export class SignalingServer {
     }
 
     // Join new room
-    const room = this.roomManager.joinRoom(roomId, playerId, playerName);
+    const room = this.roomManager.joinRoom(roomId, playerId, playerName || 'Player');
     
     if (!room) {
       this.sendError(connection.ws, 'Room is full or invalid');
