@@ -1,4 +1,4 @@
-import { GameConfig, GameRules, GameState, GameMove } from '../types';
+import { GameEngine, GameState, GameMove, GameRules } from '../../../src';
 
 // Tic-Tac-Toe game state
 export interface TicTacToeState extends GameState {
@@ -14,7 +14,7 @@ export interface TicTacToeMove {
 }
 
 // Tic-Tac-Toe game rules
-export const ticTacToeRules: GameRules = {
+const ticTacToeRules: GameRules = {
   applyMove: (state: GameState, move: GameMove): GameState => {
     const ticTacToeState = state as TicTacToeState;
     const moveData = move.data as TicTacToeMove;
@@ -23,7 +23,9 @@ export const ticTacToeRules: GameRules = {
     const newState: TicTacToeState = {
       ...ticTacToeState,
       board: [...ticTacToeState.board],
-      currentPlayer: ticTacToeState.currentPlayer // Keep current player for this move
+      currentPlayer: ticTacToeState.currentPlayer,
+      version: ticTacToeState.version + 1,
+      timestamp: Date.now()
     };
     
     // Apply the move with current player's symbol
@@ -60,11 +62,6 @@ export const ticTacToeRules: GameRules = {
       return false;
     }
     
-    // Check if it's the player's turn
-    // The currentPlayer field indicates whose turn it is ('X' or 'O')
-    // We need to check if the move is from the correct player for this turn
-    // This validation should be done by the game host, not here
-    // For now, just return true - the host will validate the player
     return true;
   },
   
@@ -101,7 +98,7 @@ function isBoardFull(board: (string | null)[]): boolean {
 }
 
 // Initial game state
-export const initialTicTacToeState: TicTacToeState = {
+const initialTicTacToeState: TicTacToeState = {
   version: 0,
   timestamp: Date.now(),
   board: Array(9).fill(null),
@@ -110,11 +107,68 @@ export const initialTicTacToeState: TicTacToeState = {
   gameOver: false
 };
 
-// Game configuration
-export const ticTacToeConfig: GameConfig = {
-  gameType: 'tic-tac-toe',
-  maxPlayers: 2,
-  initialState: initialTicTacToeState,
-  rules: ticTacToeRules
-};
+/**
+ * Tic-Tac-Toe Game Engine
+ * Extends the base GameEngine with Tic-Tac-Toe specific logic
+ */
+export class TicTacToeEngine extends GameEngine {
+  constructor() {
+    super(initialTicTacToeState, ticTacToeRules);
+  }
 
+  getGameType(): string {
+    return 'tic-tac-toe';
+  }
+
+  getMaxPlayers(): number {
+    return 2;
+  }
+
+  getPlayerRole(playerId: string): string {
+    // First player is X, second is O
+    const players = Array.from(this.getCurrentState().board).filter(cell => cell !== null);
+    return players.length === 0 ? 'X' : 'O';
+  }
+
+  canPlayerMakeMove(playerId: string, move: GameMove): boolean {
+    const state = this.getCurrentState() as TicTacToeState;
+    const playerRole = this.getPlayerRole(playerId);
+    
+    // Check if it's the player's turn
+    return playerRole === state.currentPlayer && this.rules.isValidMove(state, move);
+  }
+
+  /**
+   * Get the current game state as TicTacToeState
+   */
+  getTicTacToeState(): TicTacToeState {
+    return this.getCurrentState() as TicTacToeState;
+  }
+
+  /**
+   * Check if the game is a draw
+   */
+  isDraw(): boolean {
+    const state = this.getTicTacToeState();
+    return state.gameOver && state.winner === null;
+  }
+
+  /**
+   * Get the current player symbol
+   */
+  getCurrentPlayerSymbol(): string {
+    return this.getTicTacToeState().currentPlayer;
+  }
+
+  /**
+   * Get the board as a 2D array for easier rendering
+   */
+  getBoard2D(): (string | null)[][] {
+    const board = this.getTicTacToeState().board;
+    return [
+      [board[0], board[1], board[2]],
+      [board[3], board[4], board[5]],
+      [board[6], board[7], board[8]]
+    ];
+  }
+}

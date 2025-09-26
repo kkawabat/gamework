@@ -1,20 +1,13 @@
 // Core framework exports
 export { GameEngine } from './core/GameEngine';
+export { GameWork, GameWorkConfig, GameWorkEvents } from './GameWork';
 
-// Networking exports
+// Networking exports (for advanced usage)
 export { WebRTCManager } from './networking/WebRTCManager';
-export { SignalingService, InMemorySignalingService, FirebaseSignalingService, WebSocketSignalingService } from './networking/SignalingService';
-
-// Host and client exports
-export { GameHost } from './host/GameHost';
-export { GameClient } from './client/GameClient';
-
-// Multiplayer base class
-export { BaseMultiplayerGame } from './multiplayer/BaseMultiplayerGame';
+export { SignalingService, WebSocketSignalingService } from './networking/SignalingService';
 
 // Type exports
 export * from './types';
 
 // Utility functions
 export { generateRoomId, generateQRCode } from './utils';
-

@@ -107,6 +107,36 @@ export class WebRTCManager {
     await connectionInfo.connection.addIceCandidate(candidate);
   }
 
+  /**
+   * Create WebRTC offer and handle signaling automatically
+   */
+  async createOfferWithSignaling(peerId: string, signalingService: any, roomId: string, playerId: string): Promise<void> {
+    const offer = await this.createOffer(peerId);
+    
+    await signalingService.sendMessage({
+      type: 'offer',
+      payload: offer,
+      from: playerId,
+      to: peerId,
+      roomId: roomId
+    });
+  }
+
+  /**
+   * Handle ICE candidate and send through signaling
+   */
+  async handleIceCandidateWithSignaling(peerId: string, candidate: RTCIceCandidate, signalingService: any, roomId: string, playerId: string): Promise<void> {
+    await this.handleIceCandidate(peerId, candidate);
+    
+    await signalingService.sendMessage({
+      type: 'ice_candidate',
+      payload: candidate,
+      from: playerId,
+      to: peerId,
+      roomId: roomId
+    });
+  }
+
   private async processQueuedIceCandidates(peerId: string): Promise<void> {
     const queuedCandidates = this.iceCandidateQueue.get(peerId);
     if (!queuedCandidates || queuedCandidates.length === 0) {

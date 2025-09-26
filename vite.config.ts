@@ -5,8 +5,8 @@ export default defineConfig(({ mode }) => {
   // Load environment variables
   const env = loadEnv(mode, process.cwd(), '');
   
-  // Get signaling server URL from environment or use default
-  const signalingServerUrl = env.SIGNALING_SERVER_URL || 'wss://gamework.kankawabata.com';
+  // Get signaling server URL from environment
+  const signalingServerUrl = env.SIGNALING_SERVER_URL;
   
   console.log(`[Vite] Using signaling server URL: ${signalingServerUrl}`);
 

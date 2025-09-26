@@ -267,6 +267,11 @@
         <h1>🎮 GameWork Tic-Tac-Toe</h1>
         
         <div class="game-info">
+            <div class="player-setup">
+                <h3>Player Setup</h3>
+                <input type="text" id="player-name" placeholder="Enter your name" style="padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; width: 200px; margin-bottom: 10px;">
+            </div>
+            
             <div class="room-info">
                 <h3>Room Information</h3>
                 <div class="room-code" id="roomCode">Loading...</div>
@@ -303,8 +308,12 @@
             </div>
         </div>
 
-        <div class="status waiting" id="gameStatus">
+        <div class="status waiting" id="status">
             Connecting to GameWork framework...
+        </div>
+        
+        <div class="current-player" id="current-player">
+            Current Player: X
         </div>
 
         <div class="players">
@@ -331,7 +340,7 @@
         </div>
 
         <div class="controls">
-            <button id="resetGame" disabled>Reset Game</button>
+            <button id="restart" disabled>Restart Game</button>
         </div>
 
         <div class="game-log" id="gameLog">
@@ -340,7 +349,7 @@
     </div>
 
     <script type="module">
-        import { MultiplayerTicTacToe } from './src/multiplayer-tic-tac-toe.ts';
+        import './src/main.ts';
     </script>
 </body>
 </html>

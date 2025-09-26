@@ -1,133 +1,88 @@
-import { GameState, GameMove, GameRules, GameMessage, StateMessage, InputMessage } from '../types';
-import { v4 as uuidv4 } from 'uuid';
+import { GameState, GameMove, GameRules } from '../types';
 
-export class GameEngine {
-  private currentState: GameState;
-  private rules: GameRules;
-  private moveHistory: GameMove[] = [];
-  private versionCounter = 0;
+/**
+ * GameEngine - Base class for game logic
+ * 
+ * Developers extend this class to implement their game logic.
+ * GameWork handles all networking, this class focuses purely on game rules.
+ */
+export abstract class GameEngine {
+  protected state: GameState;
+  protected rules: GameRules;
 
   constructor(initialState: GameState, rules: GameRules) {
-    this.currentState = { ...initialState, version: 0, timestamp: Date.now() };
+    this.state = initialState;
     this.rules = rules;
   }
 
-  getCurrentState(): GameState {
-    return { ...this.currentState };
-  }
-
-  getMoveHistory(): GameMove[] {
-    return [...this.moveHistory];
-  }
-
-  getCurrentVersion(): number {
-    return this.currentState.version;
-  }
-
+  /**
+   * Apply a move to the game state
+   */
   applyMove(move: GameMove): GameState | null {
     // Validate the move
-    if (!this.rules.isValidMove(this.currentState, move)) {
+    if (!this.rules.isValidMove(this.state, move)) {
+      console.warn(`[GameEngine] Invalid move:`, move);
       return null;
     }
 
-    // Apply the move using the reducer
-    const newState = this.rules.applyMove(this.currentState, move);
+    // Apply the move
+    const newState = this.rules.applyMove(this.state, move);
     
-    // Update version and timestamp
-    newState.version = this.currentState.version + 1;
-    newState.timestamp = Date.now();
-
-    // Store the move in history
-    this.moveHistory.push(move);
-
-    // Update current state
-    this.currentState = newState;
-
+    // Update internal state
+    this.state = newState;
+    
+    console.log(`[GameEngine] Move applied successfully`);
     return newState;
   }
 
+  /**
+   * Get the current game state
+   */
+  getCurrentState(): GameState {
+    return this.state;
+  }
+
+  /**
+   * Check if the game is over
+   */
   isGameOver(): boolean {
-    return this.rules.isGameOver(this.currentState);
+    return this.rules.isGameOver(this.state);
   }
 
+  /**
+   * Get the winner (if game is over)
+   */
   getWinner(): string | null {
-    return this.rules.getWinner ? this.rules.getWinner(this.currentState) : null;
+    return this.rules.getWinner?.(this.state) || null;
   }
 
-  createStateMessage(isFullSnapshot: boolean = false, lastMoveId?: string): StateMessage {
-    return {
-      type: 'state',
-      payload: {
-        state: this.getCurrentState(),
-        isFullSnapshot,
-        lastMoveId
-      },
-      timestamp: Date.now(),
-      messageId: uuidv4()
-    };
-  }
+  /**
+   * Get the game type (optional)
+   */
+  getGameType?(): string;
 
-  createInputMessage(playerId: string, moveType: string, moveData: any): InputMessage {
-    const move: GameMove = {
-      type: moveType,
-      playerId,
-      timestamp: Date.now(),
-      data: moveData
-    };
+  /**
+   * Get maximum players (optional)
+   */
+  getMaxPlayers?(): number;
 
-    return {
-      type: 'input',
-      payload: move,
-      timestamp: Date.now(),
-      messageId: uuidv4()
-    };
-  }
+  /**
+   * Get player role based on game rules (optional)
+   */
+  getPlayerRole?(playerId: string): string;
 
-  exportState(): string {
-    return JSON.stringify({
-      state: this.currentState,
-      moveHistory: this.moveHistory,
-      version: this.currentState.version
-    });
-  }
+  /**
+   * Check if a player can make a specific move (optional)
+   */
+  canPlayerMakeMove?(playerId: string, move: GameMove): boolean;
 
-  importState(exportedState: string): boolean {
-    try {
-      const data = JSON.parse(exportedState);
-      this.currentState = data.state;
-      this.moveHistory = data.moveHistory || [];
-      this.versionCounter = data.version || 0;
-      return true;
-    } catch (error) {
-      console.error('Failed to import state:', error);
-      return false;
-    }
-  }
+  /**
+   * Export game state for persistence (optional)
+   */
+  exportState?(): string;
 
-  resetToState(state: GameState): void {
-    this.currentState = { ...state };
-    this.versionCounter = state.version;
-    this.moveHistory = [];
-  }
-
-  // Utility method to get state at a specific version
-  getStateAtVersion(targetVersion: number): GameState | null {
-    if (targetVersion === this.currentState.version) {
-      return this.getCurrentState();
-    }
-
-    if (targetVersion === 0) {
-      // Return initial state
-      const initialState = { ...this.currentState };
-      initialState.version = 0;
-      initialState.timestamp = this.currentState.timestamp;
-      return initialState;
-    }
-
-    // For now, we only support current version and initial state
-    // In a more sophisticated implementation, you could store intermediate states
-    // or replay moves to get to a specific version
-    return null;
-  }
+  /**
+   * Import game state from persistence (optional)
+   */
+  importState?(exportedState: string): boolean;
 }
-

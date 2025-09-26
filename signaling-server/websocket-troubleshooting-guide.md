@@ -1,8 +1,8 @@
 # WebSocket Connection Troubleshooting Guide
 
 ## Problem Statement
-WebSocket connection from client to `wss://gamework.kankawabata.com/` fails with:
-- Client logs: `WebSocket connection to 'wss://gamework.kankawabata.com/' failed`
+WebSocket connection from client to your signaling server fails with:
+- Client logs: `WebSocket connection to 'wss://your-server.com/' failed`
 - Client logs: `Close code: 1006`
 - Client logs: `❌ CORS ISSUE: Server must allow origin: https://kkawabat.github.io`
 

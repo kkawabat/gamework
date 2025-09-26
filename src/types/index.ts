@@ -10,6 +10,7 @@ export interface Player {
   isHost: boolean;
   isConnected: boolean;
   lastSeen: number;
+  role?: string;
 }
 
 export interface GameRoom {
@@ -30,7 +31,7 @@ export interface GameMove {
 }
 
 export interface GameMessage {
-  type: 'join' | 'input' | 'state' | 'resync' | 'player_join' | 'player_leave' | 'error';
+  type: 'join' | 'input' | 'state' | 'resync' | 'player_join' | 'player_leave' | 'error' | 'game_over';
   payload: any;
   timestamp: number;
   messageId: string;
@@ -132,4 +133,11 @@ export interface ClientConfig {
   playerName: string;
   stunServers?: RTCIceServer[];
 }
+
+// Re-export RTCIceServer for convenience
+export type RTCIceServer = {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+};
 

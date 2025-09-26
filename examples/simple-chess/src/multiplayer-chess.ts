@@ -1,7 +1,15 @@
 // Import the GameWork framework
 import { GameHost, GameClient, WebSocketSignalingService, GameRoom, generateQRCode } from '../../../src/index';
 import { chessConfig, ChessState, ChessMove } from './chess-game';
-import { activeSignalingConfig } from '../../signaling-config';
+// Use Vite-injected signaling server URL directly
+const activeSignalingConfig = {
+  get serverUrl() {
+    // @ts-ignore - This is defined by Vite's define config
+    return __SIGNALING_SERVER_URL__;
+  },
+  reconnectAttempts: 10,
+  reconnectInterval: 3000
+};
 
 console.log('GameWork Chess Multiplayer Game');
 console.log('Loading GameWork framework...');
