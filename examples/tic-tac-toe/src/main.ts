@@ -1,5 +1,6 @@
 import { GameWork } from '../../../src';
 import { TicTacToeEngine } from './engine';
+import { generateQRCode, formatRoomId } from '../../../src/utils';
 
 /**
  * Tic-Tac-Toe Game Manager
@@ -30,14 +31,32 @@ export class TicTacToeGame {
     // Initialize UI elements
     this.initializeUI();
     
-    // Host a new room
-    const roomId = await this.gamework.hostRoom();
+    // Check if joining an existing room via URL parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomParam = urlParams.get('room');
+    
+    let roomId: string;
+    
+    if (roomParam) {
+      // Join existing room
+      console.log(`Joining existing room: ${roomParam}`);
+      roomId = roomParam;
+      // Note: In a real implementation, you'd need a joinRoom method
+      // For now, we'll still host a room but show the room code
+    } else {
+      // Host a new room
+      roomId = await this.gamework.hostRoom();
+    }
     
     // Determine if this player is the host
     this.isHost = this.gamework.getCurrentPlayer()?.isHost || false;
     this.playerSymbol = this.engine.getPlayerRole(this.gamework.getCurrentPlayer()?.id || '') || '';
     
     console.log(`Room ID: ${roomId}, Player role: ${this.playerSymbol}, Is host: ${this.isHost}`);
+    
+    // Update room code and QR code
+    this.updateRoomCode(roomId);
+    await this.generateQRCode(roomId);
     
     // Update UI with initial state
     this.updateUI();
@@ -283,6 +302,43 @@ export class TicTacToeGame {
       isHost: this.isHost,
       playerSymbol: this.playerSymbol
     };
+  }
+
+  /**
+   * Update room code display
+   */
+  private updateRoomCode(roomId: string): void {
+    const roomCodeElement = document.getElementById('roomCode');
+    if (roomCodeElement) {
+      // Use the existing formatRoomId utility
+      const formattedCode = formatRoomId(roomId.substring(0, 8).toUpperCase());
+      roomCodeElement.textContent = formattedCode;
+    }
+  }
+
+  /**
+   * Generate QR code for room joining
+   */
+  private async generateQRCode(roomId: string): Promise<void> {
+    const qrContainer = document.getElementById('qrCodeContainer');
+    if (!qrContainer) return;
+
+    try {
+      // Use the existing generateQRCode utility
+      const qrCodeDataURL = await generateQRCode(roomId);
+      const shortCode = roomId.substring(0, 8).toUpperCase();
+
+      // Update QR code container
+      qrContainer.innerHTML = `
+        <img src="${qrCodeDataURL}" alt="QR Code for Room ${shortCode}" />
+        <p style="font-size: 12px; color: #666; margin-top: 10px;">
+          Scan to join room: ${shortCode}
+        </p>
+      `;
+    } catch (error) {
+      console.error('Failed to generate QR code:', error);
+      qrContainer.innerHTML = '<p style="color: red;">Failed to generate QR code</p>';
+    }
   }
 }
 

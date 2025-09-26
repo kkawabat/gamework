@@ -10,4 +10,4 @@ export { SignalingService, WebSocketSignalingService } from './networking/Signal
 export * from './types';
 
 // Utility functions
-export { generateRoomId, generateQRCode } from './utils';
+export { generateRoomId, generateQRCode, formatRoomId } from './utils';
