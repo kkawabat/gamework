@@ -150,10 +150,16 @@ export class TicTacToeGame {
         this.statusElement.textContent = "It's a draw!";
         this.statusElement.className = 'status draw';
       }
+    } else if (state.currentPlayer === null) {
+      this.statusElement.textContent = 'Waiting for player 2 to join';
+      this.statusElement.className = 'status waiting';
     } else {
       this.statusElement.textContent = `Player ${state.currentPlayer}'s turn`;
       this.statusElement.className = 'status playing';
     }
+
+    // Update player status indicators
+    this.updatePlayerStatus();
   }
 
   /**
@@ -168,6 +174,38 @@ export class TicTacToeGame {
     } else {
       this.currentPlayerElement.textContent = `Current Player: ${currentPlayer}`;
       this.currentPlayerElement.className = `current-player ${currentPlayer.toLowerCase()}`;
+    }
+  }
+
+  /**
+   * Update player status indicators
+   */
+  private updatePlayerStatus(): void {
+    const players = this.gamework.getPlayers();
+    const currentPlayerId = this.gamework.getCurrentPlayer()?.id;
+    
+    // Update Player 1 (Host) status
+    const player1Status = document.getElementById('player1Status');
+    if (player1Status) {
+      const hostPlayer = players.find(p => p.isHost);
+      if (hostPlayer) {
+        const role = this.engine.getPlayerRole(hostPlayer.id);
+        player1Status.textContent = `Host - ${role ? `Playing as ${role}` : 'Connected'}`;
+      } else {
+        player1Status.textContent = 'Host - Connecting...';
+      }
+    }
+    
+    // Update Player 2 status
+    const player2Status = document.getElementById('player2Status');
+    if (player2Status) {
+      const otherPlayer = players.find(p => !p.isHost);
+      if (otherPlayer) {
+        const role = this.engine.getPlayerRole(otherPlayer.id);
+        player2Status.textContent = `Player 2 - ${role ? `Playing as ${role}` : 'Connected'}`;
+      } else {
+        player2Status.textContent = 'Waiting for player...';
+      }
     }
   }
 
