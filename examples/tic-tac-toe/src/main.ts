@@ -52,7 +52,7 @@ export class TicTacToeGame {
     this.isHost = this.gamework.getCurrentPlayer()?.isHost || false;
     this.playerSymbol = this.engine.getPlayerRole(this.gamework.getCurrentPlayer()?.id || '') || '';
     
-    console.log(`Room ID: ${roomId}, Player role: ${this.playerSymbol}, Is host: ${this.isHost}`);
+    console.log(`Room Code: ${roomId.substring(0, 6).toUpperCase()}, Player role: ${this.playerSymbol}, Is host: ${this.isHost}`);
     
     // Update room code and QR code
     this.updateRoomCode(roomId);
@@ -310,9 +310,9 @@ export class TicTacToeGame {
   private updateRoomCode(roomId: string): void {
     const roomCodeElement = document.getElementById('roomCode');
     if (roomCodeElement) {
-      // Use the existing formatRoomId utility
-      const formattedCode = formatRoomId(roomId.substring(0, 8).toUpperCase());
-      roomCodeElement.textContent = formattedCode;
+      // Use 6 characters for convenience
+      const shortCode = roomId.substring(0, 6).toUpperCase();
+      roomCodeElement.textContent = shortCode;
     }
   }
 
@@ -326,7 +326,7 @@ export class TicTacToeGame {
     try {
       // Use the existing generateQRCode utility
       const qrCodeDataURL = await generateQRCode(roomId);
-      const shortCode = roomId.substring(0, 8).toUpperCase();
+      const shortCode = roomId.substring(0, 6).toUpperCase();
 
       // Update QR code container
       qrContainer.innerHTML = `
