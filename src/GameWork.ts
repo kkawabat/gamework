@@ -12,8 +12,6 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 
 export interface GameWorkConfig {
-  roomId: string;
-  playerName: string;
   stunServers?: RTCIceServer[];
   signalingService?: SignalingService;
   signalingConfig?: any;
@@ -38,7 +36,7 @@ export class GameWork {
   private signaling: SignalingService;
   private config: GameWorkConfig;
   private playerId: string;
-  private roomId: string;
+  private roomId: string | null;
   private isConnected = false;
   private players: Map<string, Player> = new Map();
   private room?: GameRoom;
@@ -48,7 +46,7 @@ export class GameWork {
     this.gameEngine = gameEngine;
     this.config = config;
     this.playerId = uuidv4();
-    this.roomId = config.roomId;
+    this.roomId = null;
     
     // Initialize networking
     this.webrtc = new WebRTCManager(config.stunServers);
@@ -60,30 +58,33 @@ export class GameWork {
   }
 
   /**
-   * Start the multiplayer game
+   * Host a new multiplayer game room
    */
-  async start(): Promise<void> {
+  async hostRoom(): Promise<string> {
     if (this.isConnected) {
-      throw new Error('GameWork is already started');
+      throw new Error('GameWork is already hosting a room');
     }
 
     try {
-      console.log(`[GameWork] Starting multiplayer game in room: ${this.roomId}`);
+      // Generate a new room ID
+      this.roomId = uuidv4();
+      
+      console.log(`[GameWork] Hosting multiplayer game in room: ${this.roomId}`);
       
       // Connect to signaling service
       await this.signaling.connect();
       await this.signaling.joinRoom(this.roomId, this.playerId);
       
-      // Create initial player
-      const initialPlayer: Player = {
+      // Create host player
+      const hostPlayer: Player = {
         id: this.playerId,
-        name: this.config.playerName,
-        isHost: true, // First player is host
+        name: 'Host',
+        isHost: true,
         isConnected: true,
         lastSeen: Date.now()
       };
       
-      this.players.set(this.playerId, initialPlayer);
+      this.players.set(this.playerId, hostPlayer);
       
       // Create room
       this.room = {
@@ -97,10 +98,11 @@ export class GameWork {
       };
       
       this.isConnected = true;
-      console.log(`[GameWork] Game started successfully`);
+      console.log(`[GameWork] Room hosted successfully`);
       
+      return this.roomId;
     } catch (error) {
-      console.error('[GameWork] Failed to start game:', error);
+      console.error('[GameWork] Failed to host room:', error);
       throw error;
     }
   }
@@ -119,7 +121,9 @@ export class GameWork {
     this.webrtc.disconnectAll();
     
     // Leave signaling room
-    await this.signaling.leaveRoom(this.roomId, this.playerId);
+    if (this.roomId) {
+      await this.signaling.leaveRoom(this.roomId, this.playerId);
+    }
     this.signaling.disconnect();
     
     this.isConnected = false;
@@ -344,11 +348,15 @@ export class GameWork {
   }
 
   private async handleIceCandidate(peerId: string, candidate: RTCIceCandidate): Promise<void> {
-    await this.webrtc.handleIceCandidateWithSignaling(peerId, candidate, this.signaling, this.roomId, this.playerId);
+    if (this.roomId) {
+      await this.webrtc.handleIceCandidateWithSignaling(peerId, candidate, this.signaling, this.roomId, this.playerId);
+    }
   }
 
   private async createWebRTCOffer(peerId: string): Promise<void> {
-    await this.webrtc.createOfferWithSignaling(peerId, this.signaling, this.roomId, this.playerId);
+    if (this.roomId) {
+      await this.webrtc.createOfferWithSignaling(peerId, this.signaling, this.roomId, this.playerId);
+    }
   }
 
   private broadcastStateUpdate(state: GameState): void {

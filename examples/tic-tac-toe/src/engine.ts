@@ -3,9 +3,10 @@ import { GameEngine, GameState, GameMove, GameRules } from '../../../src';
 // Tic-Tac-Toe game state
 export interface TicTacToeState extends GameState {
   board: (string | null)[];
-  currentPlayer: string;
+  currentPlayer: string | null;
   winner: string | null;
   gameOver: boolean;
+  playerRoles: { [playerId: string]: string };
 }
 
 // Tic-Tac-Toe move data
@@ -24,17 +25,31 @@ const ticTacToeRules: GameRules = {
       ...ticTacToeState,
       board: [...ticTacToeState.board],
       currentPlayer: ticTacToeState.currentPlayer,
+      playerRoles: { ...ticTacToeState.playerRoles },
       version: ticTacToeState.version + 1,
       timestamp: Date.now()
     };
     
-    // Apply the move with current player's symbol
+    // Assign roles if this is the first move
+    if (newState.currentPlayer === null) {
+      // First player to move becomes X
+      newState.playerRoles[move.playerId] = 'X';
+      newState.currentPlayer = 'X';
+    } else {
+      // Assign O to the second player if they don't have a role yet
+      if (!newState.playerRoles[move.playerId]) {
+        newState.playerRoles[move.playerId] = 'O';
+      }
+    }
+    
+    // Apply the move with player's symbol
+    const playerSymbol = newState.playerRoles[move.playerId];
     if (newState.board[moveData.position] === null) {
-      newState.board[moveData.position] = ticTacToeState.currentPlayer;
+      newState.board[moveData.position] = playerSymbol;
     }
     
     // Toggle to next player for the next turn
-    newState.currentPlayer = ticTacToeState.currentPlayer === 'X' ? 'O' : 'X';
+    newState.currentPlayer = newState.currentPlayer === 'X' ? 'O' : 'X';
     
     // Check for winner
     newState.winner = checkWinner(newState.board);
@@ -62,7 +77,14 @@ const ticTacToeRules: GameRules = {
       return false;
     }
     
-    return true;
+    // For the first move, any player can make it
+    if (ticTacToeState.currentPlayer === null) {
+      return true;
+    }
+    
+    // For subsequent moves, check if it's the player's turn
+    const playerSymbol = ticTacToeState.playerRoles[move.playerId];
+    return playerSymbol === ticTacToeState.currentPlayer;
   },
   
   isGameOver: (state: GameState): boolean => {
@@ -102,9 +124,10 @@ const initialTicTacToeState: TicTacToeState = {
   version: 0,
   timestamp: Date.now(),
   board: Array(9).fill(null),
-  currentPlayer: 'X',
+  currentPlayer: null,
   winner: null,
-  gameOver: false
+  gameOver: false,
+  playerRoles: {}
 };
 
 /**
@@ -124,17 +147,21 @@ export class TicTacToeEngine extends GameEngine {
     return 2;
   }
 
-  getPlayerRole(playerId: string): string {
-    // First player is X, second is O
-    const players = Array.from(this.getCurrentState().board).filter(cell => cell !== null);
-    return players.length === 0 ? 'X' : 'O';
+  getPlayerRole(playerId: string): string | null {
+    const state = this.getTicTacToeState();
+    return state.playerRoles[playerId] || null;
   }
 
   canPlayerMakeMove(playerId: string, move: GameMove): boolean {
     const state = this.getCurrentState() as TicTacToeState;
-    const playerRole = this.getPlayerRole(playerId);
     
-    // Check if it's the player's turn
+    // For the first move, any player can make it
+    if (state.currentPlayer === null) {
+      return this.rules.isValidMove(state, move);
+    }
+    
+    // For subsequent moves, check if it's the player's turn
+    const playerRole = this.getPlayerRole(playerId);
     return playerRole === state.currentPlayer && this.rules.isValidMove(state, move);
   }
 
@@ -156,7 +183,7 @@ export class TicTacToeEngine extends GameEngine {
   /**
    * Get the current player symbol
    */
-  getCurrentPlayerSymbol(): string {
+  getCurrentPlayerSymbol(): string | null {
     return this.getTicTacToeState().currentPlayer;
   }
 

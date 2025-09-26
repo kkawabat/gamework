@@ -16,10 +16,7 @@ export class TicTacToeGame {
 
   constructor() {
     this.engine = new TicTacToeEngine();
-    this.gamework = new GameWork(this.engine, {
-      roomId: this.getRoomId(),
-      playerName: this.getPlayerName()
-    });
+    this.gamework = new GameWork(this.engine, {});
     
     this.setupEventHandlers();
   }
@@ -33,14 +30,14 @@ export class TicTacToeGame {
     // Initialize UI elements
     this.initializeUI();
     
-    // Connect to the game
-    await this.gamework.start();
+    // Host a new room
+    const roomId = await this.gamework.hostRoom();
     
     // Determine if this player is the host
     this.isHost = this.gamework.getCurrentPlayer()?.isHost || false;
-    this.playerSymbol = this.engine.getPlayerRole(this.gamework.getCurrentPlayer()?.id || '');
+    this.playerSymbol = this.engine.getPlayerRole(this.gamework.getCurrentPlayer()?.id || '') || '';
     
-    console.log(`Player role: ${this.playerSymbol}, Is host: ${this.isHost}`);
+    console.log(`Room ID: ${roomId}, Player role: ${this.playerSymbol}, Is host: ${this.isHost}`);
     
     // Update UI with initial state
     this.updateUI();
@@ -162,11 +159,16 @@ export class TicTacToeGame {
   /**
    * Update the current player indicator
    */
-  private updateCurrentPlayer(currentPlayer: string): void {
+  private updateCurrentPlayer(currentPlayer: string | null): void {
     if (!this.currentPlayerElement) return;
     
-    this.currentPlayerElement.textContent = `Current Player: ${currentPlayer}`;
-    this.currentPlayerElement.className = `current-player ${currentPlayer.toLowerCase()}`;
+    if (currentPlayer === null) {
+      this.currentPlayerElement.textContent = 'Waiting for first move...';
+      this.currentPlayerElement.className = 'current-player waiting';
+    } else {
+      this.currentPlayerElement.textContent = `Current Player: ${currentPlayer}`;
+      this.currentPlayerElement.className = `current-player ${currentPlayer.toLowerCase()}`;
+    }
   }
 
   /**
@@ -232,22 +234,6 @@ export class TicTacToeGame {
     }
   }
 
-  /**
-   * Get room ID from URL or generate one
-   */
-  private getRoomId(): string {
-    const urlParams = new URLSearchParams(window.location.search);
-    const roomId = urlParams.get('room');
-    return roomId || `room-${Math.random().toString(36).substr(2, 9)}`;
-  }
-
-  /**
-   * Get player name from input or generate one
-   */
-  private getPlayerName(): string {
-    const nameInput = document.getElementById('player-name') as HTMLInputElement;
-    return nameInput?.value || `Player ${Math.random().toString(36).substr(2, 4)}`;
-  }
 
   /**
    * Get game statistics
