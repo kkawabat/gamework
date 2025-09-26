@@ -53,7 +53,7 @@ export class GameWork {
     // Initialize networking
     this.webrtc = new WebRTCManager(config.stunServers);
     this.signaling = config.signalingService || new WebSocketSignalingService({
-      serverUrl: (globalThis as any).__SIGNALING_SERVER_URL__ || 'ws://localhost:8080'
+      serverUrl: __SIGNALING_SERVER_URL__ || 'ws://localhost:8080'
     });
     
     this.setupEventHandlers();
