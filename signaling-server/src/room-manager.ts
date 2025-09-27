@@ -5,6 +5,21 @@ export class RoomManager {
   private rooms = new Map<string, GameRoom>();
   private pendingMessages = new Map<string, SignalingMessage[]>();
 
+  /**
+   * Find a room by its short code (first 6 characters of room ID)
+   */
+  findRoomByCode(roomCode: string): GameRoom | null {
+    const upperCode = roomCode.toUpperCase();
+    
+    for (const [roomId, room] of this.rooms) {
+      if (roomId.substring(0, 6).toUpperCase() === upperCode) {
+        return room;
+      }
+    }
+    
+    return null;
+  }
+
   createRoom(roomId: string, hostId: string, hostName: string, gameType: string = 'generic', maxPlayers: number = 8): GameRoom {
     const room: GameRoom = {
       id: roomId,

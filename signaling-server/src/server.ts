@@ -164,6 +164,9 @@ export class SignalingServer {
       case 'join_room':
         this.handleJoinRoom(connectionId, message);
         break;
+      case 'lookup_room':
+        this.handleLookupRoom(connectionId, message);
+        break;
       case 'leave_room':
         this.handleLeaveRoom(connectionId, message);
         break;
@@ -239,6 +242,37 @@ export class SignalingServer {
     }, playerId);
 
     console.log(`Player ${playerId} joined room ${roomId}`);
+  }
+
+  private handleLookupRoom(connectionId: string, message: ClientMessage): void {
+    const connection = this.connections.get(connectionId);
+    if (!connection) return;
+
+    const { roomCode } = message.payload;
+    
+    if (!roomCode) {
+      this.sendError(connection.ws, 'Missing required field: roomCode');
+      return;
+    }
+
+    // Look up room by code
+    const room = this.roomManager.findRoomByCode(roomCode);
+    
+    if (room) {
+      this.sendMessage(connection.ws, {
+        type: 'room_found',
+        payload: {
+          roomId: room.id,
+          roomCode: roomCode,
+          playerCount: room.players.size,
+          maxPlayers: room.maxPlayers
+        }
+      });
+      console.log(`Room lookup successful: ${roomCode} -> ${room.id}`);
+    } else {
+      this.sendError(connection.ws, `Room with code ${roomCode} not found`);
+      console.log(`Room lookup failed: ${roomCode} not found`);
+    }
   }
 
   private handleLeaveRoom(connectionId: string, message: ClientMessage): void {

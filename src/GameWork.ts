@@ -110,6 +110,53 @@ export class GameWork {
   }
 
   /**
+   * Look up a room by its short code
+   */
+  async lookupRoom(roomCode: string): Promise<string | null> {
+    // Connect to signaling service if not already connected
+    if (!this.signaling) {
+      throw new Error('Signaling service not initialized');
+    }
+
+    return new Promise(async (resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Room lookup timeout'));
+      }, 5000);
+
+      const handleMessage = (message: any) => {
+        if (message.type === 'room_found') {
+          clearTimeout(timeout);
+          this.signaling.onMessage(handleMessage); // Remove this listener
+          resolve(message.payload.roomId);
+        } else if (message.type === 'error') {
+          clearTimeout(timeout);
+          this.signaling.onMessage(handleMessage); // Remove this listener
+          reject(new Error(message.payload.message || 'Room lookup failed'));
+        }
+      };
+
+      try {
+        // Connect to signaling service
+        await this.signaling.connect();
+        
+        // Set up message handler
+        this.signaling.onMessage(handleMessage);
+        
+        // Send lookup request
+        await this.signaling.sendMessage({
+          type: 'lookup_room',
+          payload: { roomCode },
+          from: this.playerId,
+          roomId: 'lookup' // Temporary room ID for lookup
+        });
+      } catch (error) {
+        clearTimeout(timeout);
+        reject(error);
+      }
+    });
+  }
+
+  /**
    * Join an existing multiplayer game room
    */
   async joinRoom(roomId: string): Promise<void> {
@@ -394,15 +441,35 @@ export class GameWork {
     console.log(`[GameWork] Room update: ${room.players.size} players`);
     this.room = room;
     
-    // Update local players map
+    // Get previous player count for comparison
+    const previousPlayerCount = this.players.size;
+    
+    // Update local players map - add new players and update existing ones
     for (const [playerId, player] of room.players) {
-      if (!this.players.has(playerId)) {
-        this.players.set(playerId, player);
-        if (this.events.onPlayerJoin) {
-          this.events.onPlayerJoin(player);
+      const wasNewPlayer = !this.players.has(playerId);
+      this.players.set(playerId, player);
+      
+      if (wasNewPlayer && this.events.onPlayerJoin) {
+        this.events.onPlayerJoin(player);
+      }
+    }
+    
+    // Remove players who are no longer in the room
+    for (const [playerId, player] of this.players) {
+      if (!room.players.has(playerId)) {
+        this.players.delete(playerId);
+        if (this.events.onPlayerLeave) {
+          this.events.onPlayerLeave(playerId);
         }
       }
     }
+    
+    // Trigger state update to refresh UI
+    if (this.events.onStateUpdate) {
+      this.events.onStateUpdate(this.gameEngine.getCurrentState());
+    }
+    
+    console.log(`[GameWork] Players updated: ${this.players.size} players in room`);
   }
 
   private async handleIceCandidate(peerId: string, candidate: RTCIceCandidate): Promise<void> {

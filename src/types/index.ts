@@ -105,7 +105,7 @@ export interface GameRules {
 }
 
 export interface SignalingMessage {
-  type: 'offer' | 'answer' | 'ice_candidate' | 'room_info' | 'join_request';
+  type: 'offer' | 'answer' | 'ice_candidate' | 'room_info' | 'join_request' | 'lookup_room' | 'room_found';
   payload: any;
   from: string;
   to?: string;

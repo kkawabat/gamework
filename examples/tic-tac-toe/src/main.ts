@@ -38,11 +38,23 @@ export class TicTacToeGame {
     let roomId: string;
     
     if (roomParam) {
-      // Join existing room
-      console.log(`Joining existing room: ${roomParam}`);
-      this.addGameLogEntry(`Attempting to join room: ${roomParam.substring(0, 6).toUpperCase()}`, 'info');
-      await this.gamework.joinRoom(roomParam);
-      roomId = roomParam;
+      // Join existing room by room code
+      console.log(`Looking up room with code: ${roomParam}`);
+      this.addGameLogEntry(`Looking up room: ${roomParam.toUpperCase()}`, 'info');
+      
+      try {
+        const fullRoomId = await this.gamework.lookupRoom(roomParam);
+        if (fullRoomId) {
+          this.addGameLogEntry(`Found room: ${fullRoomId.substring(0, 6).toUpperCase()}`, 'success');
+          await this.gamework.joinRoom(fullRoomId);
+          roomId = fullRoomId;
+        } else {
+          throw new Error('Room not found');
+        }
+      } catch (error) {
+        this.addGameLogEntry(`Room lookup failed: ${error.message}`, 'error');
+        throw error;
+      }
     } else {
       // Host a new room
       this.addGameLogEntry('Creating new game room...', 'info');
@@ -304,7 +316,7 @@ export class TicTacToeGame {
   private setupEventHandlers(): void {
     this.gamework.setEvents({
       onPlayerJoin: (player) => {
-        console.log(`Player joined: ${player.name}`);
+        console.log(`Player joined: ${player.name} (ID: ${player.id})`);
         this.addGameLogEntry(`Player joined: ${player.name}`, 'success');
         this.updateUI();
         
@@ -327,6 +339,7 @@ export class TicTacToeGame {
       
       onStateUpdate: (state) => {
         console.log('Game state updated');
+        console.log('Current players:', this.gamework.getPlayers().length);
         this.updateUI();
       },
       
