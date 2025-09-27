@@ -145,7 +145,7 @@ export class GameWork {
             const index = (this.signaling as any).messageCallbacks.indexOf(messageHandler);
             if (index > -1) {
               (this.signaling as any).messageCallbacks.splice(index, 1);
-            }
+            }~19
           }
           resolve(message.payload.roomId);
         } else if (message.type === 'error' && message.payload.message.includes('Room with code')) {
@@ -497,8 +497,10 @@ export class GameWork {
     const playersMap = new Map<string, Player>();
     if (room.players) {
       if (room.players instanceof Map) {
-        // Already a Map
-        playersMap.set(room.players);
+        // Already a Map - copy all entries
+        for (const [playerId, player] of room.players) {
+          playersMap.set(playerId, player);
+        }
       } else if (typeof room.players === 'object' && !Array.isArray(room.players)) {
         // Object format from signaling server
         for (const [playerId, player] of Object.entries(room.players)) {
