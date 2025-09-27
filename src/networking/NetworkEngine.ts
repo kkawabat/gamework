@@ -110,6 +110,11 @@ export class NetworkEngine {
       throw new Error('Signaling service not initialized');
     }
 
+    // Connect to signaling service if not already connected
+    if (!this.isNetworkConnected()) {
+      await this.signaling.connect();
+    }
+
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Room lookup timeout'));
