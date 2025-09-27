@@ -335,6 +335,20 @@ export class GameWork {
   }
 
   /**
+   * Debug method to get room state
+   */
+  getRoomDebug(): any {
+    return {
+      room: this.room,
+      roomId: this.roomId,
+      playerId: this.playerId,
+      isConnected: this.isConnected,
+      playersCount: this.players.size,
+      players: Array.from(this.players.entries())
+    };
+  }
+
+  /**
    * Check if game is over
    */
   isGameOver(): boolean {
@@ -379,7 +393,12 @@ export class GameWork {
 
     // Signaling service message handling
     this.signaling.onMessage((message) => {
-      this.handleSignalingMessage(message);
+      // Handle room_joined messages specially
+      if (message.type === 'room_joined' && message.payload && message.payload.room) {
+        this.handleRoomJoinedData(message.payload.room);
+      } else {
+        this.handleSignalingMessage(message);
+      }
     });
 
     this.signaling.onRoomUpdate((room) => {
@@ -473,7 +492,9 @@ export class GameWork {
 
   private handleRoomUpdate(room: GameRoom): void {
     console.log(`[GameWork] Room update: ${room.players.size} players`);
+    console.log(`[GameWork] Setting this.room to:`, room);
     this.room = room;
+    console.log(`[GameWork] this.room is now:`, this.room);
     
     // Get previous player count for comparison
     const previousPlayerCount = this.players.size;
@@ -504,6 +525,41 @@ export class GameWork {
     }
     
     console.log(`[GameWork] Players updated: ${this.players.size} players in room`);
+  }
+
+  /**
+   * Handle room data from room_joined message (array format)
+   */
+  private handleRoomJoinedData(roomData: any): void {
+    console.log(`[GameWork] Room joined data: ${roomData.players?.length || 0} players`);
+    console.log(`[GameWork] Room data:`, roomData);
+    
+    // Convert array of players to Map
+    const playersMap = new Map<string, Player>();
+    if (roomData.players && Array.isArray(roomData.players)) {
+      for (const player of roomData.players) {
+        playersMap.set(player.id, player);
+      }
+    }
+    
+    // Create room object with Map
+    const room: GameRoom = {
+      id: roomData.id,
+      name: roomData.name,
+      hostId: roomData.hostId,
+      players: playersMap,
+      maxPlayers: roomData.maxPlayers,
+      gameType: roomData.gameType,
+      createdAt: roomData.createdAt
+    };
+    
+    console.log(`[GameWork] Created room object:`, room);
+    console.log(`[GameWork] Room players map size:`, room.players.size);
+    
+    // Use the existing room update handler
+    this.handleRoomUpdate(room);
+    
+    console.log(`[GameWork] After room update - this.room:`, this.room);
   }
 
   private async handleIceCandidate(peerId: string, candidate: RTCIceCandidate): Promise<void> {

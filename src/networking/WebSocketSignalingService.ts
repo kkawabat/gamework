@@ -175,8 +175,12 @@ export class WebSocketSignalingService {
         break;
       case 'room_joined':
         console.log(`[WebSocketSignalingService] Room joined, calling ${this.messageCallbacks.length} callbacks`);
-        // Handle room joined response
+        // Handle room joined response - also trigger room update
         this.messageCallbacks.forEach(callback => callback(message));
+        // Also trigger room update callback if room data is present
+        if (message.payload && message.payload.room) {
+          this.roomUpdateCallbacks.forEach(callback => callback(message.payload.room));
+        }
         break;
       case 'error':
         console.log(`[WebSocketSignalingService] Error received:`, message.payload);
