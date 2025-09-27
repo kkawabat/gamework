@@ -490,17 +490,45 @@ export class GameWork {
     await this.signaling.handleSignalingMessage(message, this.webrtc, this.playerId);
   }
 
-  private handleRoomUpdate(room: GameRoom): void {
-    console.log(`[GameWork] Room update: ${room.players.size} players`);
-    console.log(`[GameWork] Setting this.room to:`, room);
-    this.room = room;
+  private handleRoomUpdate(room: any): void {
+    console.log(`[GameWork] Room update received:`, room);
+    
+    // Convert players from Object to Map format
+    const playersMap = new Map<string, Player>();
+    if (room.players) {
+      if (room.players instanceof Map) {
+        // Already a Map
+        playersMap.set(room.players);
+      } else if (typeof room.players === 'object' && !Array.isArray(room.players)) {
+        // Object format from signaling server
+        for (const [playerId, player] of Object.entries(room.players)) {
+          playersMap.set(playerId, player as Player);
+        }
+      } else if (Array.isArray(room.players)) {
+        // Array format (fallback)
+        for (const player of room.players) {
+          playersMap.set(player.id, player);
+        }
+      }
+    }
+    
+    // Create proper GameRoom object with Map
+    const gameRoom: GameRoom = {
+      id: room.id,
+      name: room.name,
+      hostId: room.hostId,
+      players: playersMap,
+      maxPlayers: room.maxPlayers,
+      gameType: room.gameType,
+      createdAt: room.createdAt
+    };
+    
+    console.log(`[GameWork] Room update: ${playersMap.size} players`);
+    this.room = gameRoom;
     console.log(`[GameWork] this.room is now:`, this.room);
     
-    // Get previous player count for comparison
-    const previousPlayerCount = this.players.size;
-    
     // Update local players map - add new players and update existing ones
-    for (const [playerId, player] of room.players) {
+    for (const [playerId, player] of playersMap) {
       const wasNewPlayer = !this.players.has(playerId);
       this.players.set(playerId, player);
       
@@ -511,7 +539,7 @@ export class GameWork {
     
     // Remove players who are no longer in the room
     for (const [playerId, player] of this.players) {
-      if (!room.players.has(playerId)) {
+      if (!playersMap.has(playerId)) {
         this.players.delete(playerId);
         if (this.events.onPlayerLeave) {
           this.events.onPlayerLeave(playerId);
@@ -528,38 +556,13 @@ export class GameWork {
   }
 
   /**
-   * Handle room data from room_joined message (array format)
+   * Handle room data from room_joined message (Object format)
    */
   private handleRoomJoinedData(roomData: any): void {
-    console.log(`[GameWork] Room joined data: ${roomData.players?.length || 0} players`);
-    console.log(`[GameWork] Room data:`, roomData);
+    console.log(`[GameWork] Room joined data:`, roomData);
     
-    // Convert array of players to Map
-    const playersMap = new Map<string, Player>();
-    if (roomData.players && Array.isArray(roomData.players)) {
-      for (const player of roomData.players) {
-        playersMap.set(player.id, player);
-      }
-    }
-    
-    // Create room object with Map
-    const room: GameRoom = {
-      id: roomData.id,
-      name: roomData.name,
-      hostId: roomData.hostId,
-      players: playersMap,
-      maxPlayers: roomData.maxPlayers,
-      gameType: roomData.gameType,
-      createdAt: roomData.createdAt
-    };
-    
-    console.log(`[GameWork] Created room object:`, room);
-    console.log(`[GameWork] Room players map size:`, room.players.size);
-    
-    // Use the existing room update handler
-    this.handleRoomUpdate(room);
-    
-    console.log(`[GameWork] After room update - this.room:`, this.room);
+    // Use the existing room update handler (now handles Object format)
+    this.handleRoomUpdate(roomData);
   }
 
   private async handleIceCandidate(peerId: string, candidate: RTCIceCandidate): Promise<void> {

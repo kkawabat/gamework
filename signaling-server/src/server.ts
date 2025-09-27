@@ -417,7 +417,7 @@ export class SignalingServer {
       id: room.id,
       name: room.name,
       hostId: room.hostId,
-      players: Array.from(room.players.values()),
+      players: Object.fromEntries(room.players),
       maxPlayers: room.maxPlayers,
       gameType: room.gameType,
       createdAt: room.createdAt
