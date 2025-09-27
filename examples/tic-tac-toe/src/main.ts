@@ -58,6 +58,17 @@ export class TicTacToeGame {
     this.updateRoomCode(roomId);
     await this.generateQRCode(roomId);
     
+    // Update join room button status if we joined an existing room
+    if (roomParam) {
+      this.updateJoinRoomButtonStatus('Joined!', true);
+    }
+    
+    // Update game log with successful initialization
+    this.addGameLogEntry('Game initialized successfully!', 'success');
+    this.addGameLogEntry(`Room Code: ${roomId.substring(0, 6).toUpperCase()}`, 'info');
+    this.addGameLogEntry(`Player Role: ${this.playerSymbol || 'Not assigned'}`, 'info');
+    this.addGameLogEntry(`Status: ${this.isHost ? 'Host' : 'Player'}`, 'info');
+    
     // Update UI with initial state
     this.updateUI();
   }
@@ -84,6 +95,22 @@ export class TicTacToeGame {
       restartButton.addEventListener('click', () => this.restartGame());
     }
     
+    // Add join room button listener
+    const joinRoomBtn = document.getElementById('joinRoomBtn');
+    if (joinRoomBtn) {
+      joinRoomBtn.addEventListener('click', () => this.handleJoinRoom());
+    }
+    
+    // Add enter key listener for room code input
+    const roomCodeInput = document.getElementById('roomCodeInput');
+    if (roomCodeInput) {
+      roomCodeInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          this.handleJoinRoom();
+        }
+      });
+    }
+    
     // Add host controls if this player is the host
     if (this.isHost) {
       this.setupHostControls();
@@ -96,12 +123,14 @@ export class TicTacToeGame {
   private handleCellClick(index: number): void {
     if (!this.canMakeMove()) {
       console.log('Cannot make move - not your turn or game over');
+      this.addGameLogEntry('Cannot make move - not your turn or game over', 'warning');
       return;
     }
 
     const state = this.engine.getTicTacToeState();
     if (state.board[index] !== null) {
       console.log('Cell already occupied');
+      this.addGameLogEntry('Cell already occupied', 'warning');
       return;
     }
 
@@ -115,8 +144,10 @@ export class TicTacToeGame {
 
     if (success) {
       console.log(`Move sent: position ${index}`);
+      this.addGameLogEntry(`Move made at position ${index}`, 'info');
     } else {
       console.log('Failed to send move');
+      this.addGameLogEntry('Move failed', 'error');
     }
   }
 
@@ -142,6 +173,9 @@ export class TicTacToeGame {
     
     // Update current player indicator
     this.updateCurrentPlayer(state.currentPlayer);
+    
+    // Update player count
+    this.updatePlayerCount();
   }
 
   /**
@@ -229,18 +263,59 @@ export class TicTacToeGame {
   }
 
   /**
+   * Update player count display
+   */
+  private updatePlayerCount(): void {
+    const playerCountElement = document.getElementById('playerCount');
+    if (playerCountElement) {
+      const playerCount = this.gamework.getPlayers().length;
+      playerCountElement.textContent = `Players: ${playerCount}`;
+    }
+  }
+
+  /**
+   * Add an entry to the game log
+   */
+  private addGameLogEntry(message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info'): void {
+    const gameLogElement = document.getElementById('gameLog');
+    if (!gameLogElement) return;
+
+    const timestamp = new Date().toLocaleTimeString();
+    const logEntry = document.createElement('div');
+    logEntry.className = `log-entry ${type}`;
+    logEntry.textContent = `[${timestamp}] ${message}`;
+    
+    gameLogElement.appendChild(logEntry);
+    
+    // Auto-scroll to bottom
+    gameLogElement.scrollTop = gameLogElement.scrollHeight;
+  }
+
+  /**
    * Setup event handlers for GameWork
    */
   private setupEventHandlers(): void {
     this.gamework.setEvents({
       onPlayerJoin: (player) => {
         console.log(`Player joined: ${player.name}`);
+        this.addGameLogEntry(`Player joined: ${player.name}`, 'success');
         this.updateUI();
+        
+        // Update join room button if we're not the host and another player joined
+        if (!this.isHost && this.gamework.getPlayers().length > 1) {
+          this.updateJoinRoomButtonStatus('Joined!', true);
+        }
       },
       
       onPlayerLeave: (playerId) => {
         console.log(`Player left: ${playerId}`);
+        this.addGameLogEntry(`Player left: ${playerId}`, 'warning');
         this.updateUI();
+        
+        // Reset join room button if we're the only player left
+        if (!this.isHost && this.gamework.getPlayers().length <= 1) {
+          this.updateJoinRoomButtonStatus('Join Room', false);
+        }
       },
       
       onStateUpdate: (state) => {
@@ -250,6 +325,7 @@ export class TicTacToeGame {
       
       onError: (error) => {
         console.error('Game error:', error);
+        this.addGameLogEntry(`Error: ${error.message}`, 'error');
         this.showError(error.message);
       }
     });
@@ -261,6 +337,60 @@ export class TicTacToeGame {
   private setupHostControls(): void {
     // Add host-specific UI elements or functionality
     console.log('Setting up host controls');
+  }
+
+  /**
+   * Handle join room button click
+   */
+  private handleJoinRoom(): void {
+    const roomCodeInput = document.getElementById('roomCodeInput') as HTMLInputElement;
+    const joinRoomBtn = document.getElementById('joinRoomBtn') as HTMLButtonElement;
+    
+    if (!roomCodeInput || !joinRoomBtn) return;
+    
+    const roomCode = roomCodeInput.value.trim().toUpperCase();
+    
+    if (!roomCode) {
+      alert('Please enter a room code');
+      return;
+    }
+    
+    if (roomCode.length !== 6) {
+      alert('Room code must be 6 characters long');
+      return;
+    }
+    
+    // Update button to show connecting status
+    this.updateJoinRoomButtonStatus('Connecting...', true);
+    
+    // Navigate to the room URL
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set('room', roomCode);
+    window.location.href = currentUrl.toString();
+  }
+
+  /**
+   * Update join room button status
+   */
+  private updateJoinRoomButtonStatus(text: string, disabled: boolean = false): void {
+    const joinRoomBtn = document.getElementById('joinRoomBtn') as HTMLButtonElement;
+    if (joinRoomBtn) {
+      joinRoomBtn.textContent = text;
+      joinRoomBtn.disabled = disabled;
+      
+      // Update button styling based on status
+      if (text === 'Connecting...') {
+        joinRoomBtn.style.background = '#ffc107';
+        joinRoomBtn.style.color = '#000';
+      } else if (text === 'Joined!') {
+        joinRoomBtn.style.background = '#28a745';
+        joinRoomBtn.style.color = '#fff';
+      } else {
+        // Reset to default styling
+        joinRoomBtn.style.background = '#28a745';
+        joinRoomBtn.style.color = '#fff';
+      }
+    }
   }
 
   /**
