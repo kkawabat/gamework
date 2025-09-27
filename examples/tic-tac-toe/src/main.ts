@@ -63,9 +63,24 @@ export class TicTacToeGame {
     
     // Determine if this player is the host
     this.isHost = this.gamework.getCurrentPlayer()?.isHost || false;
-    this.playerSymbol = this.engine.getPlayerRole(this.gamework.getCurrentPlayer()?.id || '') || '';
     
-    console.log(`Room Code: ${roomId.substring(0, 6).toUpperCase()}, Player role: ${this.playerSymbol}, Is host: ${this.isHost}`);
+    // Assign player roles based on connection order
+    const players = this.gamework.getPlayers();
+    const playerCount = players.size;
+    const currentPlayerId = this.gamework.getCurrentPlayer()?.id;
+    
+    if (playerCount === 1) {
+      // First player (host) gets X
+      this.playerSymbol = 'X';
+    } else if (playerCount === 2) {
+      // Second player gets O
+      this.playerSymbol = 'O';
+    } else {
+      // Fallback to engine role assignment
+      this.playerSymbol = this.engine.getPlayerRole(currentPlayerId || '') || '';
+    }
+    
+    console.log(`Room Code: ${roomId.substring(0, 6).toUpperCase()}, Player role: ${this.playerSymbol}, Is host: ${this.isHost}, Player count: ${playerCount}`);
     
     // Update room code and QR code
     this.updateRoomCode(roomId);
@@ -250,6 +265,28 @@ export class TicTacToeGame {
   }
 
   /**
+   * Update player roles based on connection order
+   */
+  private updatePlayerRoles(): void {
+    const players = this.gamework.getPlayers();
+    const playerCount = players.size;
+    const currentPlayerId = this.gamework.getCurrentPlayer()?.id;
+    
+    if (playerCount === 1) {
+      // First player (host) gets X
+      this.playerSymbol = 'X';
+    } else if (playerCount === 2) {
+      // Second player gets O
+      this.playerSymbol = 'O';
+    } else {
+      // Fallback to engine role assignment
+      this.playerSymbol = this.engine.getPlayerRole(currentPlayerId || '') || '';
+    }
+    
+    console.log(`Updated player roles - Player count: ${playerCount}, My role: ${this.playerSymbol}`);
+  }
+
+  /**
    * Update player status indicators
    */
   private updatePlayerStatus(): void {
@@ -318,6 +355,9 @@ export class TicTacToeGame {
       onPlayerJoin: (player) => {
         console.log(`Player joined: ${player.name} (ID: ${player.id})`);
         this.addGameLogEntry(`Player joined: ${player.name}`, 'success');
+        
+        // Update player roles when players join
+        this.updatePlayerRoles();
         this.updateUI();
         
         // Update join room button if we're not the host and another player joined

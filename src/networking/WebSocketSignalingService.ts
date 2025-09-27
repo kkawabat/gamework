@@ -173,6 +173,11 @@ export class WebSocketSignalingService {
         // Handle room lookup response
         this.messageCallbacks.forEach(callback => callback(message));
         break;
+      case 'room_joined':
+        console.log(`[WebSocketSignalingService] Room joined, calling ${this.messageCallbacks.length} callbacks`);
+        // Handle room joined response
+        this.messageCallbacks.forEach(callback => callback(message));
+        break;
       case 'error':
         console.log(`[WebSocketSignalingService] Error received:`, message.payload);
         const error = new Error(message.payload.message || 'Unknown error');
