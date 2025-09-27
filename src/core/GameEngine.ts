@@ -43,6 +43,13 @@ export abstract class GameEngine {
   }
 
   /**
+   * Set the game state (used for syncing with other players)
+   */
+  setState(newState: GameState): void {
+    this.state = newState;
+  }
+
+  /**
    * Check if the game is over
    */
   isGameOver(): boolean {

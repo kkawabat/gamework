@@ -429,6 +429,10 @@ export class GameWork {
           this.handleResyncRequest(peerId);
           break;
           
+        case 'state':
+          this.handleStateUpdate(message.payload);
+          break;
+          
         default:
           console.warn(`[GameWork] Unknown message type: ${message.type}`);
       }
@@ -472,6 +476,20 @@ export class GameWork {
   private handleResyncRequest(peerId: string): void {
     console.log(`[GameWork] Resync request from ${peerId}`);
     this.broadcastStateUpdate(this.gameEngine.getCurrentState());
+  }
+
+  private handleStateUpdate(payload: any): void {
+    console.log(`[GameWork] Received state update:`, payload);
+    
+    if (payload.state) {
+      // Update the game engine with the new state
+      this.gameEngine.setState(payload.state);
+      
+      // Trigger the state update event
+      if (this.events.onStateUpdate) {
+        this.events.onStateUpdate(payload.state);
+      }
+    }
   }
 
   private handleConnectionChange(peerId: string, isConnected: boolean): void {
@@ -590,7 +608,7 @@ export class GameWork {
       messageId: uuidv4()
     };
     
-    console.log(`[GameWork] Broadcasting state update`);
+    console.log(`[GameWork] Broadcasting state update to ${this.players.size} players`);
     this.webrtc.broadcastMessage(message);
     
     if (this.events.onStateUpdate) {

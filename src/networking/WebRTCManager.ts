@@ -181,8 +181,11 @@ export class WebRTCManager {
   }
 
   broadcastMessage(message: any, excludePeerId?: string): void {
+    console.log(`[WebRTCManager] Broadcasting message to ${this.connections.size} connections`);
     this.connections.forEach((connectionInfo, peerId) => {
+      console.log(`[WebRTCManager] Connection ${peerId}: connected=${connectionInfo.isConnected}`);
       if (peerId !== excludePeerId && connectionInfo.isConnected) {
+        console.log(`[WebRTCManager] Sending message to ${peerId}`);
         this.sendMessage(peerId, message);
       }
     });
