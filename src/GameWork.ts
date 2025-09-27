@@ -121,36 +121,40 @@ export class GameWork {
     return new Promise(async (resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Room lookup timeout'));
-      }, 5000);
+      }, 10000); // Increased timeout to 10 seconds
+
+      // Create a temporary signaling service for lookup
+      const tempSignaling = new WebSocketSignalingService({
+        serverUrl: this.signaling.getServerUrl?.() || 'ws://localhost:8080'
+      });
 
       const handleMessage = (message: any) => {
         if (message.type === 'room_found') {
           clearTimeout(timeout);
-          this.signaling.onMessage(handleMessage); // Remove this listener
+          tempSignaling.disconnect();
           resolve(message.payload.roomId);
         } else if (message.type === 'error') {
           clearTimeout(timeout);
-          this.signaling.onMessage(handleMessage); // Remove this listener
+          tempSignaling.disconnect();
           reject(new Error(message.payload.message || 'Room lookup failed'));
         }
       };
 
       try {
-        // Connect to signaling service
-        await this.signaling.connect();
-        
-        // Set up message handler
-        this.signaling.onMessage(handleMessage);
+        // Connect temporary signaling service
+        await tempSignaling.connect();
+        tempSignaling.onMessage(handleMessage);
         
         // Send lookup request
-        await this.signaling.sendMessage({
+        await tempSignaling.sendMessage({
           type: 'lookup_room',
           payload: { roomCode },
           from: this.playerId,
-          roomId: 'lookup' // Temporary room ID for lookup
+          roomId: 'lookup'
         });
       } catch (error) {
         clearTimeout(timeout);
+        tempSignaling.disconnect();
         reject(error);
       }
     });

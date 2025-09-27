@@ -11,4 +11,5 @@ export interface SignalingService {
   onMessage(callback: (message: SignalingMessage) => void): void;
   onRoomUpdate(callback: (room: GameRoom) => void): void;
   onError(callback: (error: Error) => void): void;
+  getServerUrl?(): string;
 }

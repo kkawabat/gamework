@@ -144,6 +144,10 @@ export class WebSocketSignalingService {
     this.errorCallbacks.push(callback);
   }
 
+  getServerUrl(): string {
+    return this.config.serverUrl;
+  }
+
   private handleMessage(message: any): void {
     switch (message.type) {
       case 'signaling_message':
@@ -153,6 +157,10 @@ export class WebSocketSignalingService {
       case 'room_update':
         const room: GameRoom = message.payload;
         this.roomUpdateCallbacks.forEach(callback => callback(room));
+        break;
+      case 'room_found':
+        // Handle room lookup response
+        this.messageCallbacks.forEach(callback => callback(message));
         break;
       case 'error':
         const error = new Error(message.payload.message || 'Unknown error');
