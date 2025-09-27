@@ -17,7 +17,7 @@ export class TicTacToeGame {
 
   constructor() {
     this.engine = new TicTacToeEngine();
-    this.gamework = new GameWork(this.engine, {});
+    this.gamework = new GameWork(this.engine);
     
     this.setupEventHandlers();
   }
@@ -62,12 +62,12 @@ export class TicTacToeGame {
     }
     
     // Determine if this player is the host
-    this.isHost = this.gamework.getCurrentPlayer()?.isHost || false;
+    this.isHost = this.gamework.getClientPlayer()?.isHost || false;
     
     // Assign player roles based on connection order
     const players = this.gamework.getPlayers();
-    const playerCount = players.size;
-    const currentPlayerId = this.gamework.getCurrentPlayer()?.id;
+    const playerCount = players.length;
+    const currentPlayerId = this.gamework.getClientPlayer()?.id;
     
     if (playerCount === 1) {
       // First player (host) gets X
@@ -171,7 +171,7 @@ export class TicTacToeGame {
     // Send move to the game
     const success = this.gamework.sendMove({
       type: 'move',
-      playerId: this.gamework.getCurrentPlayer()?.id || '',
+      playerId: this.gamework.getClientPlayer()?.id || '',
       timestamp: Date.now(),
       data: { position: index }
     });
@@ -251,7 +251,7 @@ export class TicTacToeGame {
       }
     } else {
       // Check number of players in room instead of game state
-      const playerCount = this.gamework.getPlayers().size;
+      const playerCount = this.gamework.getPlayers().length;
       
       if (playerCount < 2) {
         this.statusElement.textContent = 'Waiting for player 2 to join';
@@ -290,8 +290,8 @@ export class TicTacToeGame {
    */
   private updatePlayerRoles(): void {
     const players = this.gamework.getPlayers();
-    const playerCount = players.size;
-    const currentPlayerId = this.gamework.getCurrentPlayer()?.id;
+    const playerCount = players.length;
+    const currentPlayerId = this.gamework.getClientPlayer()?.id;
     
     if (playerCount === 1) {
       // First player (host) gets X
@@ -312,7 +312,7 @@ export class TicTacToeGame {
    */
   private updatePlayerStatus(): void {
     const players = this.gamework.getPlayers();
-    const currentPlayerId = this.gamework.getCurrentPlayer()?.id;
+    const currentPlayerId = this.gamework.getClientPlayer()?.id;
     
     // Update Player 1 (Host) status
     const player1Status = document.getElementById('player1Status');

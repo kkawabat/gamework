@@ -21,12 +21,7 @@ export class WebSocketSignalingService {
   private pingInterval?: NodeJS.Timeout;
 
   constructor(config: WebSocketSignalingConfig) {
-    this.config = {
-      reconnectInterval: 5000,
-      maxReconnectAttempts: 10,
-      pingInterval: 30000,
-      ...config
-    };
+    this.config = config;
   }
 
   async connect(): Promise<void> {

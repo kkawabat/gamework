@@ -1,6 +1,5 @@
 import { GameEngine } from './core/GameEngine';
-import { WebRTCManager } from './networking/WebRTCManager';
-import { SignalingService, WebSocketSignalingService } from './networking/SignalingService';
+import { NetworkEngine, NetworkEngineEvents } from './networking/NetworkEngine';
 import { 
   GameState, 
   GameMove, 
@@ -9,13 +8,31 @@ import {
   GameRoom,
   RTCIceServer
 } from './types';
-import { v4 as uuidv4 } from 'uuid';
 
 export interface GameWorkConfig {
   stunServers?: RTCIceServer[];
-  signalingService?: SignalingService;
-  signalingConfig?: any;
+  signalServiceConfig: {
+    serverUrl: string;
+    reconnectInterval?: number;
+    maxReconnectAttempts?: number;
+    pingInterval?: number;
+  };
+  // GameWork-specific config can be added here
 }
+
+// Default configuration for GameWork
+const DEFAULT_GAMEWORK_CONFIG: GameWorkConfig = {
+  stunServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+  ],
+  signalServiceConfig: {
+    serverUrl: __SIGNALING_SERVER_URL__,
+    reconnectInterval: 5000,
+    maxReconnectAttempts: 10,
+    pingInterval: 30000
+  }
+};
 
 export interface GameWorkEvents {
   onPlayerJoin?: (player: Player) => void;
@@ -32,33 +49,16 @@ export interface GameWorkEvents {
  */
 export class GameWork {
   private gameEngine: GameEngine;
-  private webrtc: WebRTCManager;
-  private signaling: SignalingService;
+  private network: NetworkEngine;
   private config: GameWorkConfig;
-  private playerId: string;
-  private roomId: string | null;
-  private isConnected = false;
-  private players: Map<string, Player> = new Map();
-  private room?: GameRoom;
   private events: GameWorkEvents = {};
 
-  constructor(gameEngine: GameEngine, config: GameWorkConfig) {
+  constructor(gameEngine: GameEngine, config?: GameWorkConfig) {
     this.gameEngine = gameEngine;
-    this.config = config;
-    this.playerId = uuidv4();
-    this.roomId = null;
+    this.config = { ...DEFAULT_GAMEWORK_CONFIG, ...config };
     
     // Initialize networking
-    this.webrtc = new WebRTCManager(config.stunServers);
-    
-    // Check if signaling server URL is configured
-    if (!__SIGNALING_SERVER_URL__) {
-      throw new Error('SIGNALING_SERVER_URL environment variable is not set. Please configure the signaling server URL.');
-    }
-    
-    this.signaling = config.signalingService || new WebSocketSignalingService({
-      serverUrl: __SIGNALING_SERVER_URL__
-    });
+    this.network = new NetworkEngine(this.config);
     
     this.setupEventHandlers();
   }
@@ -67,208 +67,35 @@ export class GameWork {
    * Host a new multiplayer game room
    */
   async hostRoom(): Promise<string> {
-    // Disconnect from current room if already connected
-    if (this.isConnected) {
-      console.log('[GameWork] Disconnecting from current room before hosting new room');
-      await this.stop();
-    }
-
-    try {
-      // Generate a new room ID
-      this.roomId = uuidv4();
-      
-      console.log(`[GameWork] Hosting multiplayer game in room: ${this.roomId}`);
-      
-      // Connect to signaling service
-      await this.signaling.connect();
-      await this.signaling.joinRoom(this.roomId, this.playerId);
-      
-      // Create host player
-      const hostPlayer: Player = {
-        id: this.playerId,
-        name: 'Host',
-        isHost: true,
-        isConnected: true,
-        lastSeen: Date.now()
-      };
-      
-      this.players.set(this.playerId, hostPlayer);
-      
-      // Create room
-      this.room = {
-        id: this.roomId,
-        name: `Game Room ${this.roomId}`,
-        hostId: this.playerId,
-        players: this.players,
-        maxPlayers: this.gameEngine.getMaxPlayers?.() || 4,
-        gameType: this.gameEngine.getGameType?.() || 'custom',
-        createdAt: Date.now()
-      };
-      
-      this.isConnected = true;
-      console.log(`[GameWork] Room hosted successfully`);
-      
-      return this.roomId;
-    } catch (error) {
-      console.error('[GameWork] Failed to host room:', error);
-      throw error;
-    }
+    return await this.network.hostRoom();
   }
 
   /**
    * Look up a room by its short code
    */
   async lookupRoom(roomCode: string): Promise<string | null> {
-    console.log(`[GameWork] Starting room lookup for code: ${roomCode}`);
-    
-    // Connect to signaling service if not already connected
-    if (!this.signaling) {
-      throw new Error('Signaling service not initialized');
-    }
-
-    return new Promise(async (resolve, reject) => {
-      const timeout = setTimeout(() => {
-        console.log(`[GameWork] Room lookup timeout for code: ${roomCode}`);
-        reject(new Error('Room lookup timeout'));
-      }, 10000); // 10 seconds timeout
-
-      let messageHandler: ((message: any) => void) | null = null;
-
-      const handleMessage = (message: any) => {
-        console.log(`[GameWork] Received message during lookup:`, message.type, message);
-        
-        if (message.type === 'room_found') {
-          console.log(`[GameWork] Room found: ${message.payload.roomId} for code: ${roomCode}`);
-          clearTimeout(timeout);
-          if (messageHandler) {
-            // Remove the specific handler we added
-            const index = (this.signaling as any).messageCallbacks.indexOf(messageHandler);
-            if (index > -1) {
-              (this.signaling as any).messageCallbacks.splice(index, 1);
-            }~19
-          }
-          resolve(message.payload.roomId);
-        } else if (message.type === 'error' && message.payload.message.includes('Room with code')) {
-          console.log(`[GameWork] Room lookup error: ${message.payload.message}`);
-          clearTimeout(timeout);
-          if (messageHandler) {
-            // Remove the specific handler we added
-            const index = (this.signaling as any).messageCallbacks.indexOf(messageHandler);
-            if (index > -1) {
-              (this.signaling as any).messageCallbacks.splice(index, 1);
-            }
-          }
-          reject(new Error(message.payload.message || 'Room lookup failed'));
-        }
-      };
-
-      try {
-        console.log(`[GameWork] Connecting to signaling service for lookup...`);
-        // Connect to signaling service
-        await this.signaling.connect();
-        
-        console.log(`[GameWork] Setting up message handler for lookup...`);
-        // Set up message handler
-        messageHandler = handleMessage;
-        this.signaling.onMessage(messageHandler);
-        
-        console.log(`[GameWork] Sending lookup request for room code: ${roomCode}`);
-        // Send lookup request
-        await this.signaling.sendMessage({
-          type: 'lookup_room',
-          payload: { roomCode },
-          from: this.playerId,
-          roomId: 'lookup'
-        });
-        
-        console.log(`[GameWork] Lookup request sent, waiting for response...`);
-      } catch (error) {
-        console.log(`[GameWork] Error during room lookup:`, error);
-        clearTimeout(timeout);
-        reject(error);
-      }
-    });
+    return await this.network.lookupRoom(roomCode);
   }
 
   /**
-   * Join an existing multiplayer game room
+   * Join an existing room
    */
   async joinRoom(roomId: string): Promise<void> {
-    // Disconnect from current room if already connected
-    if (this.isConnected) {
-      console.log('[GameWork] Disconnecting from current room before joining new room');
-      await this.stop();
-    }
-
-    try {
-      this.roomId = roomId;
-      
-      console.log(`[GameWork] Joining multiplayer game in room: ${this.roomId}`);
-      
-      // Connect to signaling service
-      await this.signaling.connect();
-      await this.signaling.joinRoom(this.roomId, this.playerId);
-      
-      // Create player (not host)
-      const player: Player = {
-        id: this.playerId,
-        name: 'Player',
-        isHost: false,
-        isConnected: true,
-        lastSeen: Date.now()
-      };
-      
-      this.players.set(this.playerId, player);
-      
-      this.isConnected = true;
-      console.log(`[GameWork] Successfully joined room: ${this.roomId}`);
-      
-    } catch (error) {
-      console.error('[GameWork] Failed to join room:', error);
-      throw error;
-    }
+    await this.network.joinRoom(roomId);
   }
 
   /**
-   * Stop the multiplayer game
+   * Close the current room and disconnect from networking
    */
-  async stop(): Promise<void> {
-    if (!this.isConnected) {
-      return;
-    }
-
-    console.log(`[GameWork] Stopping multiplayer game`);
-    
-    // Disconnect all peers
-    this.webrtc.disconnectAll();
-    
-    // Leave signaling room
-    if (this.roomId) {
-      await this.signaling.leaveRoom(this.roomId, this.playerId);
-    }
-    this.signaling.disconnect();
-    
-    this.isConnected = false;
-    this.players.clear();
-    this.roomId = null;
-    this.room = undefined;
-    
-    console.log(`[GameWork] Game stopped`);
+  async closeRoom(): Promise<void> {
+    await this.network.closeRoom();
   }
 
   /**
-   * Switch to a different room (disconnect and reconnect)
+   * Switch to a different room
    */
   async switchRoom(roomId: string): Promise<void> {
-    console.log(`[GameWork] Switching to room: ${roomId}`);
-    
-    // Disconnect from current room if connected
-    if (this.isConnected) {
-      await this.stop();
-    }
-    
-    // Join the new room
-    await this.joinRoom(roomId);
+    await this.network.switchRoom(roomId);
   }
 
   /**
@@ -286,17 +113,6 @@ export class GameWork {
       return false;
     }
 
-    // Check if this is the first move and assign roles to all players
-    const currentState = this.gameEngine.getCurrentState();
-    if (currentState.currentPlayer === null && this.players.size >= 2) {
-      // This is the first move - assign roles to all players
-      const allPlayerIds = Array.from(this.players.keys());
-      if (this.gameEngine.assignRolesToAllPlayers) {
-        this.gameEngine.assignRolesToAllPlayers(allPlayerIds);
-        console.log(`[GameWork] Assigned roles to all players`);
-      }
-    }
-
     // Apply move locally first
     const newState = this.gameEngine.applyMove(move);
     if (newState) {
@@ -308,7 +124,7 @@ export class GameWork {
       }
       
       // Send move to other players via WebRTC
-      this.broadcastMove(move);
+      this.network.sendMove(move);
       console.log(`[GameWork] Move sent to other players via WebRTC`);
       return true;
     }
@@ -325,59 +141,58 @@ export class GameWork {
   }
 
   /**
-   * Get all connected players
+   * Get all players in the room
    */
   getPlayers(): Player[] {
-    return Array.from(this.players.values());
+    return this.network.getPlayers();
   }
 
   /**
-   * Get player by ID
+   * Get a specific player
    */
   getPlayer(playerId: string): Player | undefined {
-    return this.players.get(playerId);
+    return this.network.getPlayer(playerId);
   }
 
   /**
-   * Get current player
+   * Get the current client player
    */
-  getCurrentPlayer(): Player | undefined {
-    return this.players.get(this.playerId);
+  getClientPlayer(): Player | undefined {
+    const clientId = this.network.getClientId();
+    return this.network.getPlayer(clientId);
   }
 
   /**
-   * Get room information
+   * Get current room information
    */
   getRoom(): GameRoom | undefined {
-    return this.room;
+    return this.network.getRoom();
   }
 
   /**
-   * Debug method to get room state
+   * Get current room information for debugging
    */
   getRoomDebug(): any {
     return {
-      room: this.room,
-      roomId: this.roomId,
-      playerId: this.playerId,
+      room: this.network.getRoom(),
+      players: this.network.getPlayers(),
       isConnected: this.isConnected,
-      playersCount: this.players.size,
-      players: Array.from(this.players.entries())
+      clientId: this.network.getClientId()
     };
   }
 
   /**
-   * Check if game is over
+   * Check if the game is over
    */
   isGameOver(): boolean {
     return this.gameEngine.isGameOver();
   }
 
   /**
-   * Get game winner
+   * Get the winner of the game
    */
   getWinner(): string | null {
-    return this.gameEngine.getWinner?.() || null;
+    return this.gameEngine.getWinner();
   }
 
   /**
@@ -388,44 +203,41 @@ export class GameWork {
   }
 
   /**
-   * Get the underlying game engine (for advanced usage)
+   * Get the game engine instance
    */
   getGameEngine(): GameEngine {
     return this.gameEngine;
   }
 
+  /**
+   * Get connection status
+   */
+  get isConnected(): boolean {
+    return this.network.isNetworkConnected();
+  }
+
   // Private methods
+
   private setupEventHandlers(): void {
-    // WebRTC message handling
-    this.webrtc.setMessageHandler((peerId, message) => {
-      this.handlePeerMessage(peerId, message);
-    });
-
-    this.webrtc.setConnectionChangeHandler((peerId, isConnected) => {
-      this.handleConnectionChange(peerId, isConnected);
-    });
-
-    this.webrtc.setIceCandidateHandler((peerId, candidate) => {
-      this.handleIceCandidate(peerId, candidate);
-    });
-
-    // Signaling service message handling
-    this.signaling.onMessage((message) => {
-      // Handle room_joined messages specially
-      if (message.type === 'room_joined' && message.payload && message.payload.room) {
-        this.handleRoomJoinedData(message.payload.room);
-      } else {
-        this.handleSignalingMessage(message);
-      }
-    });
-
-    this.signaling.onRoomUpdate((room) => {
-      this.handleRoomUpdate(room);
-    });
-
-    this.signaling.onError((error) => {
-      if (this.events.onError) {
-        this.events.onError(error);
+    // Set up NetworkEngine event handlers
+    this.network.setEvents({
+      onPlayerJoin: (player: Player) => {
+        if (this.events.onPlayerJoin) {
+          this.events.onPlayerJoin(player);
+        }
+      },
+      onPlayerLeave: (playerId: string) => {
+        if (this.events.onPlayerLeave) {
+          this.events.onPlayerLeave(playerId);
+        }
+      },
+      onError: (error: Error) => {
+        if (this.events.onError) {
+          this.events.onError(error);
+        }
+      },
+      onPeerMessage: (peerId: string, message: GameMessage) => {
+        this.handlePeerMessage(peerId, message);
       }
     });
   }
@@ -464,48 +276,12 @@ export class GameWork {
   }
 
   private handlePlayerJoin(playerData: any): void {
-    const player: Player = {
-      id: playerData.playerId,
-      name: playerData.playerName,
-      isHost: false,
-      isConnected: true,
-      lastSeen: Date.now()
-    };
-    
-    this.players.set(player.id, player);
-    
-    // Determine player role based on game engine rules
-    const role = this.gameEngine.getPlayerRole?.(player.id) || 'player';
-    player.role = role;
-    
-    console.log(`[GameWork] Player joined: ${player.name} (${role})`);
-    
-    if (this.events.onPlayerJoin) {
-      this.events.onPlayerJoin(player);
-    }
-    
-    // Create WebRTC connection for new player (only if we're the host)
-    if (this.room && this.room.hostId === this.playerId) {
-      console.log(`[GameWork] Host creating WebRTC offer for new player ${player.id}`);
-      this.createWebRTCOffer(player.id);
-    } else {
-      console.log(`[GameWork] Non-host player, not creating WebRTC offer for ${player.id}`);
-    }
+    // This is handled by NetworkEngine, but we can add game-specific logic here if needed
+    console.log(`[GameWork] Player joined: ${playerData.playerId}`);
   }
 
   private handlePlayerMove(move: GameMove): void {
     console.log(`[GameWork] Processing move from ${move.playerId}:`, move);
-    
-    // Check if this is the first move and assign roles to all players
-    const currentState = this.gameEngine.getCurrentState();
-    if (currentState.currentPlayer === null && this.players.size >= 2) {
-      // This is the first move - assign roles to all players
-      const allPlayerIds = Array.from(this.players.keys());
-      if (this.gameEngine.assignRolesToAllPlayers) {
-        this.gameEngine.assignRolesToAllPlayers(allPlayerIds);
-        console.log(`[GameWork] Assigned roles to all players (received move)`);
-      }
-    }
     
     // Apply move to local game engine
     const newState = this.gameEngine.applyMove(move);
@@ -540,137 +316,6 @@ export class GameWork {
     }
   }
 
-  private handleConnectionChange(peerId: string, isConnected: boolean): void {
-    const player = this.players.get(peerId);
-    if (player) {
-      player.isConnected = isConnected;
-      player.lastSeen = Date.now();
-      
-      if (!isConnected && this.events.onPlayerLeave) {
-        this.events.onPlayerLeave(peerId);
-      }
-    }
-  }
-
-  private async handleSignalingMessage(message: any): Promise<void> {
-    await this.signaling.handleSignalingMessage(message, this.webrtc, this.playerId);
-  }
-
-  private handleRoomUpdate(room: any): void {
-    console.log(`[GameWork] Room update received:`, room);
-    
-    // Convert players from Object to Map format
-    const playersMap = new Map<string, Player>();
-    if (room.players) {
-      if (room.players instanceof Map) {
-        // Already a Map - copy all entries
-        for (const [playerId, player] of room.players) {
-          playersMap.set(playerId, player);
-        }
-      } else if (typeof room.players === 'object' && !Array.isArray(room.players)) {
-        // Object format from signaling server
-        for (const [playerId, player] of Object.entries(room.players)) {
-          playersMap.set(playerId, player as Player);
-        }
-      } else if (Array.isArray(room.players)) {
-        // Array format (fallback)
-        for (const player of room.players) {
-          playersMap.set(player.id, player);
-        }
-      }
-    }
-    
-    // Create proper GameRoom object with Map
-    const gameRoom: GameRoom = {
-      id: room.id,
-      name: room.name,
-      hostId: room.hostId,
-      players: playersMap,
-      maxPlayers: room.maxPlayers,
-      gameType: room.gameType,
-      createdAt: room.createdAt
-    };
-    
-    console.log(`[GameWork] Room update: ${playersMap.size} players`);
-    this.room = gameRoom;
-    console.log(`[GameWork] this.room is now:`, this.room);
-    
-    // Update local players map - add new players and update existing ones
-    for (const [playerId, player] of playersMap) {
-      const wasNewPlayer = !this.players.has(playerId);
-      this.players.set(playerId, player);
-      
-      if (wasNewPlayer) {
-        // Create WebRTC connection for new player (only if we're the host)
-        if (this.room && this.room.hostId === this.playerId) {
-          console.log(`[GameWork] Host creating WebRTC offer for new player ${player.id}`);
-          this.createWebRTCOffer(player.id);
-        } else {
-          console.log(`[GameWork] Non-host player, not creating WebRTC offer for ${player.id}`);
-        }
-        
-        if (this.events.onPlayerJoin) {
-          this.events.onPlayerJoin(player);
-        }
-      }
-    }
-    
-    // Remove players who are no longer in the room
-    for (const [playerId, player] of this.players) {
-      if (!playersMap.has(playerId)) {
-        this.players.delete(playerId);
-        if (this.events.onPlayerLeave) {
-          this.events.onPlayerLeave(playerId);
-        }
-      }
-    }
-    
-    // Trigger state update to refresh UI
-    if (this.events.onStateUpdate) {
-      this.events.onStateUpdate(this.gameEngine.getCurrentState());
-    }
-    
-    console.log(`[GameWork] Players updated: ${this.players.size} players in room`);
-  }
-
-  /**
-   * Handle room data from room_joined message (Object format)
-   */
-  private handleRoomJoinedData(roomData: any): void {
-    console.log(`[GameWork] Room joined data:`, roomData);
-    
-    // Use the existing room update handler (now handles Object format)
-    this.handleRoomUpdate(roomData);
-  }
-
-  private async handleIceCandidate(peerId: string, candidate: RTCIceCandidate): Promise<void> {
-    if (this.roomId) {
-      await this.webrtc.handleIceCandidateWithSignaling(peerId, candidate, this.signaling, this.roomId, this.playerId);
-    }
-  }
-
-  private async createWebRTCOffer(peerId: string): Promise<void> {
-    console.log(`[GameWork] Creating WebRTC offer for peer ${peerId}, roomId: ${this.roomId}`);
-    if (this.roomId) {
-      await this.webrtc.createOfferWithSignaling(peerId, this.signaling, this.roomId, this.playerId);
-      console.log(`[GameWork] WebRTC offer created for peer ${peerId}`);
-    } else {
-      console.warn(`[GameWork] Cannot create WebRTC offer - no roomId`);
-    }
-  }
-
-  private broadcastMove(move: GameMove): void {
-    const message: GameMessage = {
-      type: 'input',
-      payload: move,
-      timestamp: Date.now(),
-      messageId: uuidv4()
-    };
-    
-    console.log(`[GameWork] Broadcasting move to ${this.players.size} players via WebRTC`);
-    this.webrtc.broadcastMessage(message);
-  }
-
   private broadcastStateUpdate(state: GameState): void {
     const message: GameMessage = {
       type: 'state',
@@ -679,11 +324,11 @@ export class GameWork {
         isFullSnapshot: true
       },
       timestamp: Date.now(),
-      messageId: uuidv4()
+      messageId: require('uuid').v4()
     };
     
-    console.log(`[GameWork] Broadcasting state update to ${this.players.size} players`);
-    this.webrtc.broadcastMessage(message);
+    console.log(`[GameWork] Broadcasting state update to ${this.network.getPlayers().length} players`);
+    this.network.broadcastMessage(message);
     
     if (this.events.onStateUpdate) {
       this.events.onStateUpdate(state);

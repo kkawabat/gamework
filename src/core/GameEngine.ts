@@ -49,10 +49,6 @@ export abstract class GameEngine {
     this.state = newState;
   }
 
-  /**
-   * Assign roles to all players (optional method for game engines)
-   */
-  assignRolesToAllPlayers?(allPlayerIds: string[]): void;
 
   /**
    * Check if the game is over
@@ -81,7 +77,7 @@ export abstract class GameEngine {
   /**
    * Get player role based on game rules (optional)
    */
-  getPlayerRole?(playerId: string): string;
+  getPlayerRole?(playerId: string): string | null;
 
   /**
    * Check if a player can make a specific move (optional)

@@ -30,16 +30,13 @@ const ticTacToeRules: GameRules = {
       timestamp: Date.now()
     };
     
-    // Assign roles if this is the first move
+    // Assign roles when players make moves
     if (newState.currentPlayer === null) {
       // First player to move becomes X
       newState.playerRoles[move.playerId] = 'X';
       newState.currentPlayer = 'X';
-      
-      // Assign O to all other players in the room
-      // Note: This will be handled by the room update when other players join
     } else {
-      // Assign O to the second player if they don't have a role yet
+      // Subsequent players get O when they make their first move
       if (!newState.playerRoles[move.playerId]) {
         newState.playerRoles[move.playerId] = 'O';
       }
@@ -202,27 +199,4 @@ export class TicTacToeEngine extends GameEngine {
     ];
   }
 
-  /**
-   * Assign roles to all players in the room
-   * Called when the first move is made
-   */
-  assignRolesToAllPlayers(allPlayerIds: string[]): void {
-    const state = this.getTicTacToeState();
-    
-    // Only assign roles if this is the first move
-    if (state.currentPlayer === null && allPlayerIds.length >= 2) {
-      // First player becomes X
-      const firstPlayer = allPlayerIds[0];
-      state.playerRoles[firstPlayer] = 'X';
-      
-      // Second player becomes O
-      const secondPlayer = allPlayerIds[1];
-      state.playerRoles[secondPlayer] = 'O';
-      
-      // Set current player to X (first player's turn)
-      state.currentPlayer = 'X';
-      
-      console.log(`[TicTacToeEngine] Assigned roles: ${firstPlayer}=X, ${secondPlayer}=O`);
-    }
-  }
 }
