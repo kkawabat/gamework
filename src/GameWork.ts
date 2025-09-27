@@ -413,23 +413,27 @@ export class GameWork {
   }
 
   private async handlePeerMessage(peerId: string, message: GameMessage): Promise<void> {
-    console.log(`[GameWork] Received message from ${peerId}:`, message.type);
+    console.log(`[GameWork] Processing message from ${peerId}:`, message.type, message);
     
     try {
       switch (message.type) {
         case 'join':
+          console.log(`[GameWork] Handling join message from ${peerId}`);
           this.handlePlayerJoin(message.payload);
           break;
           
         case 'input':
+          console.log(`[GameWork] Handling input message from ${peerId}:`, message.payload);
           this.handlePlayerMove(message.payload);
           break;
           
         case 'resync':
+          console.log(`[GameWork] Handling resync request from ${peerId}`);
           this.handleResyncRequest(peerId);
           break;
           
         case 'state':
+          console.log(`[GameWork] Handling state update from ${peerId}:`, message.payload);
           this.handleStateUpdate(message.payload);
           break;
           

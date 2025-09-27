@@ -168,11 +168,14 @@ export class WebRTCManager {
   sendMessage(peerId: string, message: any): boolean {
     const connectionInfo = this.connections.get(peerId);
     if (!connectionInfo?.dataChannel || connectionInfo.dataChannel.readyState !== 'open') {
+      console.warn(`[WebRTCManager] Cannot send message to ${peerId}: connection not ready`);
       return false;
     }
 
     try {
-      connectionInfo.dataChannel.send(JSON.stringify(message));
+      const messageStr = JSON.stringify(message);
+      console.log(`[WebRTCManager] Sending message to ${peerId}:`, message.type || 'unknown', message);
+      connectionInfo.dataChannel.send(messageStr);
       return true;
     } catch (error) {
       console.error('Failed to send message:', error);
@@ -253,6 +256,7 @@ export class WebRTCManager {
     dataChannel.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
+        console.log(`[WebRTCManager] Received message from ${peerId}:`, message.type || 'unknown', message);
         if (this.onDataChannelMessage) {
           this.onDataChannelMessage(peerId, message);
         }
