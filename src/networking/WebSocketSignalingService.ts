@@ -165,7 +165,8 @@ export class WebSocketSignalingService {
         this.messageCallbacks.forEach(callback => callback(signalingMessage));
         break;
       case 'room_update':
-        const room: GameRoom = message.payload;
+        console.log(`[WebSocketSignalingService] Room update received:`, message);
+        const room: GameRoom = message.payload.room || message.payload;
         this.roomUpdateCallbacks.forEach(callback => callback(room));
         break;
       case 'room_found':

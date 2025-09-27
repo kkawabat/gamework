@@ -190,7 +190,19 @@ export class TicTacToeGame {
    */
   private canMakeMove(): boolean {
     const state = this.engine.getTicTacToeState();
-    return !state.gameOver && state.currentPlayer === this.playerSymbol;
+    
+    // Game is over
+    if (state.gameOver) {
+      return false;
+    }
+    
+    // For the first move, any player can make it
+    if (state.currentPlayer === null) {
+      return true;
+    }
+    
+    // For subsequent moves, check if it's the player's turn
+    return state.currentPlayer === this.playerSymbol;
   }
 
   /**
@@ -237,12 +249,21 @@ export class TicTacToeGame {
         this.statusElement.textContent = "It's a draw!";
         this.statusElement.className = 'status draw';
       }
-    } else if (state.currentPlayer === null) {
-      this.statusElement.textContent = 'Waiting for player 2 to join';
-      this.statusElement.className = 'status waiting';
     } else {
-      this.statusElement.textContent = `Player ${state.currentPlayer}'s turn`;
-      this.statusElement.className = 'status playing';
+      // Check number of players in room instead of game state
+      const playerCount = this.gamework.getPlayers().size;
+      
+      if (playerCount < 2) {
+        this.statusElement.textContent = 'Waiting for player 2 to join';
+        this.statusElement.className = 'status waiting';
+      } else if (state.currentPlayer === null) {
+        // Both players joined but game hasn't started yet
+        this.statusElement.textContent = 'Ready to play! Make the first move';
+        this.statusElement.className = 'status ready';
+      } else {
+        this.statusElement.textContent = `Player ${state.currentPlayer}'s turn`;
+        this.statusElement.className = 'status playing';
+      }
     }
 
     // Update player status indicators
