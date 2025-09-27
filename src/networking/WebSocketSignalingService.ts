@@ -103,10 +103,18 @@ export class WebSocketSignalingService {
       throw new Error('Not connected to signaling service');
     }
 
-    this.ws.send(JSON.stringify({
-      type: 'signaling_message',
-      payload: message
-    }));
+    console.log(`[WebSocketSignalingService] Sending message:`, message.type, message);
+    
+    // For lookup_room messages, send directly without wrapping
+    if (message.type === 'lookup_room') {
+      this.ws.send(JSON.stringify(message));
+    } else {
+      // For other messages, wrap in signaling_message
+      this.ws.send(JSON.stringify({
+        type: 'signaling_message',
+        payload: message
+      }));
+    }
   }
 
   async handleSignalingMessage(message: SignalingMessage, webrtcManager: any, playerId: string): Promise<void> {
@@ -149,6 +157,8 @@ export class WebSocketSignalingService {
   }
 
   private handleMessage(message: any): void {
+    console.log(`[WebSocketSignalingService] Received message:`, message.type, message);
+    
     switch (message.type) {
       case 'signaling_message':
         const signalingMessage: SignalingMessage = message.payload;
@@ -159,13 +169,17 @@ export class WebSocketSignalingService {
         this.roomUpdateCallbacks.forEach(callback => callback(room));
         break;
       case 'room_found':
+        console.log(`[WebSocketSignalingService] Room found, calling ${this.messageCallbacks.length} callbacks`);
         // Handle room lookup response
         this.messageCallbacks.forEach(callback => callback(message));
         break;
       case 'error':
+        console.log(`[WebSocketSignalingService] Error received:`, message.payload);
         const error = new Error(message.payload.message || 'Unknown error');
         this.errorCallbacks.forEach(callback => callback(error));
         break;
+      default:
+        console.log(`[WebSocketSignalingService] Unknown message type:`, message.type);
     }
   }
 

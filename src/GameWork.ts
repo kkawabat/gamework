@@ -50,8 +50,14 @@ export class GameWork {
     
     // Initialize networking
     this.webrtc = new WebRTCManager(config.stunServers);
+    
+    // Check if signaling server URL is configured
+    if (!__SIGNALING_SERVER_URL__) {
+      throw new Error('SIGNALING_SERVER_URL environment variable is not set. Please configure the signaling server URL.');
+    }
+    
     this.signaling = config.signalingService || new WebSocketSignalingService({
-      serverUrl: __SIGNALING_SERVER_URL__ || 'ws://localhost:8080'
+      serverUrl: __SIGNALING_SERVER_URL__
     });
     
     this.setupEventHandlers();
@@ -113,6 +119,8 @@ export class GameWork {
    * Look up a room by its short code
    */
   async lookupRoom(roomCode: string): Promise<string | null> {
+    console.log(`[GameWork] Starting room lookup for code: ${roomCode}`);
+    
     // Connect to signaling service if not already connected
     if (!this.signaling) {
       throw new Error('Signaling service not initialized');
@@ -120,41 +128,63 @@ export class GameWork {
 
     return new Promise(async (resolve, reject) => {
       const timeout = setTimeout(() => {
+        console.log(`[GameWork] Room lookup timeout for code: ${roomCode}`);
         reject(new Error('Room lookup timeout'));
-      }, 10000); // Increased timeout to 10 seconds
+      }, 10000); // 10 seconds timeout
 
-      // Create a temporary signaling service for lookup
-      const tempSignaling = new WebSocketSignalingService({
-        serverUrl: this.signaling.getServerUrl?.() || 'ws://localhost:8080'
-      });
+      let messageHandler: ((message: any) => void) | null = null;
 
       const handleMessage = (message: any) => {
+        console.log(`[GameWork] Received message during lookup:`, message.type, message);
+        
         if (message.type === 'room_found') {
+          console.log(`[GameWork] Room found: ${message.payload.roomId} for code: ${roomCode}`);
           clearTimeout(timeout);
-          tempSignaling.disconnect();
+          if (messageHandler) {
+            // Remove the specific handler we added
+            const index = (this.signaling as any).messageCallbacks.indexOf(messageHandler);
+            if (index > -1) {
+              (this.signaling as any).messageCallbacks.splice(index, 1);
+            }
+          }
           resolve(message.payload.roomId);
-        } else if (message.type === 'error') {
+        } else if (message.type === 'error' && message.payload.message.includes('Room with code')) {
+          console.log(`[GameWork] Room lookup error: ${message.payload.message}`);
           clearTimeout(timeout);
-          tempSignaling.disconnect();
+          if (messageHandler) {
+            // Remove the specific handler we added
+            const index = (this.signaling as any).messageCallbacks.indexOf(messageHandler);
+            if (index > -1) {
+              (this.signaling as any).messageCallbacks.splice(index, 1);
+            }
+          }
           reject(new Error(message.payload.message || 'Room lookup failed'));
         }
       };
 
       try {
-        // Connect temporary signaling service
-        await tempSignaling.connect();
-        tempSignaling.onMessage(handleMessage);
+        console.log(`[GameWork] Connecting to signaling service for lookup...`);
+        // Connect to signaling service
+        await this.signaling.connect();
         
+        console.log(`[GameWork] Setting up message handler for lookup...`);
+        // Set up message handler
+        messageHandler = handleMessage;
+        this.signaling.onMessage(messageHandler);
+        
+        console.log(`[GameWork] Sending lookup request for room code: ${roomCode}`);
         // Send lookup request
-        await tempSignaling.sendMessage({
+        await this.signaling.sendMessage({
           type: 'lookup_room',
           payload: { roomCode },
           from: this.playerId,
           roomId: 'lookup'
         });
+        
+        console.log(`[GameWork] Lookup request sent, waiting for response...`);
       } catch (error) {
+        console.log(`[GameWork] Error during room lookup:`, error);
         clearTimeout(timeout);
-        tempSignaling.disconnect();
         reject(error);
       }
     });
