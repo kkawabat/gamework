@@ -40,11 +40,12 @@ export class TicTacToeGame {
     if (roomParam) {
       // Join existing room
       console.log(`Joining existing room: ${roomParam}`);
+      this.addGameLogEntry(`Attempting to join room: ${roomParam.substring(0, 6).toUpperCase()}`, 'info');
+      await this.gamework.joinRoom(roomParam);
       roomId = roomParam;
-      // Note: In a real implementation, you'd need a joinRoom method
-      // For now, we'll still host a room but show the room code
     } else {
       // Host a new room
+      this.addGameLogEntry('Creating new game room...', 'info');
       roomId = await this.gamework.hostRoom();
     }
     
@@ -68,6 +69,12 @@ export class TicTacToeGame {
     this.addGameLogEntry(`Room Code: ${roomId.substring(0, 6).toUpperCase()}`, 'info');
     this.addGameLogEntry(`Player Role: ${this.playerSymbol || 'Not assigned'}`, 'info');
     this.addGameLogEntry(`Status: ${this.isHost ? 'Host' : 'Player'}`, 'info');
+    
+    if (roomParam) {
+      this.addGameLogEntry(`Joined existing room: ${roomId.substring(0, 6).toUpperCase()}`, 'success');
+    } else {
+      this.addGameLogEntry(`Hosted new room: ${roomId.substring(0, 6).toUpperCase()}`, 'success');
+    }
     
     // Update UI with initial state
     this.updateUI();

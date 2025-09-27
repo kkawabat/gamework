@@ -61,8 +61,10 @@ export class GameWork {
    * Host a new multiplayer game room
    */
   async hostRoom(): Promise<string> {
+    // Disconnect from current room if already connected
     if (this.isConnected) {
-      throw new Error('GameWork is already hosting a room');
+      console.log('[GameWork] Disconnecting from current room before hosting new room');
+      await this.stop();
     }
 
     try {
@@ -108,6 +110,45 @@ export class GameWork {
   }
 
   /**
+   * Join an existing multiplayer game room
+   */
+  async joinRoom(roomId: string): Promise<void> {
+    // Disconnect from current room if already connected
+    if (this.isConnected) {
+      console.log('[GameWork] Disconnecting from current room before joining new room');
+      await this.stop();
+    }
+
+    try {
+      this.roomId = roomId;
+      
+      console.log(`[GameWork] Joining multiplayer game in room: ${this.roomId}`);
+      
+      // Connect to signaling service
+      await this.signaling.connect();
+      await this.signaling.joinRoom(this.roomId, this.playerId);
+      
+      // Create player (not host)
+      const player: Player = {
+        id: this.playerId,
+        name: 'Player',
+        isHost: false,
+        isConnected: true,
+        lastSeen: Date.now()
+      };
+      
+      this.players.set(this.playerId, player);
+      
+      this.isConnected = true;
+      console.log(`[GameWork] Successfully joined room: ${this.roomId}`);
+      
+    } catch (error) {
+      console.error('[GameWork] Failed to join room:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Stop the multiplayer game
    */
   async stop(): Promise<void> {
@@ -128,8 +169,25 @@ export class GameWork {
     
     this.isConnected = false;
     this.players.clear();
+    this.roomId = null;
+    this.room = undefined;
     
     console.log(`[GameWork] Game stopped`);
+  }
+
+  /**
+   * Switch to a different room (disconnect and reconnect)
+   */
+  async switchRoom(roomId: string): Promise<void> {
+    console.log(`[GameWork] Switching to room: ${roomId}`);
+    
+    // Disconnect from current room if connected
+    if (this.isConnected) {
+      await this.stop();
+    }
+    
+    // Join the new room
+    await this.joinRoom(roomId);
   }
 
   /**
