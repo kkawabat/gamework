@@ -286,6 +286,17 @@ export class GameWork {
       return false;
     }
 
+    // Check if this is the first move and assign roles to all players
+    const currentState = this.gameEngine.getCurrentState();
+    if (currentState.currentPlayer === null && this.players.size >= 2) {
+      // This is the first move - assign roles to all players
+      const allPlayerIds = Array.from(this.players.keys());
+      if (this.gameEngine.assignRolesToAllPlayers) {
+        this.gameEngine.assignRolesToAllPlayers(allPlayerIds);
+        console.log(`[GameWork] Assigned roles to all players`);
+      }
+    }
+
     // Apply move locally first
     const newState = this.gameEngine.applyMove(move);
     if (newState) {
@@ -484,6 +495,17 @@ export class GameWork {
 
   private handlePlayerMove(move: GameMove): void {
     console.log(`[GameWork] Processing move from ${move.playerId}:`, move);
+    
+    // Check if this is the first move and assign roles to all players
+    const currentState = this.gameEngine.getCurrentState();
+    if (currentState.currentPlayer === null && this.players.size >= 2) {
+      // This is the first move - assign roles to all players
+      const allPlayerIds = Array.from(this.players.keys());
+      if (this.gameEngine.assignRolesToAllPlayers) {
+        this.gameEngine.assignRolesToAllPlayers(allPlayerIds);
+        console.log(`[GameWork] Assigned roles to all players (received move)`);
+      }
+    }
     
     // Apply move to local game engine
     const newState = this.gameEngine.applyMove(move);

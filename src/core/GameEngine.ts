@@ -50,6 +50,11 @@ export abstract class GameEngine {
   }
 
   /**
+   * Assign roles to all players (optional method for game engines)
+   */
+  assignRolesToAllPlayers?(allPlayerIds: string[]): void;
+
+  /**
    * Check if the game is over
    */
   isGameOver(): boolean {
