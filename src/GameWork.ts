@@ -466,8 +466,13 @@ export class GameWork {
       this.events.onPlayerJoin(player);
     }
     
-    // Create WebRTC connection for new player
-    this.createWebRTCOffer(player.id);
+    // Create WebRTC connection for new player (only if we're the host)
+    if (this.room && this.room.hostId === this.playerId) {
+      console.log(`[GameWork] Host creating WebRTC offer for new player ${player.id}`);
+      this.createWebRTCOffer(player.id);
+    } else {
+      console.log(`[GameWork] Non-host player, not creating WebRTC offer for ${player.id}`);
+    }
   }
 
   private handlePlayerMove(move: GameMove): void {
@@ -596,8 +601,12 @@ export class GameWork {
   }
 
   private async createWebRTCOffer(peerId: string): Promise<void> {
+    console.log(`[GameWork] Creating WebRTC offer for peer ${peerId}, roomId: ${this.roomId}`);
     if (this.roomId) {
       await this.webrtc.createOfferWithSignaling(peerId, this.signaling, this.roomId, this.playerId);
+      console.log(`[GameWork] WebRTC offer created for peer ${peerId}`);
+    } else {
+      console.warn(`[GameWork] Cannot create WebRTC offer - no roomId`);
     }
   }
 
