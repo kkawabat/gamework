@@ -286,12 +286,19 @@ export class GameWork {
       return false;
     }
 
-    // Apply move to game engine
+    // Apply move locally first
     const newState = this.gameEngine.applyMove(move);
     if (newState) {
-      // Broadcast state update to all players
-      this.broadcastStateUpdate(newState);
-      console.log(`[GameWork] Move applied and broadcasted`);
+      console.log(`[GameWork] Move applied locally`);
+      
+      // Trigger state update event for UI
+      if (this.events.onStateUpdate) {
+        this.events.onStateUpdate(newState);
+      }
+      
+      // Send move to other players via WebRTC
+      this.broadcastMove(move);
+      console.log(`[GameWork] Move sent to other players via WebRTC`);
       return true;
     }
 
@@ -478,8 +485,18 @@ export class GameWork {
   private handlePlayerMove(move: GameMove): void {
     console.log(`[GameWork] Processing move from ${move.playerId}:`, move);
     
-    // Apply move through game engine
-    this.sendMove(move);
+    // Apply move to local game engine
+    const newState = this.gameEngine.applyMove(move);
+    if (newState) {
+      console.log(`[GameWork] Move applied locally`);
+      
+      // Trigger state update event for UI
+      if (this.events.onStateUpdate) {
+        this.events.onStateUpdate(newState);
+      }
+    } else {
+      console.warn(`[GameWork] Invalid move rejected by game engine`);
+    }
   }
 
   private handleResyncRequest(peerId: string): void {
@@ -561,8 +578,18 @@ export class GameWork {
       const wasNewPlayer = !this.players.has(playerId);
       this.players.set(playerId, player);
       
-      if (wasNewPlayer && this.events.onPlayerJoin) {
-        this.events.onPlayerJoin(player);
+      if (wasNewPlayer) {
+        // Create WebRTC connection for new player (only if we're the host)
+        if (this.room && this.room.hostId === this.playerId) {
+          console.log(`[GameWork] Host creating WebRTC offer for new player ${player.id}`);
+          this.createWebRTCOffer(player.id);
+        } else {
+          console.log(`[GameWork] Non-host player, not creating WebRTC offer for ${player.id}`);
+        }
+        
+        if (this.events.onPlayerJoin) {
+          this.events.onPlayerJoin(player);
+        }
       }
     }
     
@@ -608,6 +635,18 @@ export class GameWork {
     } else {
       console.warn(`[GameWork] Cannot create WebRTC offer - no roomId`);
     }
+  }
+
+  private broadcastMove(move: GameMove): void {
+    const message: GameMessage = {
+      type: 'input',
+      payload: move,
+      timestamp: Date.now(),
+      messageId: uuidv4()
+    };
+    
+    console.log(`[GameWork] Broadcasting move to ${this.players.size} players via WebRTC`);
+    this.webrtc.broadcastMessage(message);
   }
 
   private broadcastStateUpdate(state: GameState): void {
