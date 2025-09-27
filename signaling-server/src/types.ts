@@ -25,14 +25,14 @@ export interface SignalingMessage {
 }
 
 export interface ClientMessage {
-  type: 'join_room' | 'leave_room' | 'signaling_message' | 'ping';
+  type: 'join_room' | 'leave_room' | 'signaling_message' | 'ping' | 'lookup_room';
   payload: any;
   roomId?: string;
   playerId?: string;
 }
 
 export interface ServerMessage {
-  type: 'room_joined' | 'room_left' | 'signaling_message' | 'room_update' | 'error' | 'pong';
+  type: 'room_joined' | 'room_left' | 'signaling_message' | 'room_update' | 'error' | 'pong' | 'room_found';
   payload: any;
   roomId?: string;
 }
