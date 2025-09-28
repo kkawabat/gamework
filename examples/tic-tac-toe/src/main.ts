@@ -19,7 +19,11 @@ export class TicTacToeGame {
     this.engine = new TicTacToeEngine();
     this.gamework = new GameWork(this.engine);
     
-    this.setupEventHandlers();
+    // Set up the engine with GameWork reference
+    this.engine.setGameWork(this.gamework);
+    
+    // Set up event listeners
+    this.engine.setupEventListeners();
   }
 
   /**
@@ -40,24 +44,24 @@ export class TicTacToeGame {
     if (roomParam) {
       // Join existing room by room code
       console.log(`Looking up room with code: ${roomParam}`);
-      this.addGameLogEntry(`Looking up room: ${roomParam.toUpperCase()}`, 'info');
+      this.engine.addGameLogEntry(`Looking up room: ${roomParam.toUpperCase()}`, 'info');
       
       try {
         const fullRoomId = await this.gamework.lookupRoom(roomParam);
         if (fullRoomId) {
-          this.addGameLogEntry(`Found room: ${fullRoomId.substring(0, 6).toUpperCase()}`, 'success');
+          this.engine.addGameLogEntry(`Found room: ${fullRoomId.substring(0, 6).toUpperCase()}`, 'success');
           await this.gamework.joinRoom(fullRoomId);
           roomId = fullRoomId;
         } else {
           throw new Error('Room not found');
         }
       } catch (error) {
-        this.addGameLogEntry(`Room lookup failed: ${error.message}`, 'error');
+        this.engine.addGameLogEntry(`Room lookup failed: ${error.message}`, 'error');
         throw error;
       }
     } else {
       // Host a new room
-      this.addGameLogEntry('Creating new game room...', 'info');
+      this.engine.addGameLogEntry('Creating new game room...', 'info');
       roomId = await this.gamework.hostRoom();
     }
     
@@ -67,20 +71,8 @@ export class TicTacToeGame {
     // Assign player roles based on connection order
     const players = this.gamework.getPlayers();
     const playerCount = players.length;
-    const currentPlayerId = this.gamework.getClientPlayer()?.id;
     
-    if (playerCount === 1) {
-      // First player (host) gets X
-      this.playerSymbol = 'X';
-    } else if (playerCount === 2) {
-      // Second player gets O
-      this.playerSymbol = 'O';
-    } else {
-      // Fallback to engine role assignment
-      this.playerSymbol = this.engine.getPlayerRole(currentPlayerId || '') || '';
-    }
-    
-    console.log(`Room Code: ${roomId.substring(0, 6).toUpperCase()}, Player role: ${this.playerSymbol}, Is host: ${this.isHost}, Player count: ${playerCount}`);
+    console.log(`Room Code: ${roomId.substring(0, 6).toUpperCase()}, Is host: ${this.isHost}, Player count: ${playerCount}`);
     
     // Update room code and QR code
     this.updateRoomCode(roomId);
@@ -92,19 +84,18 @@ export class TicTacToeGame {
     }
     
     // Update game log with successful initialization
-    this.addGameLogEntry('Game initialized successfully!', 'success');
-    this.addGameLogEntry(`Room Code: ${roomId.substring(0, 6).toUpperCase()}`, 'info');
-    this.addGameLogEntry(`Player Role: ${this.playerSymbol || 'Not assigned'}`, 'info');
-    this.addGameLogEntry(`Status: ${this.isHost ? 'Host' : 'Player'}`, 'info');
+    this.engine.addGameLogEntry('Game initialized successfully!', 'success');
+    this.engine.addGameLogEntry(`Room Code: ${roomId.substring(0, 6).toUpperCase()}`, 'info');
+    this.engine.addGameLogEntry(`Status: ${this.isHost ? 'Host' : 'Player'}`, 'info');
     
     if (roomParam) {
-      this.addGameLogEntry(`Joined existing room: ${roomId.substring(0, 6).toUpperCase()}`, 'success');
+      this.engine.addGameLogEntry(`Joined existing room: ${roomId.substring(0, 6).toUpperCase()}`, 'success');
     } else {
-      this.addGameLogEntry(`Hosted new room: ${roomId.substring(0, 6).toUpperCase()}`, 'success');
+      this.engine.addGameLogEntry(`Hosted new room: ${roomId.substring(0, 6).toUpperCase()}`, 'success');
     }
     
     // Update UI with initial state
-    this.updateUI();
+    this.engine.updateUI();
   }
 
   /**
@@ -117,6 +108,10 @@ export class TicTacToeGame {
     // Get status elements
     this.statusElement = document.getElementById('status');
     this.currentPlayerElement = document.getElementById('current-player');
+    
+    // Set up the engine with UI elements
+    this.engine.setUIElements(this.boardElements, this.statusElement, this.currentPlayerElement);
+    this.engine.setHostStatus(this.isHost);
     
     // Add click listeners to board cells
     this.boardElements.forEach((cell, index) => {
@@ -144,11 +139,6 @@ export class TicTacToeGame {
         }
       });
     }
-    
-    // Add host controls if this player is the host
-    if (this.isHost) {
-      this.setupHostControls();
-    }
   }
 
   /**
@@ -157,14 +147,14 @@ export class TicTacToeGame {
   private handleCellClick(index: number): void {
     if (!this.canMakeMove()) {
       console.log('Cannot make move - not your turn or game over');
-      this.addGameLogEntry('Cannot make move - not your turn or game over', 'warning');
+      this.engine.addGameLogEntry('Cannot make move - not your turn or game over', 'warning');
       return;
     }
 
     const state = this.engine.getTicTacToeState();
     if (state.board[index] !== null) {
       console.log('Cell already occupied');
-      this.addGameLogEntry('Cell already occupied', 'warning');
+      this.engine.addGameLogEntry('Cell already occupied', 'warning');
       return;
     }
 
@@ -178,10 +168,10 @@ export class TicTacToeGame {
 
     if (success) {
       console.log(`Move sent: position ${index}`);
-      this.addGameLogEntry(`Move made at position ${index}`, 'info');
+      this.engine.addGameLogEntry(`Move made at position ${index}`, 'info');
     } else {
       console.log('Failed to send move');
-      this.addGameLogEntry('Move failed', 'error');
+      this.engine.addGameLogEntry('Move failed', 'error');
     }
   }
 
@@ -205,220 +195,7 @@ export class TicTacToeGame {
     return state.currentPlayer === this.playerSymbol;
   }
 
-  /**
-   * Update UI based on current game state
-   */
-  private updateUI(): void {
-    const state = this.engine.getTicTacToeState();
-    
-    // Update board
-    this.updateBoard(state.board);
-    
-    // Update status
-    this.updateStatus(state);
-    
-    // Update current player indicator
-    this.updateCurrentPlayer(state.currentPlayer);
-    
-    // Update player count
-    this.updatePlayerCount();
-  }
 
-  /**
-   * Update the game board display
-   */
-  private updateBoard(board: (string | null)[]): void {
-    this.boardElements.forEach((cell, index) => {
-      const cellValue = board[index];
-      cell.textContent = cellValue || '';
-      cell.className = `cell ${cellValue ? `player-${cellValue.toLowerCase()}` : ''}`;
-    });
-  }
-
-  /**
-   * Update the game status
-   */
-  private updateStatus(state: any): void {
-    if (!this.statusElement) return;
-
-    if (state.gameOver) {
-      if (state.winner) {
-        this.statusElement.textContent = `Player ${state.winner} wins!`;
-        this.statusElement.className = 'status winner';
-      } else {
-        this.statusElement.textContent = "It's a draw!";
-        this.statusElement.className = 'status draw';
-      }
-    } else {
-      // Check number of players in room instead of game state
-      const playerCount = this.gamework.getPlayers().length;
-      
-      if (playerCount < 2) {
-        this.statusElement.textContent = 'Waiting for player 2 to join';
-        this.statusElement.className = 'status waiting';
-      } else if (state.currentPlayer === null) {
-        // Both players joined but game hasn't started yet
-        this.statusElement.textContent = 'Ready to play! Make the first move';
-        this.statusElement.className = 'status ready';
-      } else {
-        this.statusElement.textContent = `Player ${state.currentPlayer}'s turn`;
-        this.statusElement.className = 'status playing';
-      }
-    }
-
-    // Update player status indicators
-    this.updatePlayerStatus();
-  }
-
-  /**
-   * Update the current player indicator
-   */
-  private updateCurrentPlayer(currentPlayer: string | null): void {
-    if (!this.currentPlayerElement) return;
-    
-    if (currentPlayer === null) {
-      this.currentPlayerElement.textContent = 'Waiting for first move...';
-      this.currentPlayerElement.className = 'current-player waiting';
-    } else {
-      this.currentPlayerElement.textContent = `Current Player: ${currentPlayer}`;
-      this.currentPlayerElement.className = `current-player ${currentPlayer.toLowerCase()}`;
-    }
-  }
-
-  /**
-   * Update player roles based on connection order
-   */
-  private updatePlayerRoles(): void {
-    const players = this.gamework.getPlayers();
-    const playerCount = players.length;
-    const currentPlayerId = this.gamework.getClientPlayer()?.id;
-    
-    if (playerCount === 1) {
-      // First player (host) gets X
-      this.playerSymbol = 'X';
-    } else if (playerCount === 2) {
-      // Second player gets O
-      this.playerSymbol = 'O';
-    } else {
-      // Fallback to engine role assignment
-      this.playerSymbol = this.engine.getPlayerRole(currentPlayerId || '') || '';
-    }
-    
-    console.log(`Updated player roles - Player count: ${playerCount}, My role: ${this.playerSymbol}`);
-  }
-
-  /**
-   * Update player status indicators
-   */
-  private updatePlayerStatus(): void {
-    const players = this.gamework.getPlayers();
-    const currentPlayerId = this.gamework.getClientPlayer()?.id;
-    
-    // Update Player 1 (Host) status
-    const player1Status = document.getElementById('player1Status');
-    if (player1Status) {
-      const hostPlayer = players.find(p => p.isHost);
-      if (hostPlayer) {
-        const role = this.engine.getPlayerRole(hostPlayer.id);
-        player1Status.textContent = `Host - ${role ? `Playing as ${role}` : 'Connected'}`;
-      } else {
-        player1Status.textContent = 'Host - Connecting...';
-      }
-    }
-    
-    // Update Player 2 status
-    const player2Status = document.getElementById('player2Status');
-    if (player2Status) {
-      const otherPlayer = players.find(p => !p.isHost);
-      if (otherPlayer) {
-        const role = this.engine.getPlayerRole(otherPlayer.id);
-        player2Status.textContent = `Player 2 - ${role ? `Playing as ${role}` : 'Connected'}`;
-      } else {
-        player2Status.textContent = 'Waiting for player...';
-      }
-    }
-  }
-
-  /**
-   * Update player count display
-   */
-  private updatePlayerCount(): void {
-    const playerCountElement = document.getElementById('playerCount');
-    if (playerCountElement) {
-      const playerCount = this.gamework.getPlayers().length;
-      playerCountElement.textContent = `Players: ${playerCount}`;
-    }
-  }
-
-  /**
-   * Add an entry to the game log
-   */
-  private addGameLogEntry(message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info'): void {
-    const gameLogElement = document.getElementById('gameLog');
-    if (!gameLogElement) return;
-
-    const timestamp = new Date().toLocaleTimeString();
-    const logEntry = document.createElement('div');
-    logEntry.className = `log-entry ${type}`;
-    logEntry.textContent = `[${timestamp}] ${message}`;
-    
-    gameLogElement.appendChild(logEntry);
-    
-    // Auto-scroll to bottom
-    gameLogElement.scrollTop = gameLogElement.scrollHeight;
-  }
-
-  /**
-   * Setup event handlers for GameWork
-   */
-  private setupEventHandlers(): void {
-    this.gamework.setEvents({
-      onPlayerJoin: (player) => {
-        console.log(`Player joined: ${player.name} (ID: ${player.id})`);
-        this.addGameLogEntry(`Player joined: ${player.name}`, 'success');
-        
-        // Update player roles when players join
-        this.updatePlayerRoles();
-        this.updateUI();
-        
-        // Update join room button if we're not the host and another player joined
-        if (!this.isHost && this.gamework.getPlayers().length > 1) {
-          this.updateJoinRoomButtonStatus('Joined!', true);
-        }
-      },
-      
-      onPlayerLeave: (playerId) => {
-        console.log(`Player left: ${playerId}`);
-        this.addGameLogEntry(`Player left: ${playerId}`, 'warning');
-        this.updateUI();
-        
-        // Reset join room button if we're the only player left
-        if (!this.isHost && this.gamework.getPlayers().length <= 1) {
-          this.updateJoinRoomButtonStatus('Join Room', false);
-        }
-      },
-      
-      onStateUpdate: (state) => {
-        console.log('Game state updated');
-        console.log('Current players:', this.gamework.getPlayers().length);
-        this.updateUI();
-      },
-      
-      onError: (error) => {
-        console.error('Game error:', error);
-        this.addGameLogEntry(`Error: ${error.message}`, 'error');
-        this.showError(error.message);
-      }
-    });
-  }
-
-  /**
-   * Setup host-specific controls
-   */
-  private setupHostControls(): void {
-    // Add host-specific UI elements or functionality
-    console.log('Setting up host controls');
-  }
 
   /**
    * Handle join room button click
@@ -487,19 +264,9 @@ export class TicTacToeGame {
     this.engine = new TicTacToeEngine();
     
     // Update UI
-    this.updateUI();
+    this.engine.updateUI();
     
     console.log('Game restarted');
-  }
-
-  /**
-   * Show error message to user
-   */
-  private showError(message: string): void {
-    if (this.statusElement) {
-      this.statusElement.textContent = `Error: ${message}`;
-      this.statusElement.className = 'status error';
-    }
   }
 
 

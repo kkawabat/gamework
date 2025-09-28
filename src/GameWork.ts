@@ -1,5 +1,8 @@
 import { GameEngine } from './core/GameEngine';
+import { RenderingEngine } from './core/RenderingEngine';
 import { NetworkEngine, NetworkEngineEvents } from './networking/NetworkEngine';
+import { EventManager } from './EventManager';
+import { PlayerMove, GameState as EventGameState, StateChange } from './types/EventInterfaces';
 import { 
   GameState, 
   GameMove, 
@@ -34,12 +37,6 @@ const DEFAULT_GAMEWORK_CONFIG: GameWorkConfig = {
   }
 };
 
-export interface GameWorkEvents {
-  onPlayerJoin?: (player: Player) => void;
-  onPlayerLeave?: (playerId: string) => void;
-  onStateUpdate?: (state: GameState) => void;
-  onError?: (error: Error) => void;
-}
 
 /**
  * GameWork - The main multiplayer game framework
@@ -49,15 +46,18 @@ export interface GameWorkEvents {
  */
 export class GameWork {
   private gameEngine: GameEngine;
+  private renderingEngine: RenderingEngine;
   private network: NetworkEngine;
   private config: GameWorkConfig;
-  private events: GameWorkEvents = {};
+  private eventManager: EventManager;
 
-  constructor(gameEngine: GameEngine, config?: GameWorkConfig) {
-    this.gameEngine = gameEngine;
+  constructor(gameEngine: GameEngine, renderingEngine: RenderingEngine, config?: GameWorkConfig) {
     this.config = { ...DEFAULT_GAMEWORK_CONFIG, ...config };
-    
+    this.gameEngine = gameEngine;
+    this.renderingEngine = renderingEngine
+
     // Initialize networking
+    this.eventManager = new EventManager();
     this.network = new NetworkEngine(this.config);
     
     this.setupEventHandlers();
@@ -67,7 +67,7 @@ export class GameWork {
    * Host a new multiplayer game room
    */
   async hostRoom(): Promise<string> {
-    return await this.network.hostRoom();
+    return await this.network.hostRoomWithEvents();
   }
 
   /**
@@ -88,14 +88,7 @@ export class GameWork {
    * Close the current room and disconnect from networking
    */
   async closeRoom(): Promise<void> {
-    await this.network.closeRoom();
-  }
-
-  /**
-   * Switch to a different room
-   */
-  async switchRoom(roomId: string): Promise<void> {
-    await this.network.switchRoom(roomId);
+    return await this.network.closeRoomWithEvents();
   }
 
   /**
@@ -118,14 +111,20 @@ export class GameWork {
     if (newState) {
       console.log(`[GameWork] Move applied locally`);
       
-      // Trigger state update event for UI
-      if (this.events.onStateUpdate) {
-        this.events.onStateUpdate(newState);
-      }
+      // Emit player move event (NetworkEngine will automatically handle networking)
+      const playerMove = {
+        playerId: move.playerId,
+        moveType: move.type,
+        payload: move.data,
+        timestamp: move.timestamp,
+        moveId: (move as any).messageId || `move_${Date.now()}`
+      };
+      this.eventManager.emit('playerMove', playerMove);
+      this.eventManager.emit('playerMoveApplied', playerMove);
       
-      // Send move to other players via WebRTC
-      this.network.sendMove(move);
-      console.log(`[GameWork] Move sent to other players via WebRTC`);
+      // Emit state change event
+      this.eventManager.emit('stateChange', newState as any);
+      
       return true;
     }
 
@@ -170,18 +169,6 @@ export class GameWork {
   }
 
   /**
-   * Get current room information for debugging
-   */
-  getRoomDebug(): any {
-    return {
-      room: this.network.getRoom(),
-      players: this.network.getPlayers(),
-      isConnected: this.isConnected,
-      clientId: this.network.getClientId()
-    };
-  }
-
-  /**
    * Check if the game is over
    */
   isGameOver(): boolean {
@@ -193,13 +180,6 @@ export class GameWork {
    */
   getWinner(): string | null {
     return this.gameEngine.getWinner();
-  }
-
-  /**
-   * Set event handlers
-   */
-  setEvents(events: GameWorkEvents): void {
-    this.events = { ...this.events, ...events };
   }
 
   /**
@@ -216,122 +196,21 @@ export class GameWork {
     return this.network.isNetworkConnected();
   }
 
+  /**
+   * Get the event manager
+   */
+  getEventManager(): EventManager {
+    return this.eventManager;
+  }
+
   // Private methods
 
   private setupEventHandlers(): void {
-    // Set up NetworkEngine event handlers
-    this.network.setEvents({
-      onPlayerJoin: (player: Player) => {
-        if (this.events.onPlayerJoin) {
-          this.events.onPlayerJoin(player);
-        }
-      },
-      onPlayerLeave: (playerId: string) => {
-        if (this.events.onPlayerLeave) {
-          this.events.onPlayerLeave(playerId);
-        }
-      },
-      onError: (error: Error) => {
-        if (this.events.onError) {
-          this.events.onError(error);
-        }
-      },
-      onPeerMessage: (peerId: string, message: GameMessage) => {
-        this.handlePeerMessage(peerId, message);
-      }
-    });
-  }
-
-  private async handlePeerMessage(peerId: string, message: GameMessage): Promise<void> {
-    console.log(`[GameWork] Processing message from ${peerId}:`, message.type, message);
-    
-    try {
-      switch (message.type) {
-        case 'join':
-          console.log(`[GameWork] Handling join message from ${peerId}`);
-          this.handlePlayerJoin(message.payload);
-          break;
-          
-        case 'input':
-          console.log(`[GameWork] Handling input message from ${peerId}:`, message.payload);
-          this.handlePlayerMove(message.payload);
-          break;
-          
-        case 'resync':
-          console.log(`[GameWork] Handling resync request from ${peerId}`);
-          this.handleResyncRequest(peerId);
-          break;
-          
-        case 'state':
-          console.log(`[GameWork] Handling state update from ${peerId}:`, message.payload);
-          this.handleStateUpdate(message.payload);
-          break;
-          
-        default:
-          console.warn(`[GameWork] Unknown message type: ${message.type}`);
-      }
-    } catch (error) {
-      console.error(`[GameWork] Error handling message from ${peerId}:`, error);
-    }
-  }
-
-  private handlePlayerJoin(playerData: any): void {
-    // This is handled by NetworkEngine, but we can add game-specific logic here if needed
-    console.log(`[GameWork] Player joined: ${playerData.playerId}`);
-  }
-
-  private handlePlayerMove(move: GameMove): void {
-    console.log(`[GameWork] Processing move from ${move.playerId}:`, move);
-    
-    // Apply move to local game engine
-    const newState = this.gameEngine.applyMove(move);
-    if (newState) {
-      console.log(`[GameWork] Move applied locally`);
-      
-      // Trigger state update event for UI
-      if (this.events.onStateUpdate) {
-        this.events.onStateUpdate(newState);
-      }
-    } else {
-      console.warn(`[GameWork] Invalid move rejected by game engine`);
-    }
-  }
-
-  private handleResyncRequest(peerId: string): void {
-    console.log(`[GameWork] Resync request from ${peerId}`);
-    this.broadcastStateUpdate(this.gameEngine.getCurrentState());
-  }
-
-  private handleStateUpdate(payload: any): void {
-    console.log(`[GameWork] Received state update:`, payload);
-    
-    if (payload.state) {
-      // Update the game engine with the new state
-      this.gameEngine.setState(payload.state);
-      
-      // Trigger the state update event
-      if (this.events.onStateUpdate) {
-        this.events.onStateUpdate(payload.state);
-      }
-    }
-  }
-
-  private broadcastStateUpdate(state: GameState): void {
-    const message: GameMessage = {
-      type: 'state',
-      payload: {
-        state,
-        isFullSnapshot: true
-      },
-      timestamp: Date.now(),
-      messageId: require('uuid').v4()
-    };
-    
-    console.log(`[GameWork] Broadcasting state update to ${this.network.getPlayers().length} players`);
-    this.network.broadcastMessage(message);
-    
-    if (this.events.onStateUpdate) {
-      this.events.onStateUpdate(state);
-    }
+    this.eventManager.setupGameWorkEventHandlers(
+      this.network,
+      this.gameEngine,
+      this.renderingEngine,
+      this
+    );
   }
 }

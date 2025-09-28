@@ -1,4 +1,4 @@
-import { GameState, GameMove, GameRules } from '../types';
+import { GameState, GameMove, GameRules, Player } from '../types';
 
 /**
  * GameEngine - Base class for game logic
@@ -93,4 +93,15 @@ export abstract class GameEngine {
    * Import game state from persistence (optional)
    */
   importState?(exportedState: string): boolean;
+
+  // Event handler methods that match the event system
+  onStateChange?(payload: any): void;
+  onPlayerMoveApplied?(payload: any): void;
+  onTurnChange?(payload: { currentPlayerId: string }): void;
+  onGameOver?(payload: { winnerId?: string, scores: Record<string, number> }): void;
+  onScoreUpdate?(payload: { scores: Record<string, number> }): void;
+  onEntitySpawned?(payload: { entityId: string, type: string, position: { x: number, y: number } }): void;
+  onEntityRemoved?(payload: { entityId: string }): void;
+  onError?(payload: { code: string, message: string }): void;
+
 }

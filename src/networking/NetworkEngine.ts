@@ -11,12 +11,15 @@ import { GameWorkConfig } from '../GameWork';
 
 
 export interface NetworkEngineEvents {
-  onPlayerJoin?: (player: Player) => void;
-  onPlayerLeave?: (playerId: string) => void;
-  onStateUpdate?: (state: any) => void;
-  onError?: (error: Error) => void;
-  onRoomUpdate?: (room: GameRoom) => void;
-  onPeerMessage?: (peerId: string, message: GameMessage) => void;
+  onPlayerJoined?: (payload: { playerId: string, playerName?: string }) => void;
+  onPlayerLeft?: (payload: { playerId: string }) => void;
+  onStateChange?: (payload: any) => void;
+  onError?: (payload: { code: string, message: string }) => void;
+  onRoomCreated?: (payload: { roomId: string, hostId: string }) => void;
+  onRoomClosed?: (payload: { roomId: string }) => void;
+  onConnectionLost?: (payload: { playerId?: string, reason?: string }) => void;
+  onConnectionRestored?: (payload: { playerId?: string }) => void;
+  onChatMessage?: (payload: { playerId: string, message: string }) => void;
 }
 
 /**
@@ -280,6 +283,26 @@ export class NetworkEngine {
   }
 
   /**
+   * Host a room with event emission
+   */
+  async hostRoomWithEvents(): Promise<string> {
+    const roomId = await this.hostRoom();
+    this.events.onRoomCreated?.({ roomId, hostId: this.clientId });
+    return roomId;
+  }
+
+  /**
+   * Close room with event emission
+   */
+  async closeRoomWithEvents(): Promise<void> {
+    const roomId = this.room?.id;
+    await this.closeRoom();
+    if (roomId) {
+      this.events.onRoomClosed?.({ roomId });
+    }
+  }
+
+  /**
    * Set event handlers
    */
   setEvents(events: NetworkEngineEvents): void {
@@ -306,9 +329,7 @@ export class NetworkEngine {
     // WebRTC message handling
     this.webrtc.setMessageHandler((peerId, message) => {
       console.log(`[NetworkEngine] Received message from ${peerId}:`, message.type);
-      if (this.events.onPeerMessage) {
-        this.events.onPeerMessage(peerId, message);
-      }
+      this.handlePeerMessage(peerId, message);
     });
 
     this.webrtc.setConnectionChangeHandler((peerId, isConnected) => {
@@ -335,7 +356,7 @@ export class NetworkEngine {
 
     this.signaling.onError((error) => {
       if (this.events.onError) {
-        this.events.onError(error);
+        this.events.onError({ code: 'NETWORK_ERROR', message: error.message });
       }
     });
   }
@@ -346,10 +367,106 @@ export class NetworkEngine {
       player.isConnected = isConnected;
       player.lastSeen = Date.now();
       
-      if (!isConnected && this.events.onPlayerLeave) {
-        this.events.onPlayerLeave(peerId);
+      if (!isConnected && this.events.onPlayerLeft) {
+        this.events.onPlayerLeft({ playerId: peerId });
       }
     }
+  }
+
+  private handlePeerMessage(peerId: string, message: GameMessage): void {
+    console.log(`[NetworkEngine] Processing message from ${peerId}:`, message.type);
+    
+    try {
+      switch (message.type) {
+        case 'join':
+          console.log(`[NetworkEngine] Handling join message from ${peerId}`);
+          this.handlePlayerJoin(message.payload);
+          break;
+          
+        case 'input':
+          console.log(`[NetworkEngine] Handling input message from ${peerId}:`, message.payload);
+          this.handlePlayerMove(message.payload);
+          break;
+          
+        case 'resync':
+          console.log(`[NetworkEngine] Handling resync request from ${peerId}`);
+          this.handleResyncRequest(peerId);
+          break;
+          
+        case 'state':
+          console.log(`[NetworkEngine] Handling state update from ${peerId}:`, message.payload);
+          this.handleStateUpdate(message.payload);
+          break;
+          
+        default:
+          console.warn(`[NetworkEngine] Unknown message type: ${message.type}`);
+      }
+    } catch (error) {
+      console.error(`[NetworkEngine] Error handling message from ${peerId}:`, error);
+      if (this.events.onError) {
+        this.events.onError({ code: 'MESSAGE_ERROR', message: (error as Error).message });
+      }
+    }
+  }
+
+  private handlePlayerJoin(playerData: any): void {
+    console.log(`[NetworkEngine] Player joined: ${playerData.playerId}`);
+    // This is handled by the room update mechanism
+  }
+
+  private handlePlayerMove(move: any): void {
+    console.log(`[NetworkEngine] Processing move from ${move.playerId}:`, move);
+    
+    // Emit player move event
+    const playerMove = {
+      playerId: move.playerId,
+      moveType: move.type,
+      payload: move.data,
+      timestamp: move.timestamp,
+      moveId: (move as any).messageId || `move_${Date.now()}`
+    };
+    
+    if (this.events.onStateChange) {
+      this.events.onStateChange({ type: 'playerMove', payload: playerMove });
+    }
+  }
+
+  private handleResyncRequest(peerId: string): void {
+    console.log(`[NetworkEngine] Resync request from ${peerId}`);
+    // Send current state to the requesting peer
+    const currentState = this.getCurrentState();
+    if (currentState) {
+      this.broadcastStateUpdate(currentState);
+    }
+  }
+
+  private handleStateUpdate(payload: any): void {
+    console.log(`[NetworkEngine] Received state update:`, payload);
+    
+    if (payload.state && this.events.onStateChange) {
+      this.events.onStateChange(payload.state);
+    }
+  }
+
+  private broadcastStateUpdate(state: any): void {
+    const message: GameMessage = {
+      type: 'state',
+      payload: {
+        state,
+        isFullSnapshot: true
+      },
+      timestamp: Date.now(),
+      messageId: require('uuid').v4()
+    };
+    
+    console.log(`[NetworkEngine] Broadcasting state update to ${this.players.size} players`);
+    this.broadcastMessage(message);
+  }
+
+  private getCurrentState(): any {
+    // This should be implemented to get the current game state
+    // For now, return null - this would need to be connected to GameEngine
+    return null;
   }
 
   private async handleSignalingMessage(message: any): Promise<void> {
@@ -409,8 +526,8 @@ export class NetworkEngine {
           console.log(`[NetworkEngine] Non-host player, not creating WebRTC offer for ${player.id}`);
         }
         
-        if (this.events.onPlayerJoin) {
-          this.events.onPlayerJoin(player);
+        if (this.events.onPlayerJoined) {
+          this.events.onPlayerJoined({ playerId: player.id, playerName: player.name });
         }
       }
     }
@@ -419,15 +536,15 @@ export class NetworkEngine {
     for (const [playerId, player] of this.players) {
       if (!playersMap.has(playerId)) {
         this.players.delete(playerId);
-        if (this.events.onPlayerLeave) {
-          this.events.onPlayerLeave(playerId);
+        if (this.events.onPlayerLeft) {
+          this.events.onPlayerLeft({ playerId });
         }
       }
     }
     
     // Trigger room update event
-    if (this.events.onRoomUpdate) {
-      this.events.onRoomUpdate(gameRoom);
+    if (this.events.onStateChange) {
+      this.events.onStateChange(gameRoom);
     }
   }
 
