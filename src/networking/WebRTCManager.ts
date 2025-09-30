@@ -4,7 +4,7 @@ export class WebRTCManager {
   private connections: Map<string, ConnectionInfo> = new Map();
   private onDataChannelMessage?: (peerId: string, message: any) => void;
   private onConnectionChange?: (peerId: string, isConnected: boolean) => void;
-  private onIceCandidate?: (peerId: string, candidate: RTCIceCandidate) => void;
+
   private stunServers: RTCIceServer[];
   private iceCandidateQueue: Map<string, RTCIceCandidateInit[]> = new Map();
 
@@ -13,18 +13,6 @@ export class WebRTCManager {
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' }
     ];
-  }
-
-  setMessageHandler(handler: (peerId: string, message: any) => void): void {
-    this.onDataChannelMessage = handler;
-  }
-
-  setConnectionChangeHandler(handler: (peerId: string, isConnected: boolean) => void): void {
-    this.onConnectionChange = handler;
-  }
-
-  setIceCandidateHandler(handler: (peerId: string, candidate: RTCIceCandidate) => void): void {
-    this.onIceCandidate = handler;
   }
 
   async createOffer(peerId: string): Promise<RTCSessionDescriptionInit> {

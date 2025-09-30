@@ -1,16 +1,18 @@
-import { GameState, Player } from '../types';
-
 /**
- * RenderingEngine - Abstract base class for UI rendering
+ * UIEngine - Abstract base class for UI rendering
  * 
  * Handles all UI updates and rendering logic for games.
  * Developers extend this class to implement their specific UI rendering.
  */
-export abstract class RenderingEngine {
+export abstract class UIEngine {
+  protected gameWork: any; // Will be typed as GameWork to avoid circular imports
+
   /**
-   * Update the UI based on current game state
+   * Set the GameWork instance for the UI engine
    */
-  abstract update(): void;
+  setGameWork(gameWork: any): void {
+    this.gameWork = gameWork;
+  }
 
   // Event handler methods that match the event system
   onPlayerJoined?(payload: { playerId: string, playerName?: string }): void;
