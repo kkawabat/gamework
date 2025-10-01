@@ -4,23 +4,18 @@ FROM node:18-alpine
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY server/package*.json ./
-
-# Install all dependencies (including dev dependencies for build)
-RUN npm install
-
-# Copy source files and shared types
-COPY server/server.ts ./
-COPY server/room-manager.ts ./
-COPY server/tsconfig.json ./
+# Copy source files maintaining directory structure
+COPY server/ ./server/
 COPY shared ./shared
 
+# Install all dependencies (including dev dependencies for build)
+RUN cd server && npm install
+
 # Build the application
-RUN npm run build
+RUN cd server && npm run build
 
 # Remove dev dependencies after build
-RUN npm prune --omit=dev
+RUN cd server && npm prune --omit=dev
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs
@@ -38,7 +33,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "const http = require('http'); const req = http.get('http://127.0.0.1:8080/health', (res) => { if (res.statusCode === 200) process.exit(0); else process.exit(1); }); req.on('error', () => process.exit(1)); setTimeout(() => process.exit(1), 5000);"
 
 # Start the server
-CMD ["npm", "start"]
+CMD ["node", "server/dist/server.js"]
 
 
 
