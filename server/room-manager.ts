@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { GameRoom, Player, SignalingMessage } from './types';
+import { GameRoom, Player, SignalingMessage } from '../shared/signaling-types';
 
 export class RoomManager {
   private rooms = new Map<string, GameRoom>();

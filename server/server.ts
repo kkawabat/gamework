@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import { v4 as uuidv4 } from 'uuid';
 import { RoomManager } from './room-manager';
-import { ClientMessage, ServerMessage, SignalingMessage, GameRoom } from './types';
+import { ClientMessage, ServerMessage, SignalingMessage, GameRoom } from '../shared/signaling-types';
 
 interface ClientConnection {
   ws: WebSocket;

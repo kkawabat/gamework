@@ -10,8 +10,12 @@ COPY package*.json ./
 # Install all dependencies (including dev dependencies for build)
 RUN npm install
 
-# Copy source code
-COPY . .
+# Copy source files and shared types
+COPY server.ts ./
+COPY room-manager.ts ./
+COPY tsconfig.json ./
+COPY docker-compose.yml ./
+COPY ../shared ./shared
 
 # Build the application
 RUN npm run build

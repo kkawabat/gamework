@@ -37,10 +37,11 @@ if ! docker network ls | grep -q "app_network"; then
     exit 1
 fi
 
-# Navigate to the server directory
-cd /opt/gamework/server
+# Navigate to the project root (parent of server)
+cd /opt/gamework
 
-print_status "Installing dependencies..."
+print_status "Installing server dependencies..."
+cd server
 npm ci
 
 print_status "Building server..."
@@ -50,16 +51,17 @@ print_status "Installing production dependencies..."
 npm ci --production
 
 print_status "Stopping existing containers..."
-docker-compose down 2>/dev/null || true
+cd ..
+docker-compose -f server/docker-compose.yml down 2>/dev/null || true
 
 print_status "Building and starting the signaling server..."
-docker-compose up -d --build
+docker-compose -f server/docker-compose.yml up -d --build
 
 print_status "Waiting for server to be ready..."
 sleep 10
 
 # Check if the container is running
-if docker-compose ps | grep -q "Up"; then
+if docker-compose -f server/docker-compose.yml ps | grep -q "Up"; then
     print_status "✅ Signaling server is running successfully!"
     
     # Get the server URL
@@ -69,23 +71,23 @@ if docker-compose ps | grep -q "Up"; then
     # Show container status
     echo ""
     print_status "Container status:"
-    docker-compose ps
+    docker-compose -f server/docker-compose.yml ps
     
     # Show logs
     echo ""
     print_status "Recent logs:"
-    docker-compose logs --tail=20
+    docker-compose -f server/docker-compose.yml logs --tail=20
     
 else
     print_error "❌ Failed to start the signaling server"
     print_status "Checking logs for errors:"
-    docker-compose logs
+    docker-compose -f server/docker-compose.yml logs
     exit 1
 fi
 
 print_status "🎉 Deployment completed successfully!"
 print_status "Useful commands:"
-echo "  View logs:     docker-compose logs -f"
-echo "  Stop server:   docker-compose down"
-echo "  Restart:       docker-compose restart"
-echo "  Update:        git pull && ./deploy.sh"
+echo "  View logs:     docker-compose -f server/docker-compose.yml logs -f"
+echo "  Stop server:   docker-compose -f server/docker-compose.yml down"
+echo "  Restart:       docker-compose -f server/docker-compose.yml restart"
+echo "  Update:        git pull && ./server/deploy.sh"
