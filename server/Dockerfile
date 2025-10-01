@@ -11,7 +11,7 @@ COPY shared ./shared
 # Install all dependencies (including dev dependencies for build)
 RUN cd server && npm install
 
-# Build the application
+# Build the application (run from parent directory to match rootDir)
 RUN cd server && npm run build
 
 # Remove dev dependencies after build
@@ -33,7 +33,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "const http = require('http'); const req = http.get('http://127.0.0.1:8080/health', (res) => { if (res.statusCode === 200) process.exit(0); else process.exit(1); }); req.on('error', () => process.exit(1)); setTimeout(() => process.exit(1), 5000);"
 
 # Start the server
-CMD ["node", "server/dist/server.js"]
+CMD ["node", "server/dist/server/server.js"]
 
 
 

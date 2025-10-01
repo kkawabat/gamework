@@ -24,12 +24,7 @@ export interface SignalingMessage {
 }
 export interface ClientMessage {
     type: 'server_message' | 'signaling_message' | 'ping';
-    payload: {
-        message: string;
-        roomId?: string;
-        playerId?: string;
-        [key: string]: any;
-    };
+    payload: any;
 }
 export interface ServerMessage {
     type: 'room_joined' | 'room_left' | 'signaling_message' | 'room_update' | 'error' | 'pong' | 'room_found';
