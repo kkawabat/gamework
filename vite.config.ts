@@ -28,9 +28,9 @@ export default defineConfig(({ mode }) => {
         output: {
           // Keep modules separate for better caching
           manualChunks: {
-            'gamework-core': ['src/core/GameEngine.ts'],
-            'gamework-networking': ['src/networking/WebRTCManager.ts', 'src/networking/SignalingService.ts'],
-            'gamework-main': ['src/GameWork.ts']
+            'gamework-core': ['client/core/GameEngine.ts'],
+            'gamework-networking': ['client/networking/WebRTCManager.ts', 'client/networking/SignalingService.ts'],
+            'gamework-main': ['client/GameWork.ts']
           }
         }
       },

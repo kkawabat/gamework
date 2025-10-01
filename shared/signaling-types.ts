@@ -1,9 +1,12 @@
+// Shared types for signaling communication between client and server
+
 export interface Player {
   id: string;
-  name: string;
-  isHost: boolean;
-  isConnected: boolean;
-  lastSeen: number;
+  name?: string;
+  isHost?: boolean;
+  isConnected?: boolean;
+  lastSeen?: number;
+  [key: string]: any;
 }
 
 export interface GameRoom {
@@ -17,7 +20,7 @@ export interface GameRoom {
 }
 
 export interface SignalingMessage {
-  type: 'offer' | 'answer' | 'ice_candidate' | 'room_info' | 'join_request';
+  type: 'offer' | 'answer' | 'ice_candidate' | 'room_info' | 'join_request' | 'lookup_room' | 'room_found' | 'room_joined';
   payload: any;
   from: string;
   to?: string;
@@ -25,10 +28,8 @@ export interface SignalingMessage {
 }
 
 export interface ClientMessage {
-  type: 'join_room' | 'leave_room' | 'signaling_message' | 'ping' | 'lookup_room';
-  payload: any;
-  roomId?: string;
-  playerId?: string;
+  type: 'server_message' | 'signaling_message' | 'ping';
+  payload: any; // Can be server message structure or SignalingMessage
 }
 
 export interface ServerMessage {
@@ -36,7 +37,3 @@ export interface ServerMessage {
   payload: any;
   roomId?: string;
 }
-
-
-
-

@@ -1,4 +1,10 @@
-import { SignalingMessage, GameRoom } from '../types';
+// Import shared types
+import {
+  SignalingMessage,
+  GameRoom,
+  ClientMessage,
+  ServerMessage
+} from '../../shared/signaling-types';
 
 export interface SignalingConfig {
   serverUrl: string;
@@ -74,19 +80,13 @@ export class SignalingService {
     this.currentPlayerId = playerId;
     
     if (this.isConnected && this.ws) {
-      this.ws.send(JSON.stringify({
-        type: 'join_room',
-        payload: { roomId, playerId }
-      }));
+      await this.sendServerMessage('join_room', { roomId, playerId });
     }
   }
 
   async leaveRoom(roomId: string, playerId: string): Promise<void> {
     if (this.isConnected && this.ws) {
-      this.ws.send(JSON.stringify({
-        type: 'leave_room',
-        payload: { roomId, playerId }
-      }));
+      await this.sendServerMessage('leave_room', { roomId, playerId });
     }
     
     this.currentRoom = undefined;
@@ -100,16 +100,27 @@ export class SignalingService {
 
     console.log(`[WebSocketSignalingService] Sending message:`, message.type, message);
     
-    // For lookup_room messages, send directly without wrapping
-    if (message.type === 'lookup_room') {
-      this.ws.send(JSON.stringify(message));
-    } else {
-      // For other messages, wrap in signaling_message
-      this.ws.send(JSON.stringify({
-        type: 'signaling_message',
-        payload: message
-      }));
+    // For peer-to-peer signaling messages, use signaling_message
+    this.ws.send(JSON.stringify({
+      type: 'signaling_message',
+      payload: message
+    }));
+  }
+
+  async sendServerMessage(messageType: string, payload: any): Promise<void> {
+    if (!this.isConnected || !this.ws) {
+      throw new Error('Not connected to signaling service');
     }
+
+    console.log(`[WebSocketSignalingService] Sending server message:`, messageType, payload);
+    
+    this.ws.send(JSON.stringify({
+      type: 'server_message',
+      payload: {
+        message: messageType,
+        ...payload
+      }
+    }));
   }
 
   async handleSignalingMessage(message: SignalingMessage, webrtcManager: any, playerId: string): Promise<void> {
@@ -137,6 +148,13 @@ export class SignalingService {
 
   onMessage(callback: (message: SignalingMessage) => void): void {
     this.messageCallbacks.push(callback);
+  }
+
+  offMessage(callback: (message: SignalingMessage) => void): void {
+    const index = this.messageCallbacks.indexOf(callback);
+    if (index > -1) {
+      this.messageCallbacks.splice(index, 1);
+    }
   }
 
   onRoomUpdate(callback: (room: GameRoom) => void): void {

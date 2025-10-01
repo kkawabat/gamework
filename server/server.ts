@@ -161,14 +161,8 @@ export class SignalingServer {
     console.log(`[WebSocket] 🔄 Handling message type '${message.type}' from ${connectionId}`);
 
     switch (message.type) {
-      case 'join_room':
-        this.handleJoinRoom(connectionId, message);
-        break;
-      case 'lookup_room':
-        this.handleLookupRoom(connectionId, message);
-        break;
-      case 'leave_room':
-        this.handleLeaveRoom(connectionId, message);
+      case 'server_message':
+        this.handleServerMessage(connectionId, message);
         break;
       case 'signaling_message':
         this.handleSignalingMessage(connectionId, message);
@@ -178,6 +172,24 @@ export class SignalingServer {
         break;
       default:
         console.warn(`[WebSocket] ⚠️ Unknown message type: ${message.type} from ${connectionId}`);
+    }
+  }
+
+  private handleServerMessage(connectionId: string, message: ClientMessage): void {
+    const { message: serverMessage } = message.payload;
+    
+    switch (serverMessage) {
+      case 'join_room':
+        this.handleJoinRoom(connectionId, message);
+        break;
+      case 'lookup_room':
+        this.handleLookupRoom(connectionId, message);
+        break;
+      case 'leave_room':
+        this.handleLeaveRoom(connectionId, message);
+        break;
+      default:
+        console.warn(`[WebSocket] ⚠️ Unknown server message: ${serverMessage} from ${connectionId}`);
     }
   }
 
@@ -313,7 +325,7 @@ export class SignalingServer {
       return;
     }
 
-    const signalingMessage: SignalingMessage = message.payload;
+    const signalingMessage: SignalingMessage = message.payload as SignalingMessage;
     
     if (!signalingMessage || !signalingMessage.type || !signalingMessage.payload) {
       this.sendError(connection.ws, 'Invalid signaling message');

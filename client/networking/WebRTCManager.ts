@@ -1,18 +1,17 @@
-import { ConnectionInfo, SignalingMessage } from '../types';
+import { ConnectionInfo } from '../types';
+import { SignalingMessage } from '../../shared/signaling-types';
 
 export class WebRTCManager {
   private connections: Map<string, ConnectionInfo> = new Map();
   private onDataChannelMessage?: (peerId: string, message: any) => void;
   private onConnectionChange?: (peerId: string, isConnected: boolean) => void;
+  private onIceCandidate?: (peerId: string, candidate: RTCIceCandidateInit) => void;
 
   private stunServers: RTCIceServer[];
   private iceCandidateQueue: Map<string, RTCIceCandidateInit[]> = new Map();
 
   constructor(stunServers: RTCIceServer[] = []) {
-    this.stunServers = stunServers.length > 0 ? stunServers : [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
-    ];
+    this.stunServers = stunServers;
   }
 
   async createOffer(peerId: string): Promise<RTCSessionDescriptionInit> {

@@ -6,8 +6,13 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
+    "build:client": "tsc",
+    "build:server": "cd server && npm run build",
     "dev": "tsc --watch",
+    "dev:client": "tsc --watch",
+    "dev:server": "cd server && npm run dev",
     "start": "node dist/index.js",
+    "start:server": "cd server && npm start",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -15,8 +20,9 @@
     "build:game": "chmod +x scripts/build-demos-vite.sh && ./scripts/build-demos-vite.sh",
     "dev:game": "vite",
     "preview:game": "vite preview",
-    "lint": "eslint src/**/*.ts",
-    "clean": "rm -rf dist demo-build"
+    "lint": "eslint client/**/*.ts shared/**/*.ts",
+    "lint:server": "cd server && npm run lint",
+    "clean": "rm -rf dist demo-build server/dist"
   },
   "keywords": [
     "board-games",

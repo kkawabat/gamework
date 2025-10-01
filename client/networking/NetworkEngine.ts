@@ -1,11 +1,8 @@
 import { WebRTCManager } from './WebRTCManager';
 import { SignalingService } from './SignalingService';
-import {
-  Player,
-  GameRoom
-} from '../types';
+import { Player, GameRoom } from '../../shared/signaling-types';
 import { v4 as uuidv4 } from 'uuid';
-import { EventPayload, PlayerAction, StateChange } from '../events/EventFlow';
+import { PlayerAction, StateChange } from '../events/EventFlow';
 
 export class NetworkEngine {
   private webrtc: WebRTCManager;
@@ -53,15 +50,22 @@ export class NetworkEngine {
   /**
    * Host a new multiplayer game room
    */
-  async joinRoom(roomId?: string): Promise<string> {
+  async joinRoom(roomCode?: string): Promise<string> {
     // Disconnect from current room if already connected
     if (this.isConnected) {
-      console.log('[NetworkEngine] Disconnecting from current room before hosting new room');
       await this.leaveRoom();
     }
 
     try {
-      roomId = roomId || uuidv4()
+      let roomId: string | null;
+      if (roomCode) {
+        roomId = await this.lookupRoom(roomCode);
+        if (!roomId) {
+          throw new Error('Room not found');
+        }
+      } else {
+        roomId = uuidv4();
+      }
 
       // Create room
       this.room = {
@@ -69,17 +73,16 @@ export class NetworkEngine {
         name: `Game Room ${roomId}`,
         hostId: this.owner.id,
         players: new Map([[this.owner.id, this.owner]]),
+        maxPlayers: 8,
+        gameType: 'generic',
         createdAt: Date.now()
       };
-
-      console.log(`[NetworkEngine] Hosting multiplayer game in room: ${this.room.id}`);
 
       // Connect to signaling service
       await this.signaling.connect();
       await this.signaling.joinRoom(this.room.id, this.owner.id);
 
       this.isConnected = true;
-      console.log(`[NetworkEngine] Room hosted successfully`);
 
       return this.room.id;
     } catch (error) {
@@ -89,29 +92,25 @@ export class NetworkEngine {
   }
 
   /**
-   * Look up a room by room code
+   * Look up a room by room code (private method)
    */
-  async lookupRoom(roomCode: string): Promise<string | null> {
+  private async lookupRoom(roomCode: string): Promise<string | null> {
     console.log(`[NetworkEngine] Looking up room with code: ${roomCode}`);
 
     if (!this.isConnected) {
       await this.signaling.connect();
     }
 
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Room lookup timeout'));
-      }, 10000);
-
+    return new Promise((resolve) => {
       const messageHandler = (message: any) => {
         if (message.type === 'room_found') {
-          clearTimeout(timeout);
           const roomId = message.payload.roomId;
           console.log(`[NetworkEngine] Room found: ${roomId}`);
+          this.signaling.offMessage(messageHandler);
           resolve(roomId);
-        } else if (message.type === 'room_not_found') {
-          clearTimeout(timeout);
+        } else if (message.type === 'error' && message.payload.message?.includes('not found')) {
           console.log(`[NetworkEngine] Room not found: ${roomCode}`);
+          this.signaling.offMessage(messageHandler);
           resolve(null);
         }
       };
@@ -120,12 +119,7 @@ export class NetworkEngine {
       this.signaling.onMessage(messageHandler);
 
       // Send lookup request
-      this.signaling.sendMessage({
-        type: 'lookup_room',
-        payload: { roomCode },
-        from: this.owner.id,
-        roomId: 'lookup' // Special roomId for lookup requests
-      });
+      this.signaling.sendServerMessage('lookup_room', { roomCode });
     });
   }
 
@@ -137,8 +131,6 @@ export class NetworkEngine {
       return;
     }
 
-    console.log('[NetworkEngine] Closing room...');
-
     // Disconnect from signaling service
     if (this.signaling) {
       await this.signaling.disconnect();
@@ -147,7 +139,14 @@ export class NetworkEngine {
     // Clear room data
     this.room = undefined;
     this.isConnected = false;
+  }
 
-    console.log('[NetworkEngine] Room closed');
+  /**
+   * Setup signaling updates
+   */
+  setupSignalingUpdates(): void {
+    this.signaling.onRoomUpdate((room: GameRoom) => {
+      this.room = room;
+    });
   }
 }
