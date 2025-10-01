@@ -52,7 +52,10 @@ npm ci --production
 
 print_status "Stopping existing containers..."
 cd ..
-docker-compose -f server/docker-compose.yml down 2>/dev/null || true
+docker-compose -f server/docker-compose.yml down --remove-orphans 2>/dev/null || true
+
+# Force remove the container if it exists
+docker rm -f gamework-signalling-server 2>/dev/null || true
 
 print_status "Building and starting the signaling server..."
 docker-compose -f server/docker-compose.yml up -d --build
