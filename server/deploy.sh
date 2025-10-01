@@ -51,7 +51,6 @@ print_status "Installing production dependencies..."
 npm ci --production
 
 print_status "Stopping existing containers..."
-cd ..
 docker-compose -f server/docker-compose.yml down 2>/dev/null || true
 
 print_status "Building and starting the signaling server..."

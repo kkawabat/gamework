@@ -5,17 +5,16 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY server/package*.json ./
 
 # Install all dependencies (including dev dependencies for build)
 RUN npm install
 
 # Copy source files and shared types
-COPY server.ts ./
-COPY room-manager.ts ./
-COPY tsconfig.json ./
-COPY docker-compose.yml ./
-COPY ../shared ./shared
+COPY server/server.ts ./
+COPY server/room-manager.ts ./
+COPY server/tsconfig.json ./
+COPY shared ./shared
 
 # Build the application
 RUN npm run build

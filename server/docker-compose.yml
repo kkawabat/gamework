@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   signaling-server:
-    build: .
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
     container_name: gamework-signalling-server
     ports:
       - "8080:8080"
