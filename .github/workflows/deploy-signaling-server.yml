@@ -39,12 +39,9 @@ jobs:
           git fetch --all
           git reset --hard origin/main
           
-          print_status "Downloading deployment script..."
-          curl -fsSL https://raw.githubusercontent.com/kkawabat/gamework/main/server/deploy.sh -o /tmp/deploy.sh
-          chmod +x /tmp/deploy.sh
-          
           print_status "Running deployment script..."
-          /tmp/deploy.sh
+          chmod +x server/deploy.sh
+          ./server/deploy.sh
           
           print_status "✅ GitHub Actions deployment completed!"
           print_status "Container name: gamework-signalling-server"

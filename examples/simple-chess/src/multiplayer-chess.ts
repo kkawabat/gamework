@@ -1,5 +1,5 @@
 // Import the GameWork framework
-import { GameHost, GameClient, WebSocketSignalingService, GameRoom, generateQRCode } from '../../../src/index';
+import { GameHost, GameClient, WebSocketSignalingService, GameRoom, generateQRCode } from '../../../client/index';
 import { chessConfig, ChessState, ChessMove } from './chess-game';
 // Use Vite-injected signaling server URL directly
 const activeSignalingConfig = {

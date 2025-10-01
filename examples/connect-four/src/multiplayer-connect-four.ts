@@ -1,5 +1,5 @@
 // Import the GameWork framework
-import { BaseMultiplayerGame } from '../../../src/multiplayer/BaseMultiplayerGame';
+import { BaseMultiplayerGame } from '../../../client/multiplayer/BaseMultiplayerGame';
 import { connectFourConfig, ConnectFourState, ConnectFourMove } from './connect-four-game';
 
 console.log('GameWork Connect Four Multiplayer Game');

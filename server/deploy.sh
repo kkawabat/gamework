@@ -5,55 +5,87 @@
 
 set -e
 
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
 print_status() {
-    echo -e "\033[0;32m[INFO]\033[0m $1"
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
 print_error() {
-    echo -e "\033[0;31m[ERROR]\033[0m $1"
+    echo -e "${RED}[ERROR]${NC} $1"
 }
 
 print_status "Starting GameWork Signaling Server deployment..."
+
+# Check if Docker is installed
+if ! command -v docker &> /dev/null; then
+    print_error "Docker is not installed. Please install Docker first."
+    exit 1
+fi
+
+# Check if the app_network exists (required for reverse proxy integration)
+if ! docker network ls | grep -q "app_network"; then
+    print_error "app_network does not exist. Please ensure your reverse proxy is running."
+    exit 1
+fi
 
 # Navigate to the server directory
 cd /opt/gamework/server
 
 print_status "Installing dependencies..."
-npm ci --production
+npm ci
 
 print_status "Building server..."
 npm run build
 
-print_status "Stopping existing container (if running)..."
-docker stop gamework-signalling-server 2>/dev/null || true
-docker rm gamework-signalling-server 2>/dev/null || true
+print_status "Installing production dependencies..."
+npm ci --production
 
-print_status "Building Docker image..."
-docker build -t gamework-signalling-server .
+print_status "Stopping existing containers..."
+docker-compose down 2>/dev/null || true
 
-print_status "Starting new container..."
-docker run -d \
-  --name gamework-signalling-server \
-  --network app_network \
-  --restart unless-stopped \
-  -p 8080:8080 \
-  gamework-signalling-server
+print_status "Building and starting the signaling server..."
+docker-compose up -d --build
 
-print_status "Waiting for container to start..."
-sleep 5
+print_status "Waiting for server to be ready..."
+sleep 10
 
-print_status "Checking container status..."
-if docker ps | grep -q gamework-signalling-server; then
-    print_status "✅ Container started successfully!"
-    print_status "Container name: gamework-signalling-server"
-    print_status "Network: app_network"
-    print_status "Port: 8080"
-    print_status "Ready for Caddy reverse proxy configuration!"
+# Check if the container is running
+if docker-compose ps | grep -q "Up"; then
+    print_status "✅ Signaling server is running successfully!"
+    
+    # Get the server URL
+    SERVER_IP=$(curl -s ifconfig.me 2>/dev/null || curl -s ipinfo.io/ip 2>/dev/null || echo "localhost")
+    print_status "🌐 Server is available at: ws://${SERVER_IP}:8080"
+    
+    # Show container status
+    echo ""
+    print_status "Container status:"
+    docker-compose ps
+    
+    # Show logs
+    echo ""
+    print_status "Recent logs:"
+    docker-compose logs --tail=20
+    
 else
-    print_error "❌ Container failed to start!"
-    print_error "Container logs:"
-    docker logs gamework-signalling-server
+    print_error "❌ Failed to start the signaling server"
+    print_status "Checking logs for errors:"
+    docker-compose logs
     exit 1
 fi
 
-print_status "✅ Deployment completed successfully!"
+print_status "🎉 Deployment completed successfully!"
+print_status "Useful commands:"
+echo "  View logs:     docker-compose logs -f"
+echo "  Stop server:   docker-compose down"
+echo "  Restart:       docker-compose restart"
+echo "  Update:        git pull && ./deploy.sh"

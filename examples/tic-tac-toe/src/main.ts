@@ -1,4 +1,4 @@
-import { GameWork } from '../../../src';
+import { GameWork } from '../../../client';
 import { TicTacToeEngine } from './game-engine';
 import { TicTacToeUIEngine } from './ui-engine';
 

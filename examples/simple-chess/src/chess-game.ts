@@ -1,4 +1,4 @@
-import { GameConfig, GameState, GameMove } from '../../../src/index';
+import { GameConfig, GameState, GameMove } from '../../../client/index';
 
 // Chess piece types
 export type ChessPiece = 'K' | 'Q' | 'R' | 'B' | 'N' | 'P' | 'k' | 'q' | 'r' | 'b' | 'n' | 'p';

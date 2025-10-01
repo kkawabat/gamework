@@ -1,6 +1,6 @@
-import { UIEngine } from '../../../src';
+import { UIEngine } from '../../../client';
 import { TicTacToeEngine } from './game-engine';
-import { generateQRCode } from '../../../src/utils';
+import { generateQRCode } from '../../../client/utils';
 
 export class TicTacToeUIEngine extends UIEngine {
   private boardElements: HTMLElement[] = [];

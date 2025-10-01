@@ -1,4 +1,4 @@
-import { GameEngine, GameState, GameMove, GameRules, Player } from '../../../src';
+import { GameEngine, GameState, GameMove, GameRules, Player } from '../../../client';
 
 // Tic-Tac-Toe game state
 export interface TicTacToeState extends GameState {
