@@ -1,11 +1,30 @@
+// Game State Interface
+export interface GameState {
+  stage: string;
+  tick: number;            // current game tick
+  players: {
+    [playerId: string]: {
+      [key: string]: any;  // game-specific player data
+    };
+  };
+  gameData?: {
+    [key: string]: any;    // game-specific state data
+  };
+  metadata?: {
+    gameMode?: string;
+    round?: number;
+    phase?: string;
+    [key: string]: any;    // additional game metadata
+  };
+}
+
 // Client → Host
 export interface PlayerAction {
-  t: "playerMove";         // event type
-  tick: number;            // game tick when action occurred
-  seq: number;             // per-player sequence number for dedup/reorder
+  action: "CreateRoom" | "JoinRoom" | "LeaveRoom" | "PlayerMove" | string;
+  tick?: number;            // game tick when action occurred
+  seq?: number;             // per-player sequence number for dedup/reorder
   playerId: string;        // sender ID
-  input: {
-    action?: string;    // e.g. ["jump", "shoot"]
+  input?: {
     [key: string]: any;    // extension for game-specific actions
   };
 }
@@ -21,7 +40,7 @@ export interface StateChange {
   changes?: any[];         // for "delta": compact list of state changes
 
   // snapshot-specific
-  fullState?: any;         // for "snapshot": authoritative full game state
+  fullState?: GameState;         // for "snapshot": authoritative full game state
 
   // optional metadata (for lifecycle/system)
   meta?: {

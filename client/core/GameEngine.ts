@@ -1,32 +1,15 @@
-export interface GameConfig {
-  gameType: string;
-  maxPlayers: number;
-  initialState: any;
-  rules: GameRules;
-}
-
-export interface GameRules {
-  applyMove: (state: any, move: any) => any;
-  isValidMove: (state: any, move: any) => boolean;
-  isGameOver: (state: any) => boolean;
-  getWinner?: (state: any) => string | null;
-}
-
-
 /**
  * GameEngine - Base class for game logic
  * 
  * Developers extend this class to implement their game logic.
  * GameWork handles all networking, this class focuses purely on game rules.
  */
-export abstract class GameEngine {
-  protected state: any;
-  protected rules: GameRules;
+export abstract class GameEngine<S, A = unknown> {
+  private _state: S;
   protected gameWork: any; // Will be typed as GameWork to avoid circular imports
 
-  constructor(initialState: any, rules: GameRules) {
-    this.state = initialState;
-    this.rules = rules;
+  constructor(initialState: S) {
+    this._state = initialState;
   }
 
   /**
@@ -36,22 +19,24 @@ export abstract class GameEngine {
     this.gameWork = gameWork;
   }
 
-  getCurrentState(): any {
-    return this.state;
+  get state(): Readonly<S> {
+    return this._state; // never undefined
+  }
+  
+  protected setState(next: S) {
+    this._state = next;
   }
 
-  getRules(): GameRules {
-    return this.rules;
-  }
+  abstract applyAction(action: A): S;
 
-  // Event handler methods that match the event system
-  onStateChange?(payload: any): void;
-  onPlayerMoveApplied?(payload: any): void;
-  onTurnChange?(payload: { currentPlayerId: string }): void;
-  onGameOver?(payload: { winnerId?: string, scores: Record<string, number> }): void;
-  onScoreUpdate?(payload: { scores: Record<string, number> }): void;
-  onEntitySpawned?(payload: { entityId: string, type: string, position: { x: number, y: number } }): void;
-  onEntityRemoved?(payload: { entityId: string }): void;
-  onError?(payload: { code: string, message: string }): void;
+  async onSendPlayerAction(action: A): Promise<void>{};
+  async onReceivePlayerAction(action: A): Promise<void>{
+    this._state = this.applyAction(action);
+  };
+  async onSendStateChange(state: S): Promise<void>{};
+  async onReceiveStateChange(state: S): Promise<void>{
+    this._state = state;
+  };
 
+  
 }

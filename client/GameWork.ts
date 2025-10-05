@@ -7,6 +7,7 @@ import {
   GameWorkConfig,
 } from './types';
 import { v4 as uuidv4 } from 'uuid';
+import { PlayerAction, StateChange } from './events/EventFlow';
 
 
 
@@ -34,13 +35,13 @@ const DEFAULT_GAMEWORK_CONFIG: GameWorkConfig = {
 export class GameWork {
   private config: GameWorkConfig;
   private eventManager: EventManager;
-  private gameEngine: GameEngine;
-  private uiEngine: UIEngine;
+  private gameEngine: GameEngine<any, any>;
+  private uiEngine: UIEngine<any, any>;
   private network: NetworkEngine;
   private owner: Player;
   
 
-  constructor(gameEngine: GameEngine, uiEngine: UIEngine, config?: GameWorkConfig) {
+  constructor(gameEngine: GameEngine<any, any>, uiEngine: UIEngine<any, any>, config?: GameWorkConfig) {
     this.config = { ...DEFAULT_GAMEWORK_CONFIG, ...config };
     this.owner = {
       id: uuidv4(),
@@ -62,5 +63,25 @@ export class GameWork {
     // Initialize event manager first
     this.eventManager = new EventManager(this);
 
+  }
+
+  getState(): any {
+    return this.gameEngine.state;
+  }
+
+  sendPlayerAction(payload: PlayerAction) {
+    this.eventManager.emit('sendPlayerAction', payload);
+  }
+
+  receivePlayerAction(payload: PlayerAction) {
+    this.eventManager.emit('receivePlayerAction', payload);
+  }
+
+  sendStateChange(payload: StateChange) {
+    this.eventManager.emit('sendStateChange', payload);
+  }
+
+  receiveStateChange(payload: StateChange) {
+    this.eventManager.emit('receiveStateChange', payload);
   }
 }

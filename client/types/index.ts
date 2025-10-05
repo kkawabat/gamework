@@ -4,8 +4,6 @@ export interface Player {
   [key: string]: any;
 }
 
-
-
 export interface ConnectionInfo {
   peerId: string;
   connection: RTCPeerConnection;

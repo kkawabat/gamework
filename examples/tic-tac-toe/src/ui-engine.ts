@@ -1,62 +1,16 @@
 import { UIEngine } from '../../../client';
-import { TicTacToeEngine } from './game-engine';
+import { TicTacToeAction, TicTacToeEngine, TicTacToeState } from './game-engine';
 import { generateQRCode } from '../../../client/utils';
 
-export class TicTacToeUIEngine extends UIEngine {
+export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction> {
   private boardElements: HTMLElement[] = [];
   private statusElement: HTMLElement | null = null;
   private currentPlayerElement: HTMLElement | null = null;
+  private restartButton: HTMLElement | null = null;
+  private joinRoomBtn: HTMLElement | null = null;
+  private roomCodeInput: HTMLInputElement | null = null;
   private gameEngine: TicTacToeEngine;
   private isHost: boolean = false;
-
-  // Event handler methods that match the event system
-  onPlayerJoined(payload: { playerId: string, playerName?: string }): void {
-    this.addGameLogEntry(`Player joined: ${payload.playerName || payload.playerId}`, 'success');
-    this.updateUI();
-  }
-  onPlayerLeft(payload: { playerId: string }): void {
-    this.addGameLogEntry(`Player left: ${payload.playerId}`, 'warning');
-    this.updateUI();
-  }
-  onStateChange(payload: any): void {
-    this.addGameLogEntry(`State changed: ${JSON.stringify(payload)}`, 'info');
-    this.updateUI();
-  }
-  onPlayerMove(payload: any): void {
-    this.addGameLogEntry(`Player move: ${JSON.stringify(payload)}`, 'info');
-    this.updateUI();
-  }
-  onPlayerMoveApplied(payload: any): void {
-    this.addGameLogEntry(`Player move applied: ${JSON.stringify(payload)}`, 'info');
-    this.updateUI();
-  }
-  onTurnChange?(payload: { currentPlayerId: string }): void;
-  onGameOver(payload: { winnerId?: string, scores: Record<string, number> }): void {
-    this.addGameLogEntry(`Game over: ${JSON.stringify(payload)}`, 'info');
-    this.updateUI();
-  }
-  onScoreUpdate(payload: { scores: Record<string, number> }): void {
-    this.addGameLogEntry(`Score update: ${JSON.stringify(payload)}`, 'info');
-    this.updateUI();
-  }
-  onRoomCreated(payload: { roomId: string, hostId: string }): void {
-    this.addGameLogEntry(`Room created: ${JSON.stringify(payload)}`, 'success');
-    this.updateUI();
-  }
-  onRoomClosed(payload: { roomId: string }): void{
-    this.addGameLogEntry(`Room closed: ${JSON.stringify(payload)}`, 'info');
-    this.updateUI();
-  }
-  // onConnectionLost(payload: { playerId?: string, reason?: string }): void;
-  // onConnectionRestored?(payload: { playerId?: string }): void;
-  // onChatMessage?(payload: { playerId: string, message: string }): void;
-  // onRenderComplete?(payload: { frameTime: number }): void;
-  // onAnimationEnd?(payload: { animationId: string }): void;
-  // onUiInteraction?(payload: { elementId: string, action: string }): void;
-  onError(payload: { code: string, message: string }): void{
-    this.addGameLogEntry(`Error: ${JSON.stringify(payload)}`, 'error');
-    this.showError(payload.message);
-  }
 
   /**
   * Add an entry to the game log
@@ -77,28 +31,85 @@ export class TicTacToeUIEngine extends UIEngine {
   }
 
   /**
+ * Initialize UI elements and event listeners
+ */
+  initialize(): void {
+    // Get board elements
+    this.boardElements = Array.from(document.querySelectorAll('.cell'));
+    this.boardElements.forEach((cell, index) => {
+      const action: TicTacToeAction = {
+        action: 'playerMove',
+        playerId: this.gameWork.getOwner().id,
+        input: {
+          position: index
+        }
+      }
+      cell.addEventListener('click', () => this.gameWork.sendPlayerAction(action));
+    });
+    
+    this.statusElement = document.getElementById('status');
+    this.currentPlayerElement = document.getElementById('current-player');
+    
+    this.restartButton = document.getElementById('restart');
+    if (this.restartButton) {
+      const action: TicTacToeAction = {
+        action: 'restartGame',
+        playerId: this.gameWork.getOwner().id,
+      }
+      this.restartButton.addEventListener('click', () => this.gameWork.sendPlayerAction(action));
+    }
+    
+    
+    this.roomCodeInput = document.getElementById('roomCodeInput') as HTMLInputElement;
+    this.joinRoomBtn = document.getElementById('joinRoomBtn');
+    if (this.joinRoomBtn) {
+      this.joinRoomBtn.addEventListener('click', () => {
+        let roomCode = this.roomCodeInput?.value
+        if (roomCode) {
+          const action: TicTacToeAction = {
+            action: 'JoinRoom',
+            playerId: this.gameWork.getOwner().id,
+            input: { roomCode: roomCode }
+          }
+          this.gameWork.sendPlayerAction(action)
+        }
+      });
+    }
+    
+    
+    if (this.roomCodeInput) {
+      this.roomCodeInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          let roomCode = this.roomCodeInput?.value
+          if (roomCode) {
+            const action: TicTacToeAction = {
+              action: 'JoinRoom',
+              playerId: this.gameWork.getOwner().id,
+              input: { roomCode: roomCode }
+            }
+            this.gameWork.sendPlayerAction(action);
+          }
+        }
+      });
+    }
+  }
+
+  /**
    * Update UI based on current game state
    */
-  public updateUI(): void {
-    const state = this.gameEngine.getTicTacToeState();
+  public render(): void {
+    const state = this.gameWork.getState();
     
-    // Update board
-    this.updateBoard(state.board);
-    
-    // Update status
+    this.updateBoard(state.gameData.board);
     this.updateStatus(state);
-    
-    // Update current player indicator
-    this.updateCurrentPlayer(state.currentPlayer);
-    
-    // Update player count
-    this.updatePlayerCount();
+    this.updateCurrentPlayer(state);
+    this.updatePlayerStatus(state);
   }
 
   /**
    * Update the game board display
    */
-  private updateBoard(board: (string | null)[]): void {
+  private updateBoard(board: ('X' | 'O' | null)[]): void {
     this.boardElements.forEach((cell, index) => {
       const cellValue = board[index];
       cell.textContent = cellValue || '';
@@ -112,9 +123,9 @@ export class TicTacToeUIEngine extends UIEngine {
   private updateStatus(state: any): void {
     if (!this.statusElement) return;
 
-    if (state.gameOver) {
-      if (state.winner) {
-        this.statusElement.textContent = `Player ${state.winner} wins!`;
+    if (state.gameData.gameOver) {
+      if (state.gameData.winner) {
+        this.statusElement.textContent = `Player ${state.gameData.winner} wins!`;
         this.statusElement.className = 'status winner';
       } else {
         this.statusElement.textContent = "It's a draw!";
@@ -122,31 +133,28 @@ export class TicTacToeUIEngine extends UIEngine {
       }
     } else {
       // Check number of players in room instead of game state
-      const playerCount = this.gameWork.getPlayers().length || 0;
+      const playerCount = Object.keys(state.players).length || 0;
       
       if (playerCount < 2) {
         this.statusElement.textContent = 'Waiting for player 2 to join';
         this.statusElement.className = 'status waiting';
-      } else if (state.currentPlayer === null) {
+      } else if (state.gameData.currentPlayer === null) {
         // Both players joined but game hasn't started yet
         this.statusElement.textContent = 'Ready to play! Make the first move';
         this.statusElement.className = 'status ready';
       } else {
-        this.statusElement.textContent = `Player ${state.currentPlayer}'s turn`;
+        this.statusElement.textContent = `Player ${state.gameData.currentPlayer}'s turn`;
         this.statusElement.className = 'status playing';
       }
     }
-
-    // Update player status indicators
-    this.updatePlayerStatus();
   }
 
   /**
    * Update the current player indicator
    */
-  private updateCurrentPlayer(currentPlayer: string | null): void {
+  private updateCurrentPlayer(state: TicTacToeState): void {
     if (!this.currentPlayerElement) return;
-    
+    let currentPlayer = state.gameData.currentPlayer;
     if (currentPlayer === null) {
       this.currentPlayerElement.textContent = 'Waiting for first move...';
       this.currentPlayerElement.className = 'current-player waiting';
@@ -159,28 +167,30 @@ export class TicTacToeUIEngine extends UIEngine {
   /**
    * Update player status indicators
    */
-  private updatePlayerStatus(): void {
+  private updatePlayerStatus(state: TicTacToeState): void {
     
-    const players = this.gameWork.getPlayers();
+    const players = state.players;
     
-    // Update Player 1 (Host) status
+    const playerCount = players.length;
+    const playerCountElement = document.getElementById('playerCount');
+    if (playerCountElement) {
+      playerCountElement.textContent = `Players: ${playerCount}`;
+    }
+
+
+    const me = this.gameWork.getOwner()
     const player1Status = document.getElementById('player1Status');
     if (player1Status) {
-      const hostPlayer = players.find(p => p.isHost);
-      if (hostPlayer) {
-        const role = this.gameEngine.getPlayerRole(hostPlayer.id);
-        player1Status.textContent = `Host - ${role ? `Playing as ${role}` : 'Connected'}`;
-      } else {
-        player1Status.textContent = 'Host - Connecting...';
-      }
+      const role = state.players[me.id].symbol;
+      player1Status.textContent = `You - ${role ? `Playing as ${role}` : 'Connected'}`;
     }
     
     // Update Player 2 status
     const player2Status = document.getElementById('player2Status');
     if (player2Status) {
-      const otherPlayer = players.find(p => !p.isHost);
-      if (otherPlayer) {
-        const role = this.gameEngine.getPlayerRole(otherPlayer.id);
+      const player2Id = Object.keys(state.players).find(k => k !== me.id)!;
+      if (player2Id) {
+        const role = state.players[player2Id].symbol;
         player2Status.textContent = `Player 2 - ${role ? `Playing as ${role}` : 'Connected'}`;
       } else {
         player2Status.textContent = 'Waiting for player...';
@@ -188,64 +198,7 @@ export class TicTacToeUIEngine extends UIEngine {
     }
   }
 
-  /**
-   * Update player count display
-   */
-  private updatePlayerCount(): void {
-    const playerCount = this.gameWork.getPlayers().length;
-    const playerCountElement = document.getElementById('playerCount');
-    if (playerCountElement) {
-      playerCountElement.textContent = `Players: ${playerCount}`;
-    }
-  }
 
-
-  /**
-  * Show error message to user
-  */
-  public showError(message: string): void {
-    if (this.statusElement) {
-      this.statusElement.textContent = `Error: ${message}`;
-      this.statusElement.className = 'status error';
-    }
-  }
-
-  /**
- * Initialize UI elements and event listeners
- */
-  initialize(): void {
-    // Get board elements
-    this.boardElements = Array.from(document.querySelectorAll('.cell'));
-    this.boardElements.forEach((cell, index) => {
-      cell.addEventListener('click', () => this.gameWork.emit('playerMove', { index }));
-    });
-    
-    // Get status elements
-    this.statusElement = document.getElementById('status');
-    this.currentPlayerElement = document.getElementById('current-player');
-    
-    // Add restart button listener
-    const restartButton = document.getElementById('restart');
-    if (restartButton) {
-      restartButton.addEventListener('click', () => this.gameWork.emit('restartGame'));
-    }
-    
-    // Add join room button listener
-    const joinRoomBtn = document.getElementById('joinRoomBtn');
-    if (joinRoomBtn) {
-      joinRoomBtn.addEventListener('click', () => this.gameWork.emit('joinRoom'));
-    }
-    
-    // Add enter key listener for room code input
-    const roomCodeInput = document.getElementById('roomCodeInput');
-    if (roomCodeInput) {
-      roomCodeInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-          this.gameWork.emit('joinRoom');
-        }
-      });
-    }
-  }
 
 
       /**

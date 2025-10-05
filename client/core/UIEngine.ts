@@ -1,10 +1,14 @@
+import { StateChange } from "../events/EventFlow";
+
+import { PlayerAction } from "../events/EventFlow";
+
 /**
  * UIEngine - Abstract base class for UI rendering
  * 
  * Handles all UI updates and rendering logic for games.
  * Developers extend this class to implement their specific UI rendering.
  */
-export abstract class UIEngine {
+export abstract class UIEngine<S, A = unknown> {
   protected gameWork: any; // Will be typed as GameWork to avoid circular imports
 
   /**
@@ -14,23 +18,16 @@ export abstract class UIEngine {
     this.gameWork = gameWork;
   }
 
-  // Event handler methods that match the event system
-  onPlayerJoined?(payload: { playerId: string, playerName?: string }): void;
-  onPlayerLeft?(payload: { playerId: string }): void;
-  onStateChange?(payload: any): void;
-  onPlayerMove?(payload: any): void;
-  onPlayerMoveApplied?(payload: any): void;
-  onTurnChange?(payload: { currentPlayerId: string }): void;
-  onGameOver?(payload: { winnerId?: string, scores: Record<string, number> }): void;
-  onScoreUpdate?(payload: { scores: Record<string, number> }): void;
-  onRoomCreated?(payload: { roomId: string, hostId: string }): void;
-  onRoomClosed?(payload: { roomId: string }): void;
-  onConnectionLost?(payload: { playerId?: string, reason?: string }): void;
-  onConnectionRestored?(payload: { playerId?: string }): void;
-  onChatMessage?(payload: { playerId: string, message: string }): void;
-  onRenderComplete?(payload: { frameTime: number }): void;
-  onAnimationEnd?(payload: { animationId: string }): void;
-  onUiInteraction?(payload: { elementId: string, action: string }): void;
-  onError?(payload: { code: string, message: string }): void;
+  abstract render(): void;
+  abstract initialize?(): void;
+
+  async onSendPlayerAction(action: A): Promise<void>{
+    this.gameWork.sendPlayerAction(action);
+  };
+  async onReceivePlayerAction(action: A): Promise<void>{};
+  async onSendStateChange(state: S): Promise<void>{};
+  async onReceiveStateChange(state: S): Promise<void>{
+    this.render();
+  };
 
 }

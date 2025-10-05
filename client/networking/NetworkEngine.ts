@@ -25,13 +25,13 @@ export class NetworkEngine {
     this.webrtc.broadcastMessage(payload);
   }
   async onReceivePlayerAction(payload: PlayerAction): Promise<void> {
-    const action = payload.input.action;
+    const action = payload.action;
     switch (action) {
       case 'CreateRoom':
         this.joinRoom();
         break;
       case 'JoinRoom':
-        this.joinRoom(payload.input.roomId);
+        this.joinRoom(payload.input?.roomCode);
         break;
       case 'LeaveRoom':
         this.leaveRoom();
