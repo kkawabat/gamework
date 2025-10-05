@@ -66,8 +66,12 @@ export class GameWork {
 
   }
 
-  getState(): any {
+  getState(): GameState {
     return this.gameEngine.state;
+  }
+
+  getOwner(): Player {
+    return this.owner;
   }
 
   sendPlayerAction(payload: PlayerAction) {
