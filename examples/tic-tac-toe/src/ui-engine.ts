@@ -92,6 +92,8 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
         }
       });
     }
+
+    this.initializeQRCode()
   }
 
   /**
