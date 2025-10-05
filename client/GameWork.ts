@@ -7,7 +7,7 @@ import {
   GameWorkConfig,
 } from './types';
 import { v4 as uuidv4 } from 'uuid';
-import { PlayerAction, StateChange } from './events/EventFlow';
+import { PlayerAction, StateChange, ThinClientEventFlow } from './events/EventFlow';
 
 
 
@@ -39,6 +39,7 @@ export class GameWork {
   private uiEngine: UIEngine<any, any>;
   private network: NetworkEngine;
   private owner: Player;
+  public eventFlow = ThinClientEventFlow;
   
 
   constructor(gameEngine: GameEngine<any, any>, uiEngine: UIEngine<any, any>, config?: GameWorkConfig) {
