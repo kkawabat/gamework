@@ -50,6 +50,18 @@ export class TicTacToeEngine extends GameEngine<TicTacToeState, TicTacToeAction>
 
 
   applyAction(action: TicTacToeAction): TicTacToeState {
+
+    switch (action.action) {
+      case 'PlayerMove':
+        return this.applyPlayerMove(action);
+      case 'RestartGame':
+        return this.applyRestartGame();
+      default:
+        throw new Error(`Unknown action: ${action.action}`);
+    }
+  }
+
+  applyPlayerMove(action: TicTacToeAction): TicTacToeState {
     let newState = structuredClone(this.state as TicTacToeState);
 
     const player = newState.players[action.playerId];
@@ -74,6 +86,10 @@ export class TicTacToeEngine extends GameEngine<TicTacToeState, TicTacToeAction>
 
     return newState;
   };
+
+  applyRestartGame(): TicTacToeState {
+    return TicTacToeEngine.getInitialState();
+  }
 
   updateState(state: TicTacToeState): TicTacToeState {
     state.gameData.currentPlayer = state.gameData.currentPlayer === 'X' ? 'O' : 'X'

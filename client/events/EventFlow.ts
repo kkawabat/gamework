@@ -20,7 +20,7 @@ export interface GameState {
 
 // Client → Host
 export interface PlayerAction {
-  action: "CreateRoom" | "JoinRoom" | "LeaveRoom" | "PlayerMove" | string;
+  action: "CreateRoom" | "JoinRoom" | "LeaveRoom" | "PlayerMove" | "RestartGame" | string;
   tick?: number;            // game tick when action occurred
   seq?: number;             // per-player sequence number for dedup/reorder
   playerId: string;        // sender ID

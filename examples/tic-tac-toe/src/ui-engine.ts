@@ -53,7 +53,7 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
     this.restartButton = document.getElementById('restart');
     if (this.restartButton) {
       const action: TicTacToeAction = {
-        action: 'restartGame',
+        action: 'RestartGame',
         playerId: this.gameWork.getOwner().id,
       }
       this.restartButton.addEventListener('click', () => this.gameWork.sendPlayerAction(action));
@@ -176,7 +176,6 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
     if (playerCountElement) {
       playerCountElement.textContent = `Players: ${playerCount}`;
     }
-
 
     const me = this.gameWork.getOwner()
     const player1Status = document.getElementById('player1Status');

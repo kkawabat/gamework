@@ -7,7 +7,7 @@ import {
   GameWorkConfig,
 } from './types';
 import { v4 as uuidv4 } from 'uuid';
-import { PlayerAction, StateChange, ThinClientEventFlow } from './events/EventFlow';
+import { GameState, PlayerAction, StateChange, ThinClientEventFlow } from './events/EventFlow';
 
 
 
@@ -67,7 +67,7 @@ export class GameWork {
   }
 
   getState(): GameState {
-    return this.gameEngine.state;
+    return this.gameEngine.state as GameState;
   }
 
   getOwner(): Player {
