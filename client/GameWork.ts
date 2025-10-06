@@ -65,6 +65,9 @@ export abstract class GameWork<T extends BaseGameWorkState = BaseGameWorkState> 
     
     // Initialize game-specific components
     this.initializeGame();
+    
+    // Initialize networking after state is ready
+    this.network.initialize();
   }
 
   // === ABSTRACT METHODS (Override in game-specific implementations) ===

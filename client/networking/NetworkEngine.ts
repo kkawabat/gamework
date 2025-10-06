@@ -6,13 +6,20 @@ import { PlayerAction, StateChange } from '../events/EventFlow';
 
 export class NetworkEngine {
   private webrtc: WebRTCManager | null = null;
-  private signaling: SignalingService;
-  private owner: Player;
+  private signaling: SignalingService | null = null;
+  private owner: Player | null = null;
   protected gameWork: any;
 
   constructor(gameWork: any) {
     this.gameWork = gameWork;
-    this.owner = gameWork.getOwner();
+    // Defer initialization until GameWork is ready
+  }
+
+  /**
+   * Initialize networking components after GameWork state is ready
+   */
+  initialize(): void {
+    this.owner = this.gameWork.getOwner();
     this.signaling = new SignalingService(this.gameWork.config.signalServiceConfig);
     
     // Setup signaling message handlers
@@ -79,7 +86,7 @@ export class NetworkEngine {
             ...paction.input || {}
           }
         } as SignalingMessage;
-        this.signaling.sendMessage(createRoomMessage);
+        this.signaling?.sendMessage(createRoomMessage);
         break;
 
       case 'JoinRoomRequest':
@@ -91,7 +98,7 @@ export class NetworkEngine {
             ...paction.input || {}
           }
         } as SignalingMessage;
-        this.signaling.sendMessage(joinRoomMessage);
+        this.signaling?.sendMessage(joinRoomMessage);
         break;
 
       case 'LeaveRoomRequest':
@@ -122,8 +129,8 @@ export class NetworkEngine {
             // Initialize room and WebRTC manager synchronously
             const newRoom = {
               id: schange.payload?.roomId,
-              hostId: this.owner.id,
-              players: new Map([[this.owner.id, this.owner]]),
+              hostId: this.owner!.id,
+              players: new Map([[this.owner!.id, this.owner!]]),
             } as GameRoom;
             this.webrtc = new WebRTCManager(newRoom, this.gameWork.config.stunServers);
             
@@ -151,8 +158,8 @@ export class NetworkEngine {
           case 'LeaveRoom':
             const playerId = schange.payload?.playerId;
             const room = this.gameWork.getRoom();
-            if (room?.hostId === this.owner.id) {
-              if (playerId === this.owner.id) {
+            if (room?.hostId === this.owner?.id) {
+              if (playerId === this.owner?.id) {
                 // Host leaving - disconnect all and close room
                 this.webrtc?.disconnectAll();
                 // Clear room in GameWork state
@@ -167,7 +174,7 @@ export class NetworkEngine {
                     roomId: roomId
                   }
                 } as SignalingMessage;
-                this.signaling.sendMessage(leaveRoomMessage);
+                this.signaling?.sendMessage(leaveRoomMessage);
               } else {
                 // Player leaving - disconnect and remove from state
                 this.webrtc?.disconnectPeer(playerId);
@@ -186,7 +193,7 @@ export class NetworkEngine {
    * Setup signaling message handlers for host-based room management
    */
   private setupSignalingHandlers(): void {
-    this.signaling.onMessage((message: any) => {
+    this.signaling?.onMessage((message: any) => {
       console.log('[NetworkEngine] Received signaling message:', message.type);
       switch (message.type) {
         case 'RoomUpdate':
@@ -247,13 +254,13 @@ export class NetworkEngine {
         let msg =  {
           type: 'SignalingMessage',
           action: 'answer',
-          from: this.owner.id,
+          from: this.owner?.id || '',
           payload: {
             to: message.from,
             answer: answer
           }
         } as answerMessage;
-        await this.signaling.sendMessage(msg);
+        await this.signaling?.sendMessage(msg);
         break;
       case 'answer':
         await this.webrtc?.handleAnswer(message as answerMessage);

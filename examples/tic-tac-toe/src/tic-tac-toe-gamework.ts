@@ -72,14 +72,6 @@ export class TicTacToeGameWork extends GameWork<TicTacToeState> {
   // === GAME-SPECIFIC METHODS ===
   
   /**
-   * Initialize the game (public method for external use)
-   */
-  initialize(): void {
-    // This method is called from main.ts
-    // The actual initialization is done in initializeGame()
-  }
-  
-  /**
    * Get the TicTacToe-specific game state
    */
   getTicTacToeState(): TicTacToeState {

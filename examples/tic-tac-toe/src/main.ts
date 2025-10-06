@@ -6,7 +6,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     // New pattern: Game-specific GameWork extension
     const gamework = new TicTacToeGameWork();
-    gamework.initialize();
     
     // Make game available globally for debugging
     (window as any).gamework = gamework;
