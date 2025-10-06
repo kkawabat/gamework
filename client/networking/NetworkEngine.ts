@@ -24,11 +24,11 @@ export class NetworkEngine {
     return this.room;
   }
 
-  async onSendPlayerAction(payload: PlayerAction): Promise<void> {
+  async onReceivePlayerAction(payload: PlayerAction): Promise<void> {
     // send to the host of the room for processing
     this.webrtc?.sendMessage(this.room?.hostId || "", payload);
   }
-  async onReceivePlayerAction(paction: PlayerAction): Promise<void> {
+  async onSendPlayerAction(paction: PlayerAction): Promise<void> {
     const action = paction.action;
     switch (action) {
       case 'CreateRoomRequest':
