@@ -1,7 +1,8 @@
 import { UIEngine } from '../../../client';
 import { TicTacToeAction, TicTacToeEngine, TicTacToeState } from './game-engine';
 import { generateQRCode } from '../../../client/utils';
-import { StateChange } from '../../../client/events/EventFlow';
+import { StateChange, GameState } from '../../../client/events/EventFlow';
+import { GameRoom } from '../../../shared/signaling-types';
 
 export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction> {
   private boardElements: HTMLElement[] = [];
@@ -12,10 +13,31 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
   private roomCodeInput: HTMLInputElement | null = null;
   private gameEngine: TicTacToeEngine;
   private isHost: boolean = false;
+  private currentGameState?: GameState;
+  private currentRoom?: GameRoom;
+
+  // === DIRECT METHOD CALLS (Hybrid Architecture) ===
+  
+  /**
+   * Update game state - called directly by GameWork
+   */
+  updateState(gameState: GameState): void {
+    this.currentGameState = gameState;
+    this.render();
+  }
 
   /**
- * Initialize UI elements and event listeners
- */
+   * Update room information - called directly by GameWork
+   */
+  updateRoom(room: GameRoom, isHost: boolean): void {
+    this.currentRoom = room;
+    this.isHost = isHost;
+    this.render();
+  }
+
+  /**
+   * Initialize UI elements and event listeners
+   */
   initialize(): void {
     // Get board elements
     this.boardElements = Array.from(document.querySelectorAll('.cell'));
@@ -83,7 +105,7 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
    * Update UI based on current game state
    */
   public render(): void {
-    const state = this.gameWork.getState();
+    const state = this.currentGameState || this.gameWork.getState();
     
     this.updateBoard(state.gameData.board);
     this.updateStatus(state);

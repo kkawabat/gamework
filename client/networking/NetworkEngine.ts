@@ -2,7 +2,7 @@ import { WebRTCManager } from './WebRTCManager';
 import { SignalingService } from './SignalingService';
 import { Player, GameRoom, SignalingMessage, answerMessage, offerMessage, iceCandidateMessage } from '../../shared/signaling-types';
 import { v4 as uuidv4 } from 'uuid';
-import { PlayerAction, StateChange } from '../events/EventFlow';
+import { PlayerAction, StateChange, GameState } from '../events/EventFlow';
 
 export class NetworkEngine {
   private webrtc: WebRTCManager | null = null;
@@ -13,7 +13,7 @@ export class NetworkEngine {
 
   constructor(gameWork: any) {
     this.gameWork = gameWork;
-    this.owner = gameWork.owner;
+    this.owner = gameWork.getOwner();
     this.signaling = new SignalingService(this.gameWork.config.signalServiceConfig);
     
     // Setup signaling message handlers
@@ -22,6 +22,43 @@ export class NetworkEngine {
 
   getRoom(): GameRoom | undefined {
     return this.room;
+  }
+
+  // === DIRECT METHOD CALLS (Hybrid Architecture) ===
+  
+  /**
+   * Update game state - called directly by GameWork
+   */
+  updateState(gameState: GameState): void {
+    // Broadcast state changes to all connected peers
+    if (this.webrtc && this.room) {
+      this.webrtc.broadcastMessage({
+        type: 'stateChange',
+        payload: gameState
+      });
+    }
+  }
+
+  /**
+   * Update room information - called directly by GameWork
+   */
+  updateRoom(room: GameRoom, isHost: boolean): void {
+    this.room = room;
+    
+    // Initialize WebRTC if not already done
+    if (!this.webrtc) {
+      this.webrtc = new WebRTCManager(room, this.gameWork.config.stunServers);
+    }
+  }
+
+  /**
+   * Process player action - called directly by GameWork
+   */
+  processPlayerAction(action: PlayerAction): void {
+    // Send to host for processing
+    if (this.webrtc && this.room) {
+      this.webrtc.sendMessage(this.room.hostId, action);
+    }
   }
 
   async onSendPlayerAction(payload: PlayerAction): Promise<void> {

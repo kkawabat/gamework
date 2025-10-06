@@ -1,6 +1,6 @@
-import { StateChange } from "../events/EventFlow";
-
+import { StateChange, GameState } from "../events/EventFlow";
 import { PlayerAction } from "../events/EventFlow";
+import { GameRoom } from "../../shared/signaling-types";
 
 /**
  * UIEngine - Abstract base class for UI rendering
@@ -21,6 +21,26 @@ export abstract class UIEngine<S, A = unknown> {
   abstract render(): void;
   abstract initialize?(): void;
 
+  // === DIRECT METHOD CALLS (Hybrid Architecture) ===
+  
+  /**
+   * Update game state - called directly by GameWork
+   */
+  updateState(gameState: GameState): void {
+    // Override in subclasses to handle state updates
+    this.render();
+  }
+
+  /**
+   * Update room information - called directly by GameWork
+   */
+  updateRoom(room: GameRoom, isHost: boolean): void {
+    // Override in subclasses to handle room updates
+    this.render();
+  }
+
+  // === EXTERNAL COMMUNICATION (Events) ===
+  
   async onSendPlayerAction(action: A): Promise<void>{
     this.gameWork.sendPlayerAction(action);
   };

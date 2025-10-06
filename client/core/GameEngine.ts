@@ -32,6 +32,24 @@ export abstract class GameEngine<S, A = unknown> {
   abstract applyAction(action: A): S;
   abstract applyStateChange(stateChange: StateChange): S;
   
+  // === DIRECT METHOD CALLS (Hybrid Architecture) ===
+  
+  /**
+   * Process player action - called directly by GameWork
+   */
+  processAction(gameState: any, action: A): any {
+    // Override in subclasses to implement game logic
+    return this.applyAction(action);
+  }
+  
+  /**
+   * Update game state - called directly by GameWork
+   */
+  update(gameState: any, deltaTime: number): any {
+    // Override in subclasses to implement game loop logic
+    return gameState;
+  }
+  
   async onSendPlayerAction(action: A): Promise<void>{};
   async onReceivePlayerAction(action: A): Promise<void>{
     this._state = this.applyAction(action);
