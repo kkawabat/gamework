@@ -20,15 +20,21 @@ export class TicTacToeGameWork extends GameWork<TicTacToeState> {
   // === GAME-SPECIFIC IMPLEMENTATION ===
   
   protected initializeGame(): void {
+    console.log('[TicTacToeGameWork] initializeGame() called');
+    
     // Initialize game-specific components
+    console.log('[TicTacToeGameWork] Creating TicTacToeEngine');
     this.gameEngine = new TicTacToeEngine();
+    console.log('[TicTacToeGameWork] Creating TicTacToeUIEngine');
     this.uiEngine = new TicTacToeUIEngine();
     
     // Set GameWork reference in engines
+    console.log('[TicTacToeGameWork] Setting GameWork reference in engines');
     this.gameEngine.setGameWork(this);
     this.uiEngine.setGameWork(this);
     
     // Initialize complete state in GameWork
+    console.log('[TicTacToeGameWork] Initializing state');
     this.state = {
       // Base GameWork properties
       room: undefined,
@@ -42,11 +48,17 @@ export class TicTacToeGameWork extends GameWork<TicTacToeState> {
       ...TicTacToeEngine.getInitialGameState()
     } as TicTacToeState;
     
+    console.log('[TicTacToeGameWork] Initial state:', this.state);
+    
     // Initialize UI with initial game state
+    console.log('[TicTacToeGameWork] Updating UI with initial state');
     this.uiEngine.updateState(this.state);
     
     // Automatically create a room for the host
+    console.log('[TicTacToeGameWork] Creating room automatically');
     this.createRoom();
+    
+    console.log('[TicTacToeGameWork] initializeGame() complete');
   }
 
   protected getInitialGameState(): TicTacToeState {

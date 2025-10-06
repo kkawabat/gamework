@@ -21,27 +21,42 @@ export class SignalingService {
   }
 
   async connect(): Promise<void> {
+    console.log('[WebSocketSignalingService] Attempting to connect to:', this.config.serverUrl);
+    
     return new Promise((resolve, reject) => {
       try {
         this.ws = new WebSocket(this.config.serverUrl);
         
         this.ws.onopen = () => {
+          console.log('[WebSocketSignalingService] WebSocket connected successfully');
           this.isConnected = true;
           this.reconnectAttempts = 0;
           resolve();
         };
         
         this.ws.onmessage = (event) => {
-          const message = JSON.parse(event.data);
-          this.handleMessage(message);
+          console.log('[WebSocketSignalingService] Received raw message:', event.data);
+          try {
+            const message = JSON.parse(event.data);
+            console.log('[WebSocketSignalingService] Parsed message:', message);
+            this.handleMessage(message);
+          } catch (error) {
+            console.error('[WebSocketSignalingService] Error parsing message:', error);
+          }
         };
         
-        this.ws.onclose = () => {
+        this.ws.onclose = (event) => {
+          console.log('[WebSocketSignalingService] WebSocket closed:', event.code, event.reason);
           this.isConnected = false;
           this.scheduleReconnect();
         };
         
+        this.ws.onerror = (error) => {
+          console.error('[WebSocketSignalingService] WebSocket error:', error);
+        };
+        
       } catch (error) {
+        console.error('[WebSocketSignalingService] Connection error:', error);
         reject(error);
       }
     });
@@ -61,19 +76,28 @@ export class SignalingService {
   }
 
   async sendMessage(message: SignalingMessage): Promise<void> {
+    console.log('[WebSocketSignalingService] sendMessage called with:', message.type, message.action);
+    
     if (!this.isConnected || !this.ws) {
       console.log('[WebSocketSignalingService] Not connected, attempting to connect...');
       await this.connect();
     }
 
     if (!this.isConnected || !this.ws) {
+      console.error('[WebSocketSignalingService] Failed to connect to signaling service');
       throw new Error('Failed to connect to signaling service');
     }
 
     console.log(`[WebSocketSignalingService] Sending message:`, message.type, message);
+    console.log('[WebSocketSignalingService] WebSocket readyState:', this.ws.readyState);
     
-    // For peer-to-peer signaling messages, use signaling_message
-    this.ws.send(JSON.stringify(message));
+    try {
+      this.ws.send(JSON.stringify(message));
+      console.log('[WebSocketSignalingService] Message sent successfully');
+    } catch (error) {
+      console.error('[WebSocketSignalingService] Error sending message:', error);
+      throw error;
+    }
   }
 
 
@@ -86,8 +110,10 @@ export class SignalingService {
   }
 
   private handleMessage(message: SignalingMessage): void {
-    console.log(`[WebSocketSignalingService] Received message:`, message.type, message);
+    console.log(`[WebSocketSignalingService] handleMessage called with:`, message.type, message.action);
+    console.log('[WebSocketSignalingService] Calling messageCallback...');
     this.messageCallback(message);
+    console.log('[WebSocketSignalingService] messageCallback completed');
   }
 
   private scheduleReconnect(): void {

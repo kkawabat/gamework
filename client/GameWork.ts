@@ -55,19 +55,26 @@ export abstract class GameWork<T extends BaseGameWorkState = BaseGameWorkState> 
   private eventBus = new Map<string, Function[]>();
 
   constructor(config?: GameWorkConfig) {
+    console.log('[GameWork] Constructor called');
     this.config = { ...DEFAULT_GAMEWORK_CONFIG, ...config };
+    console.log('[GameWork] Config:', this.config);
     
     // Initialize networking with GameWork reference
+    console.log('[GameWork] Creating NetworkEngine');
     this.network = new NetworkEngine(this);
     
     // Initialize event manager for external communication
+    console.log('[GameWork] Creating EventManager');
     this.eventManager = new EventManager(this);
     
     // Initialize game-specific components
+    console.log('[GameWork] Calling initializeGame()');
     this.initializeGame();
     
     // Initialize networking after state is ready
+    console.log('[GameWork] Calling network.initialize()');
     this.network.initialize();
+    console.log('[GameWork] Constructor complete');
   }
 
   // === ABSTRACT METHODS (Override in game-specific implementations) ===
@@ -235,12 +242,18 @@ export abstract class GameWork<T extends BaseGameWorkState = BaseGameWorkState> 
    * Create a new room
    */
   createRoom(): void {
+    console.log('[GameWork] createRoom() called');
+    console.log('[GameWork] Owner ID:', this.state.owner.id);
+    
     const action: PlayerAction = {
       action: 'CreateRoomRequest',
       playerId: this.state.owner.id
     };
     
+    console.log('[GameWork] Created PlayerAction:', action);
+    console.log('[GameWork] Sending PlayerAction via event system');
     this.sendPlayerAction(action);
+    console.log('[GameWork] PlayerAction sent');
   }
 
   /**
@@ -274,7 +287,11 @@ export abstract class GameWork<T extends BaseGameWorkState = BaseGameWorkState> 
    * Send player action to network (external)
    */
   sendPlayerAction(payload: PlayerAction): void {
+    console.log('[GameWork] sendPlayerAction called with:', payload.action);
+    console.log('[GameWork] EventManager:', this.eventManager);
+    console.log('[GameWork] Emitting sendPlayerAction event');
     this.eventManager.emit('sendPlayerAction', payload);
+    console.log('[GameWork] sendPlayerAction event emitted');
   }
 
   /**

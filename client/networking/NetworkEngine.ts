@@ -68,16 +68,30 @@ export class NetworkEngine {
   }
 
   async onSendPlayerAction(payload: PlayerAction): Promise<void> {
-    console.log('[NetworkEngine] Sending player action:', payload.action);
+    console.log('[NetworkEngine] onSendPlayerAction called with:', payload.action);
+    console.log('[NetworkEngine] Payload details:', payload);
+    
     // send to the host of the room for processing
     const room = this.gameWork.getRoom();
-    this.webrtc?.sendMessage(room?.hostId || "", payload);
+    console.log('[NetworkEngine] Current room:', room);
+    console.log('[NetworkEngine] WebRTC manager:', this.webrtc);
+    
+    if (this.webrtc && room?.hostId) {
+      console.log('[NetworkEngine] Sending to host via WebRTC:', room.hostId);
+      this.webrtc.sendMessage(room.hostId, payload);
+    } else {
+      console.log('[NetworkEngine] No WebRTC connection or room, sending via signaling service');
+      // Send via signaling service for room management
+      this.handlePlayerAction(payload);
+    }
   }
   async onReceivePlayerAction(paction: PlayerAction): Promise<void> {
-    console.log('[NetworkEngine] Received player action:', paction.action);
+    console.log('[NetworkEngine] onReceivePlayerAction called with:', paction.action);
+    console.log('[NetworkEngine] Action details:', paction);
     const action = paction.action;
     switch (action) {
       case 'CreateRoomRequest':
+        console.log('[NetworkEngine] Processing CreateRoomRequest');
         const createRoomMessage: SignalingMessage = {
           type: 'RoomUpdate',
           action: action,
@@ -86,7 +100,10 @@ export class NetworkEngine {
             ...paction.input || {}
           }
         } as SignalingMessage;
+        console.log('[NetworkEngine] Created signaling message:', createRoomMessage);
+        console.log('[NetworkEngine] Signaling service:', this.signaling);
         this.signaling?.sendMessage(createRoomMessage);
+        console.log('[NetworkEngine] CreateRoomRequest sent via signaling service');
         break;
 
       case 'JoinRoomRequest':
@@ -193,22 +210,39 @@ export class NetworkEngine {
    * Setup signaling message handlers for host-based room management
    */
   private setupSignalingHandlers(): void {
+    console.log('[NetworkEngine] Setting up signaling handlers');
+    console.log('[NetworkEngine] Signaling service:', this.signaling);
+    
     this.signaling?.onMessage((message: any) => {
-      console.log('[NetworkEngine] Received signaling message:', message.type);
+      console.log('[NetworkEngine] Received signaling message:', message.type, message.action);
+      console.log('[NetworkEngine] Full message:', message);
       switch (message.type) {
         case 'RoomUpdate':
+          console.log('[NetworkEngine] Handling RoomUpdate message');
           this.handleRoomUpdate(message);
           break;
         case 'SignalingMessage':
+          console.log('[NetworkEngine] Handling SignalingMessage');
           this.handleSignalingMessages(message);
           break;
+        default:
+          console.log('[NetworkEngine] Unknown message type:', message.type);
       }
     });
+    
+    console.log('[NetworkEngine] Signaling handlers setup complete');
   }
 
   private handleRoomUpdate(message: SignalingMessage): void {
+    console.log('[NetworkEngine] handleRoomUpdate called with action:', message.action);
+    console.log('[NetworkEngine] Message payload:', message.payload);
+    
     switch (message.action) {
       case 'CreateRoom':
+        console.log('[NetworkEngine] Processing CreateRoom confirmation');
+        console.log('[NetworkEngine] Room ID:', message.payload.roomId);
+        console.log('[NetworkEngine] Room Code:', message.payload.roomCode);
+        
         // Server confirmed room creation - relay to game system
         this.gameWork.sendStateChange({
           type: 'system',
@@ -218,6 +252,7 @@ export class NetworkEngine {
             roomCode: message.payload.roomCode
           }
         });
+        console.log('[NetworkEngine] CreateRoom state change sent to GameWork');
         break;
       case 'JoinRoom':
         // Create player with WebRTC info
