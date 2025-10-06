@@ -46,6 +46,7 @@ export interface EventPayloadMap {
   receivePlayerAction?: PlayerAction;
   sendStateChange?: StateChange;
   receiveStateChange?: StateChange;
+  createRoomComplete?: StateChange;
 }
 
 export type EventName = keyof EventPayloadMap
@@ -86,6 +87,13 @@ export const ThinClientEventFlow = {
     ],
   },
   receiveStateChange: {
+    sender: { method: 'onSendStateChange', component: 'NetworkEngine' },
+    listeners: [
+      { method: 'onReceiveStateChange', component: 'UIEngine' }
+    ],
+  },
+  // NetworkEngine completion events (no event loop)
+  createRoomComplete: {
     sender: { method: 'onSendStateChange', component: 'NetworkEngine' },
     listeners: [
       { method: 'onReceiveStateChange', component: 'UIEngine' }

@@ -81,15 +81,35 @@ export class NetworkEngine {
       case 'system':
         switch (schange.action) {
           case 'CreateRoom':
+            // Initialize room and WebRTC manager synchronously
             this.room = {
               id: schange.payload?.roomId,
               hostId: this.owner.id,
               players: new Map([[this.owner.id, this.owner]]),
             } as GameRoom;
             this.webrtc = new WebRTCManager(this.room, this.gameWork.config.stunServers);
+            
+            // Emit completion event with different action to avoid event loop
+            this.gameWork.sendStateChange({
+              type: 'system',
+              action: 'CreateRoomComplete',
+              payload: {
+                roomId: schange.payload?.roomId,
+                roomCode: schange.payload?.roomCode,
+                isInitialized: true // Flag to indicate WebRTC is ready
+              }
+            });
           break;
           case 'JoinRoom':
             this.room?.players.set(schange.payload?.playerId, schange.payload?.player);
+             // Emit completion event with different action to avoid event loop
+             this.gameWork.sendStateChange({
+              type: 'system',
+              action: 'JoinRoomComplete',
+              payload: {
+                playerId: schange.payload?.playerId
+              }
+            });
             break;
           case 'LeaveRoom':
             if (this.room?.hostId === this.owner.id) {
