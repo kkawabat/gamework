@@ -218,7 +218,7 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
        console.log(`Looking up room with code: ${roomParam}`);
        this.addGameLogEntry(`Looking up room: ${roomParam.toUpperCase()}`, 'info');
        this.gameWork.sendPlayerAction({
-        action: 'JoinRoom',
+        action: 'JoinRoomRequest',
         playerId: this.gameWork.getOwner().id,
         input: { roomCode: roomParam }
        })
@@ -226,7 +226,7 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
        // Host a new room
        this.addGameLogEntry('Creating new game room...', 'info');
        this.gameWork.sendPlayerAction({
-        action: 'CreateRoom',
+        action: 'CreateRoomRequest',
         playerId: this.gameWork.getOwner().id,
        })
      }
@@ -255,7 +255,7 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
           
           const urlParams = new URLSearchParams(window.location.search);
           const roomParam = urlParams.get('room');
-          
+
           // Update join room button status if we joined an existing room
           if (roomParam) {
             this.updateJoinRoomButtonStatus('Joined!', true);
