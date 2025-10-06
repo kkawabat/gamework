@@ -71,18 +71,24 @@ export class NetworkEngine {
     console.log('[NetworkEngine] onSendPlayerAction called with:', payload.action);
     console.log('[NetworkEngine] Payload details:', payload);
     
-    // send to the host of the room for processing
+    // Only handle game actions (not room management)
+    const gameActions = ['PlayerMove', 'RestartGame'];
+    if (!gameActions.includes(payload.action)) {
+      console.log('[NetworkEngine] Not a game action, ignoring:', payload.action);
+      return;
+    }
+    
+    // Send game actions to the host via WebRTC
     const room = this.gameWork.getRoom();
     console.log('[NetworkEngine] Current room:', room);
     console.log('[NetworkEngine] WebRTC manager:', this.webrtc);
     
     if (this.webrtc && room?.hostId) {
-      console.log('[NetworkEngine] Sending to host via WebRTC:', room.hostId);
+      console.log('[NetworkEngine] Sending game action to host via WebRTC:', room.hostId);
       this.webrtc.sendMessage(room.hostId, payload);
     } else {
-      console.log('[NetworkEngine] No WebRTC connection or room, sending via signaling service');
-      // Send via signaling service for room management
-      this.handlePlayerAction(payload);
+      console.log('[NetworkEngine] No WebRTC connection or room, cannot send game action');
+      console.log('[NetworkEngine] WebRTC:', this.webrtc, 'Room:', room);
     }
   }
   async onReceivePlayerAction(paction: PlayerAction): Promise<void> {
