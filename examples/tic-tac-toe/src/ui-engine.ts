@@ -1,6 +1,7 @@
 import { UIEngine } from '../../../client';
 import { TicTacToeAction, TicTacToeEngine, TicTacToeState } from './game-engine';
 import { generateQRCode } from '../../../client/utils';
+import { StateChange } from '../../../client/events/EventFlow';
 
 export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction> {
   private boardElements: HTMLElement[] = [];
@@ -230,34 +231,55 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
        })
      }
      
-     // Determine if this player is the host
-     this.isHost = this.gameWork.getOwner()?.isHost || false;
-     
-     // Assign player roles based on connection order
-     const players = this.gameWork.getPlayers();
-     const playerCount = players.length;
-     
-     console.log(`Room Code: ${roomId.substring(0, 6).toUpperCase()}, Is host: ${this.isHost}, Player count: ${playerCount}`);
-     
-     // Update room code and QR code
-     this.updateRoomCode(roomId);
-     await this.generateQRCode(roomId);
-     
-     // Update join room button status if we joined an existing room
-     if (roomParam) {
-       this.updateJoinRoomButtonStatus('Joined!', true);
-     }
-     
-     // Update game log with successful initialization
-     this.addGameLogEntry('Game initialized successfully!', 'success');
-     this.addGameLogEntry(`Room Code: ${roomId.substring(0, 6).toUpperCase()}`, 'info');
-     this.addGameLogEntry(`Status: ${this.isHost ? 'Host' : 'Player'}`, 'info');
-     
-     if (roomParam) {
-       this.addGameLogEntry(`Joined existing room: ${roomId.substring(0, 6).toUpperCase()}`, 'success');
-     } else {
-       this.addGameLogEntry(`Hosted new room: ${roomId.substring(0, 6).toUpperCase()}`, 'success');
-     }
+  }
+
+  async onReceiveStateChange(schange: StateChange): Promise<void> {
+    switch (schange.type) {
+      case 'system':
+        switch (schange.action) {
+          case 'CreateRoom':
+          // Determine if this player is the host
+          this.isHost = this.gameWork.getOwner()?.isHost || false;
+          
+          // Assign player roles based on connection order
+          const room = this.gameWork.getRoom();
+          const roomId = schange.payload?.roomId;
+          const players = room?.players.values() || [];
+          const playerCount = players.length;
+          
+          console.log(`Room Code: ${roomId.substring(0, 6).toUpperCase()}, Is host: ${this.isHost}, Player count: ${playerCount}`);
+          
+          // Update room code and QR code
+          this.updateRoomCode(roomId);
+          await this.generateQRCode(roomId);
+          
+          const urlParams = new URLSearchParams(window.location.search);
+          const roomParam = urlParams.get('room');
+          
+          // Update join room button status if we joined an existing room
+          if (roomParam) {
+            this.updateJoinRoomButtonStatus('Joined!', true);
+          }
+          
+          // Update game log with successful initialization
+          this.addGameLogEntry('Game initialized successfully!', 'success');
+          this.addGameLogEntry(`Room Code: ${roomId.substring(0, 6).toUpperCase()}`, 'info');
+          this.addGameLogEntry(`Status: ${this.isHost ? 'Host' : 'Player'}`, 'info');
+          
+          if (roomParam) {
+            this.addGameLogEntry(`Joined existing room: ${roomId.substring(0, 6).toUpperCase()}`, 'success');
+          } else {
+            this.addGameLogEntry(`Hosted new room: ${roomId.substring(0, 6).toUpperCase()}`, 'success');
+          }
+          break;
+        case 'CreateRoom':
+          this.updateJoinRoomButtonStatus('Created!', true);
+          break;
+      }
+      default:
+        this.render();
+        break;
+    }
   }
 
   /**

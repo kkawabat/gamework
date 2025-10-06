@@ -1,3 +1,5 @@
+import { StateChange } from "../events/EventFlow";
+
 /**
  * GameEngine - Base class for game logic
  * 
@@ -28,14 +30,15 @@ export abstract class GameEngine<S, A = unknown> {
   }
 
   abstract applyAction(action: A): S;
-
+  abstract applyStateChange(stateChange: StateChange): S;
+  
   async onSendPlayerAction(action: A): Promise<void>{};
   async onReceivePlayerAction(action: A): Promise<void>{
     this._state = this.applyAction(action);
   };
-  async onSendStateChange(state: S): Promise<void>{};
-  async onReceiveStateChange(state: S): Promise<void>{
-    this._state = state;
+  async onSendStateChange(stateChange: StateChange): Promise<void>{};
+  async onReceiveStateChange(stateChange: StateChange): Promise<void>{
+    this._state = this.applyStateChange(stateChange);
   };
 
   

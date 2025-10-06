@@ -8,6 +8,7 @@ import {
 } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { GameState, PlayerAction, StateChange, ThinClientEventFlow } from './events/EventFlow';
+import { GameRoom } from '../shared/signaling-types';
 
 
 
@@ -72,6 +73,10 @@ export class GameWork {
 
   getOwner(): Player {
     return this.owner;
+  }
+
+  getRoom(): GameRoom | undefined {
+    return this.network.getRoom();
   }
 
   sendPlayerAction(payload: PlayerAction) {

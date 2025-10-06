@@ -20,6 +20,10 @@ export class NetworkEngine {
     this.setupSignalingHandlers();
   }
 
+  getRoom(): GameRoom | undefined {
+    return this.room;
+  }
+
   async onSendPlayerAction(payload: PlayerAction): Promise<void> {
     // send to the host of the room for processing
     this.webrtc?.sendMessage(this.room?.hostId || "", payload);

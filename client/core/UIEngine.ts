@@ -25,9 +25,7 @@ export abstract class UIEngine<S, A = unknown> {
     this.gameWork.sendPlayerAction(action);
   };
   async onReceivePlayerAction(action: A): Promise<void>{};
-  async onSendStateChange(state: S): Promise<void>{};
-  async onReceiveStateChange(state: S): Promise<void>{
-    this.render();
-  };
+  async onSendStateChange(stateChange: StateChange): Promise<void>{};
+  async onReceiveStateChange(stateChange: StateChange): Promise<void>{};
 
 }
