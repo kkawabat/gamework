@@ -103,4 +103,29 @@ export class EventManager {
     
     console.log('[EventManager] Event handlers setup complete');
   }
+
+  /**
+   * Update component references after they are initialized
+   */
+  updateComponents(gameEngine: any, uiEngine: any): void {
+    console.log('[EventManager] updateComponents called');
+    console.log('[EventManager] GameEngine:', gameEngine);
+    console.log('[EventManager] UIEngine:', uiEngine);
+    
+    this.gameEngine = gameEngine;
+    this.uiEngine = uiEngine;
+    
+    // Update component mapping
+    const componentMapping = new Map([
+      ['NetworkEngine', this.networkEngine],
+      ['GameEngine', this.gameEngine],
+      ['UIEngine', this.uiEngine],
+      ['GameWork', this] // GameWork is the EventManager itself
+    ]);
+
+    console.log('[EventManager] Updated component mapping:', componentMapping);
+    
+    // Re-setup event handlers with updated components
+    this.setupEventHandlers();
+  }
 }

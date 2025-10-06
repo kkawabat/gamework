@@ -75,6 +75,10 @@ export abstract class GameWork<T extends BaseGameWorkState = BaseGameWorkState> 
     console.log('[GameWork] Calling network.initialize()');
     this.network.initialize();
     
+    // Update event manager with initialized components
+    console.log('[GameWork] Updating event manager with initialized components');
+    this.eventManager.updateComponents(this.gameEngine, this.uiEngine);
+    
     // Automatically create a room for the host after networking is ready
     console.log('[GameWork] Creating room automatically after network initialization');
     this.createRoom();
