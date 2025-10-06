@@ -10,7 +10,7 @@ export interface Player {
   connection?: any; // RTCPeerConnection
   dataChannel?: any; // RTCDataChannel
   isConnected?: boolean;
-  ~50
+  
   [key: string]: any;
 }
 
