@@ -78,19 +78,25 @@ export class EventManager {
           const component = componentMapping.get(listener.component);
           if (!component) {
             console.warn(`[EventManager] Component ${listener.component} not found for event ${eventName}`);
+            console.warn(`[EventManager] Available components:`, Array.from(componentMapping.keys()));
             return;
           }
           
           // Check if the method exists on the component
           if (typeof component[listener.method] !== 'function') {
             console.warn(`[EventManager] Method ${listener.method} not found on ${listener.component} for event ${eventName}`);
+            console.warn(`[EventManager] Available methods on ${listener.component}:`, Object.getOwnPropertyNames(component));
             return;
           }
           
           // Call the handler method
           console.log(`[EventManager] Calling ${listener.component}.${listener.method} with payload:`, payload);
-          component[listener.method](payload);
-          console.log(`[EventManager] ${listener.component}.${listener.method} completed`);
+          try {
+            component[listener.method](payload);
+            console.log(`[EventManager] ${listener.component}.${listener.method} completed`);
+          } catch (error) {
+            console.error(`[EventManager] Error calling ${listener.component}.${listener.method}:`, error);
+          }
         });
       };
     });

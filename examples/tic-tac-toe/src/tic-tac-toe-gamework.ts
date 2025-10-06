@@ -54,10 +54,6 @@ export class TicTacToeGameWork extends GameWork<TicTacToeState> {
     console.log('[TicTacToeGameWork] Updating UI with initial state');
     this.uiEngine.updateState(this.state);
     
-    // Automatically create a room for the host
-    console.log('[TicTacToeGameWork] Creating room automatically');
-    this.createRoom();
-    
     console.log('[TicTacToeGameWork] initializeGame() complete');
   }
 

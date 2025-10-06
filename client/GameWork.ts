@@ -74,6 +74,11 @@ export abstract class GameWork<T extends BaseGameWorkState = BaseGameWorkState> 
     // Initialize networking after state is ready
     console.log('[GameWork] Calling network.initialize()');
     this.network.initialize();
+    
+    // Automatically create a room for the host after networking is ready
+    console.log('[GameWork] Creating room automatically after network initialization');
+    this.createRoom();
+    
     console.log('[GameWork] Constructor complete');
   }
 
