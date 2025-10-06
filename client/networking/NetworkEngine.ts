@@ -122,6 +122,7 @@ export class NetworkEngine {
    */
   private setupSignalingHandlers(): void {
     this.signaling.onMessage((message: any) => {
+      console.log('[NetworkEngine] Received signaling message:', message.type);
       switch (message.type) {
         case 'RoomUpdate':
           this.handleRoomUpdate(message);
@@ -135,7 +136,8 @@ export class NetworkEngine {
 
   private handleRoomUpdate(message: SignalingMessage): void {
     switch (message.action) {
-      case 'CreateRoomRequest':
+      case 'CreateRoom':
+        // Server confirmed room creation - relay to game system
         this.gameWork.sendStateChange({
           type: 'system',
           action: 'CreateRoom',
@@ -145,7 +147,7 @@ export class NetworkEngine {
           }
         });
         break;
-      case 'JoinRoomRequest':
+      case 'JoinRoom':
         // Create player with WebRTC info
         const newPlayer: Player = {
           id: message.from,

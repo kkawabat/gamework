@@ -157,7 +157,7 @@ export class SignalingServer {
     // Send confirmation to host
     this.sendMessage(connection.ws, {
       type: 'RoomUpdate',
-      action: 'CreateRoomRequest',
+      action: 'CreateRoom',
       from: 'server',
       payload: {
         roomId,
@@ -202,7 +202,7 @@ export class SignalingServer {
     if (hostConnection) {
       this.sendMessage(hostConnection.ws, {
         type: 'RoomUpdate',
-        action: 'JoinRoomRequest',
+        action: 'JoinRoom',
         from: 'server',
         payload: {
           playerId: message.from
