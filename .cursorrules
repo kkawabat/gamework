@@ -1,0 +1,145 @@
+# GameWork Architecture Rules
+
+## 🏗️ HYBRID ARCHITECTURE PRINCIPLES
+
+### ✅ CORRECT: Direct Method Calls (Internal Communication)
+- `GameWork` → `NetworkEngine.method()` (direct)
+- `GameWork` → `UIEngine.method()` (direct) 
+- `GameWork` → `GameEngine.method()` (direct)
+- `NetworkEngine` → `GameWork.handleRoomUpdate()` (direct)
+- `GameWork` → `UIEngine.updateRoom()` (direct)
+
+### ❌ WRONG: Events for Internal Communication
+- `GameWork.sendStateChange()` for internal updates
+- `NetworkEngine.onReceiveStateChange()` for internal logic
+- `UIEngine.onReceiveStateChange()` for internal updates
+
+### ✅ CORRECT: Events (External Communication Only)
+- `GameWork` ↔ `SignalingService` (WebSocket)
+- `GameWork` ↔ `WebRTC` (peer-to-peer)
+- Client ↔ Server communication
+
+## 🎯 COMPONENT RESPONSIBILITIES
+
+### GameWork (Central State Manager)
+- **Direct calls**: `updateGameState()`, `handleRoomUpdate()`, `addConnectedPlayer()`
+- **Events**: Only for external communication (signaling, WebRTC)
+- **State**: Single source of truth for all game state
+
+### NetworkEngine (Network Communication)
+- **Direct calls**: `GameWork.handleRoomUpdate()`, `GameWork.addConnectedPlayer()`
+- **Events**: Only for external signaling (WebSocket, WebRTC)
+- **Never**: Send internal state changes via events
+
+### UIEngine (User Interface)
+- **Direct calls**: `GameWork.updateRoom()`, `GameWork.updateState()`
+- **Events**: Only for external communication
+- **Never**: Listen to internal state changes via events
+
+### GameEngine (Game Logic)
+- **Direct calls**: `GameWork.processPlayerAction()`, `GameWork.updateGameState()`
+- **Events**: Only for external communication
+- **Never**: Send internal state changes via events
+
+## 🚫 COMMON MISTAKES TO AVOID
+
+### ❌ Event-Based Internal Communication
+```typescript
+// WRONG - Don't use events for internal communication
+this.gameWork.sendStateChange({
+  type: 'system',
+  action: 'CreateRoom',
+  payload: { roomId, roomCode }
+});
+```
+
+### ✅ Direct Method Calls
+```typescript
+// CORRECT - Use direct method calls for internal communication
+this.gameWork.handleRoomUpdate(newRoom);
+this.gameWork.updateGameState(newState);
+```
+
+### ❌ Listening to Internal Events
+```typescript
+// WRONG - Don't listen to internal state changes
+async onReceiveStateChange(schange: StateChange): Promise<void> {
+  // Internal logic here
+}
+```
+
+### ✅ Direct Method Calls
+```typescript
+// CORRECT - Use direct method calls
+updateRoom(room: GameRoom, isHost: boolean): void {
+  // Handle room updates directly
+}
+```
+
+## 🔄 CORRECT FLOW PATTERNS
+
+### Room Creation Flow
+1. `GameWork.createRoom()` → `NetworkEngine.onReceivePlayerAction()` (event - external)
+2. `NetworkEngine` → `SignalingService.sendMessage()` (external)
+3. Server response → `NetworkEngine.handleRoomUpdate()` (direct)
+4. `NetworkEngine` → `GameWork.handleRoomUpdate()` (direct)
+5. `GameWork` → `UIEngine.updateRoom()` (direct)
+
+### Game State Updates
+1. `GameWork.updateGameState()` → `UIEngine.updateState()` (direct)
+2. `GameWork.updateGameState()` → `NetworkEngine.updateState()` (direct)
+
+### Player Actions
+1. `UIEngine` → `GameWork.sendPlayerAction()` (event - external)
+2. `GameWork` → `NetworkEngine.onReceivePlayerAction()` (event - external)
+3. `NetworkEngine` → `GameWork.processPlayerAction()` (direct)
+
+## 🎯 EVENT FLOW CONFIGURATION
+
+### ✅ CORRECT Event Flow
+```typescript
+// External communication only
+sendPlayerAction: {
+  sender: { method: 'onSendPlayerAction', component: 'UIEngine' },
+  listeners: [{ method: 'onReceivePlayerAction', component: 'NetworkEngine' }]
+}
+```
+
+### ❌ WRONG Event Flow
+```typescript
+// Don't use events for internal communication
+receiveStateChange: {
+  sender: { method: 'onSendStateChange', component: 'NetworkEngine' },
+  listeners: [
+    { method: 'onReceiveStateChange', component: 'NetworkEngine' }, // WRONG
+    { method: 'onReceiveStateChange', component: 'UIEngine' }        // WRONG
+  ]
+}
+```
+
+## 🔍 DEBUGGING CHECKLIST
+
+Before making changes, ask:
+1. **Is this internal communication?** → Use direct method calls
+2. **Is this external communication?** → Use events
+3. **Am I sending state changes internally?** → Use direct calls
+4. **Am I listening to internal events?** → Use direct calls
+5. **Does this follow the hybrid architecture?** → Verify pattern
+
+## 📋 ARCHITECTURE VALIDATION
+
+### ✅ Good Patterns
+- `GameWork.handleRoomUpdate()` - Direct method call
+- `UIEngine.updateRoom()` - Direct method call
+- `NetworkEngine.sendMessage()` - External communication
+- `GameWork.sendPlayerAction()` - External communication
+
+### ❌ Bad Patterns
+- `GameWork.sendStateChange()` for internal updates
+- `NetworkEngine.onReceiveStateChange()` for internal logic
+- `UIEngine.onReceiveStateChange()` for internal updates
+- Events for internal component communication
+
+## 🎯 KEY PRINCIPLE
+
+**Events are for external communication only. Internal communication must use direct method calls.**
