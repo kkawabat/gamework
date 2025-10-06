@@ -32,6 +32,13 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
   updateRoom(room: GameRoom, isHost: boolean): void {
     this.currentRoom = room;
     this.isHost = isHost;
+    
+    // Update connection status based on room
+    const connectedPlayers = this.gameWork.getConnectedPlayers();
+    const playerCount = this.gameWork.getPlayerCount();
+    
+    console.log(`Room updated: ${room.id}, Host: ${isHost}, Players: ${playerCount}`);
+    
     this.render();
   }
 

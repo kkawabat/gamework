@@ -13,7 +13,7 @@ import { GameRoom } from '../shared/signaling-types';
 // Hybrid architecture: Direct calls for internal logic, events for external communication
 interface GameWorkState {
   gameState: GameState;
-  room?: GameRoom;
+  room?: GameRoom;  // Single source of truth for all connection info
   owner: Player;
   isHost: boolean;
   isConnected: boolean;
@@ -112,6 +112,18 @@ export class GameWork {
     return this.state.isConnected;
   }
 
+  getConnectedPlayers(): Map<string, Player> {
+    return this.state.room?.players || new Map();
+  }
+
+  getHostId(): string | undefined {
+    return this.state.room?.hostId;
+  }
+
+  getPlayerCount(): number {
+    return this.state.room?.players.size || 0;
+  }
+
   // === INTERNAL GAME LOGIC (Direct calls) ===
   
   /**
@@ -156,6 +168,54 @@ export class GameWork {
     
     // Emit event for external systems
     this.emit('roomUpdated', { room, isHost });
+  }
+
+  /**
+   * Add a connected player
+   */
+  addConnectedPlayer(player: Player): void {
+    if (this.state.room) {
+      this.state.room.players.set(player.id, player);
+      
+      // Update components
+      this.uiEngine.updateState(this.state.gameState);
+      this.network.updateState(this.state.gameState);
+      
+      // Emit event for external systems
+      this.emit('playerConnected', { player, connectedPlayers: this.state.room.players });
+    }
+  }
+
+  /**
+   * Remove a disconnected player
+   */
+  removeConnectedPlayer(playerId: string): void {
+    if (this.state.room) {
+      this.state.room.players.delete(playerId);
+      
+      // Update components
+      this.uiEngine.updateState(this.state.gameState);
+      this.network.updateState(this.state.gameState);
+      
+      // Emit event for external systems
+      this.emit('playerDisconnected', { playerId, connectedPlayers: this.state.room.players });
+    }
+  }
+
+  /**
+   * Update player information
+   */
+  updatePlayer(player: Player): void {
+    if (this.state.room) {
+      this.state.room.players.set(player.id, player);
+      
+      // Update components
+      this.uiEngine.updateState(this.state.gameState);
+      this.network.updateState(this.state.gameState);
+      
+      // Emit event for external systems
+      this.emit('playerUpdated', { player, connectedPlayers: this.state.room.players });
+    }
   }
 
   // === EXTERNAL COMMUNICATION (Events) ===

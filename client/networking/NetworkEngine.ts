@@ -138,36 +138,36 @@ export class NetworkEngine {
             });
           break;
           case 'JoinRoom':
-            this.room?.players.set(schange.payload?.playerId, schange.payload?.player);
-             // Emit completion event with different action to avoid event loop
-             this.gameWork.sendStateChange({
-              type: 'system',
-              action: 'JoinRoomComplete',
-              payload: {
-                playerId: schange.payload?.playerId
-              }
-            });
+            const player = schange.payload?.player;
+            if (player && this.room) {
+              this.room.players.set(player.id, player);
+              // Update GameWork state with new player
+              this.gameWork.addConnectedPlayer(player);
+            }
             break;
           case 'LeaveRoom':
+            const playerId = schange.payload?.playerId;
             if (this.room?.hostId === this.owner.id) {
-              if (schange.payload?.playerId === this.owner.id) {
+              if (playerId === this.owner.id) {
+                // Host leaving - disconnect all and close room
                 this.webrtc?.disconnectAll();
                 this.room = undefined;
                 
+                const roomId = schange.payload?.roomId || '';
                 const leaveRoomMessage: SignalingMessage = {
                   type: 'RoomUpdate',
                   action: 'CloseRoomRequest',
-                  from: schange.payload?.playerId,
+                  from: playerId,
                   payload: {
-                    roomId: schange.payload.roomId
+                    roomId: roomId
                   }
                 } as SignalingMessage;
                 this.signaling.sendMessage(leaveRoomMessage);
-                
-              }
-              else {
-                this.webrtc?.disconnectPeer(schange.payload?.playerId);
-                this.room?.players.delete(schange.payload?.playerId);
+              } else {
+                // Player leaving - disconnect and remove from state
+                this.webrtc?.disconnectPeer(playerId);
+                this.room?.players.delete(playerId);
+                this.gameWork.removeConnectedPlayer(playerId);
               }
             }
             break;
