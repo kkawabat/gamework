@@ -8,7 +8,6 @@ export class NetworkEngine {
   private webrtc: WebRTCManager | null = null;
   private signaling: SignalingService;
   private owner: Player;
-  private room?: GameRoom;
   protected gameWork: any;
 
   constructor(gameWork: any) {
@@ -21,7 +20,7 @@ export class NetworkEngine {
   }
 
   getRoom(): GameRoom | undefined {
-    return this.room;
+    return this.gameWork.getRoom();
   }
 
   // === DIRECT METHOD CALLS (Hybrid Architecture) ===
@@ -31,7 +30,8 @@ export class NetworkEngine {
    */
   updateState(gameState: GameState): void {
     // Broadcast state changes to all connected peers
-    if (this.webrtc && this.room) {
+    const room = this.gameWork.getRoom();
+    if (this.webrtc && room) {
       this.webrtc.broadcastMessage({
         type: 'stateChange',
         payload: gameState
@@ -43,8 +43,6 @@ export class NetworkEngine {
    * Update room information - called directly by GameWork
    */
   updateRoom(room: GameRoom, isHost: boolean): void {
-    this.room = room;
-    
     // Initialize WebRTC if not already done
     if (!this.webrtc) {
       this.webrtc = new WebRTCManager(room, this.gameWork.config.stunServers);
@@ -56,15 +54,17 @@ export class NetworkEngine {
    */
   processPlayerAction(action: PlayerAction): void {
     // Send to host for processing
-    if (this.webrtc && this.room) {
-      this.webrtc.sendMessage(this.room.hostId, action);
+    const room = this.gameWork.getRoom();
+    if (this.webrtc && room) {
+      this.webrtc.sendMessage(room.hostId, action);
     }
   }
 
   async onSendPlayerAction(payload: PlayerAction): Promise<void> {
     console.log('[NetworkEngine] Sending player action:', payload.action);
     // send to the host of the room for processing
-    this.webrtc?.sendMessage(this.room?.hostId || "", payload);
+    const room = this.gameWork.getRoom();
+    this.webrtc?.sendMessage(room?.hostId || "", payload);
   }
   async onReceivePlayerAction(paction: PlayerAction): Promise<void> {
     console.log('[NetworkEngine] Received player action:', paction.action);
@@ -95,11 +95,12 @@ export class NetworkEngine {
         break;
 
       case 'LeaveRoomRequest':
+        const room = this.gameWork.getRoom();
         this.gameWork.sendStateChange({
           type: 'system',
           action: 'LeaveRoom',
           payload: {
-            roomId: this.room?.id,
+            roomId: room?.id,
             playerId: paction.playerId
           }
         });
@@ -119,12 +120,15 @@ export class NetworkEngine {
         switch (schange.action) {
           case 'CreateRoom':
             // Initialize room and WebRTC manager synchronously
-            this.room = {
+            const newRoom = {
               id: schange.payload?.roomId,
               hostId: this.owner.id,
               players: new Map([[this.owner.id, this.owner]]),
             } as GameRoom;
-            this.webrtc = new WebRTCManager(this.room, this.gameWork.config.stunServers);
+            this.webrtc = new WebRTCManager(newRoom, this.gameWork.config.stunServers);
+            
+            // Update GameWork state
+            this.gameWork.handleRoomUpdate(newRoom);
             
             // Emit completion event with different action to avoid event loop
             this.gameWork.sendStateChange({
@@ -139,19 +143,20 @@ export class NetworkEngine {
           break;
           case 'JoinRoom':
             const player = schange.payload?.player;
-            if (player && this.room) {
-              this.room.players.set(player.id, player);
+            if (player) {
               // Update GameWork state with new player
               this.gameWork.addConnectedPlayer(player);
             }
             break;
           case 'LeaveRoom':
             const playerId = schange.payload?.playerId;
-            if (this.room?.hostId === this.owner.id) {
+            const room = this.gameWork.getRoom();
+            if (room?.hostId === this.owner.id) {
               if (playerId === this.owner.id) {
                 // Host leaving - disconnect all and close room
                 this.webrtc?.disconnectAll();
-                this.room = undefined;
+                // Clear room in GameWork state
+                this.gameWork.handleRoomUpdate(undefined as any);
                 
                 const roomId = schange.payload?.roomId || '';
                 const leaveRoomMessage: SignalingMessage = {
@@ -166,7 +171,6 @@ export class NetworkEngine {
               } else {
                 // Player leaving - disconnect and remove from state
                 this.webrtc?.disconnectPeer(playerId);
-                this.room?.players.delete(playerId);
                 this.gameWork.removeConnectedPlayer(playerId);
               }
             }
@@ -216,7 +220,8 @@ export class NetworkEngine {
           dataChannel: undefined,
           isConnected: false
         };
-        this.room?.players.set(message.from, newPlayer);
+        // Add player to GameWork state
+        this.gameWork.addConnectedPlayer(newPlayer);
         this.webrtc?.createOffer(message.from);
         break;
       case 'CloseRoomRequest':

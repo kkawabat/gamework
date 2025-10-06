@@ -12,7 +12,6 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
   private joinRoomBtn: HTMLElement | null = null;
   private roomCodeInput: HTMLInputElement | null = null;
   private gameEngine: TicTacToeEngine;
-  private isHost: boolean = false;
   private currentGameState?: GameState;
   private currentRoom?: GameRoom;
 
@@ -31,13 +30,13 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
    */
   updateRoom(room: GameRoom, isHost: boolean): void {
     this.currentRoom = room;
-    this.isHost = isHost;
     
     // Update connection status based on room
     const connectedPlayers = this.gameWork.getConnectedPlayers();
     const playerCount = this.gameWork.getPlayerCount();
+    const actualIsHost = this.gameWork.isHost();
     
-    console.log(`Room updated: ${room.id}, Host: ${isHost}, Players: ${playerCount}`);
+    console.log(`Room updated: ${room.id}, Host: ${actualIsHost}, Players: ${playerCount}`);
     
     this.render();
   }
@@ -269,7 +268,7 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
           case 'CreateRoomComplete':
             // WebRTC is fully initialized - safe to access room data
             // Determine if this player is the host
-            this.isHost = this.gameWork.getOwner()?.isHost || false;
+            const isHost = this.gameWork.isHost();
             
             // Get room data (WebRTC is now ready)
             const room = this.gameWork.getRoom();
@@ -277,7 +276,7 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
             const players = room?.players.values() || [];
             const playerCount = players.length;
             
-            console.log(`Room Code: ${roomId.substring(0, 6).toUpperCase()}, Is host: ${this.isHost}, Player count: ${playerCount}`);
+            console.log(`Room Code: ${roomId.substring(0, 6).toUpperCase()}, Is host: ${isHost}, Player count: ${playerCount}`);
             
             // Update room code and QR code
             this.updateRoomCode(roomId);
@@ -294,7 +293,7 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
             // Update game log with successful initialization
             this.addGameLogEntry('Game initialized successfully!', 'success');
             this.addGameLogEntry(`Room Code: ${roomId.substring(0, 6).toUpperCase()}`, 'info');
-            this.addGameLogEntry(`Status: ${this.isHost ? 'Host' : 'Player'}`, 'info');
+            this.addGameLogEntry(`Status: ${isHost ? 'Host' : 'Player'}`, 'info');
             
             if (roomParam) {
               this.addGameLogEntry(`Joined existing room: ${roomId.substring(0, 6).toUpperCase()}`, 'success');

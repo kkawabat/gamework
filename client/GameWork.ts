@@ -14,9 +14,7 @@ import { GameRoom } from '../shared/signaling-types';
 interface GameWorkState {
   gameState: GameState;
   room?: GameRoom;  // Single source of truth for all connection info
-  owner: Player;
-  isHost: boolean;
-  isConnected: boolean;
+  owner: Player;   // Owner info (no connection state here)
 }
 
 
@@ -69,12 +67,8 @@ export class GameWork {
       owner: {
         id: uuidv4(),
         name: 'Host',
-        isHost: true,
-        isConnected: true,
         lastSeen: Date.now()
-      },
-      isHost: true,
-      isConnected: false
+      }
     };
 
     // Initialize networking with GameWork reference
@@ -105,11 +99,11 @@ export class GameWork {
   }
 
   isHost(): boolean {
-    return this.state.isHost;
+    return this.state.room?.hostId === this.state.owner.id;
   }
 
   isConnected(): boolean {
-    return this.state.isConnected;
+    return this.state.room !== undefined;
   }
 
   getConnectedPlayers(): Map<string, Player> {
@@ -157,17 +151,15 @@ export class GameWork {
   /**
    * Handle room creation/joining
    */
-  handleRoomUpdate(room: GameRoom, isHost: boolean): void {
+  handleRoomUpdate(room: GameRoom): void {
     this.state.room = room;
-    this.state.isHost = isHost;
-    this.state.isConnected = true;
     
     // Update components directly
-    this.uiEngine.updateRoom(room, isHost);
-    this.network.updateRoom(room, isHost);
+    this.uiEngine.updateRoom(room, this.isHost());
+    this.network.updateRoom(room, this.isHost());
     
     // Emit event for external systems
-    this.emit('roomUpdated', { room, isHost });
+    this.emit('roomUpdated', { room, isHost: this.isHost() });
   }
 
   /**
