@@ -2,7 +2,7 @@ import { WebRTCManager } from './WebRTCManager';
 import { SignalingService } from './SignalingService';
 import { Player, GameRoom, SignalingMessage, answerMessage, offerMessage, iceCandidateMessage } from '../../shared/signaling-types';
 import { v4 as uuidv4 } from 'uuid';
-import { PlayerAction, StateChange, GameState } from '../events/EventFlow';
+import { PlayerAction, StateChange } from '../events/EventFlow';
 
 export class NetworkEngine {
   private webrtc: WebRTCManager | null = null;
@@ -28,7 +28,7 @@ export class NetworkEngine {
   /**
    * Update game state - called directly by GameWork
    */
-  updateState(gameState: GameState): void {
+  updateState(gameState: any): void {
     // Broadcast state changes to all connected peers
     const room = this.gameWork.getRoom();
     if (this.webrtc && room) {

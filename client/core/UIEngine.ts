@@ -1,4 +1,4 @@
-import { StateChange, GameState } from "../events/EventFlow";
+import { StateChange } from "../events/EventFlow";
 import { PlayerAction } from "../events/EventFlow";
 import { GameRoom } from "../../shared/signaling-types";
 
@@ -26,7 +26,7 @@ export abstract class UIEngine<S, A = unknown> {
   /**
    * Update game state - called directly by GameWork
    */
-  updateState(gameState: GameState): void {
+  updateState(gameState: any): void {
     // Override in subclasses to handle state updates
     this.render();
   }

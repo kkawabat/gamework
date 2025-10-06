@@ -1,7 +1,7 @@
 import { UIEngine } from '../../../client';
 import { TicTacToeAction, TicTacToeEngine, TicTacToeState } from './game-engine';
 import { generateQRCode } from '../../../client/utils';
-import { StateChange, GameState } from '../../../client/events/EventFlow';
+import { StateChange } from '../../../client/events/EventFlow';
 import { GameRoom } from '../../../shared/signaling-types';
 
 export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction> {
@@ -12,7 +12,7 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
   private joinRoomBtn: HTMLElement | null = null;
   private roomCodeInput: HTMLInputElement | null = null;
   private gameEngine: TicTacToeEngine;
-  private currentGameState?: GameState;
+  private currentGameState?: TicTacToeState;
   private currentRoom?: GameRoom;
 
   // === DIRECT METHOD CALLS (Hybrid Architecture) ===
@@ -20,8 +20,8 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
   /**
    * Update game state - called directly by GameWork
    */
-  updateState(gameState: GameState): void {
-    this.currentGameState = gameState;
+  updateState(state: TicTacToeState): void {
+    this.currentGameState = state;
     this.render();
   }
 
@@ -122,7 +122,16 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
   /**
    * Update the game board display
    */
-  private updateBoard(board: ('X' | 'O' | null)[]): void {
+  private updateBoard(board: ('X' | 'O' | null)[] | undefined): void {
+    if (!board || !Array.isArray(board)) {
+      // Initialize empty board if not provided
+      this.boardElements.forEach((cell) => {
+        cell.textContent = '';
+        cell.className = 'cell';
+      });
+      return;
+    }
+    
     this.boardElements.forEach((cell, index) => {
       const cellValue = board[index];
       cell.textContent = cellValue || '';
@@ -136,9 +145,12 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
   private updateStatus(state: any): void {
     if (!this.statusElement) return;
 
-    if (state.gameData.gameOver) {
-      if (state.gameData.winner) {
-        this.statusElement.textContent = `Player ${state.gameData.winner} wins!`;
+    // Add null checks for gameData
+    const gameData = state.gameData || {};
+    
+    if (gameData.gameOver) {
+      if (gameData.winner) {
+        this.statusElement.textContent = `Player ${gameData.winner} wins!`;
         this.statusElement.className = 'status winner';
       } else {
         this.statusElement.textContent = "It's a draw!";
@@ -146,17 +158,17 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
       }
     } else {
       // Check number of players in room instead of game state
-      const playerCount = Object.keys(state.players).length || 0;
+      const playerCount = Object.keys(state.players || {}).length || 0;
       
       if (playerCount < 2) {
         this.statusElement.textContent = 'Waiting for player 2 to join';
         this.statusElement.className = 'status waiting';
-      } else if (state.gameData.currentPlayer === null) {
+      } else if (gameData.currentPlayer === null) {
         // Both players joined but game hasn't started yet
         this.statusElement.textContent = 'Ready to play! Make the first move';
         this.statusElement.className = 'status ready';
       } else {
-        this.statusElement.textContent = `Player ${state.gameData.currentPlayer}'s turn`;
+        this.statusElement.textContent = `Player ${gameData.currentPlayer}'s turn`;
         this.statusElement.className = 'status playing';
       }
     }
@@ -167,8 +179,12 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
    */
   private updateCurrentPlayer(state: TicTacToeState): void {
     if (!this.currentPlayerElement) return;
-    let currentPlayer = state.gameData.currentPlayer;
-    if (currentPlayer === null) {
+    
+    // Add null checks for gameData
+    const gameData = state.gameData || {};
+    let currentPlayer = gameData.currentPlayer;
+    
+    if (currentPlayer === null || currentPlayer === undefined) {
       this.currentPlayerElement.textContent = 'Waiting for first move...';
       this.currentPlayerElement.className = 'current-player waiting';
     } else {

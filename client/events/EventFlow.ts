@@ -1,22 +1,5 @@
-// Game State Interface
-export interface GameState {
-  stage: string;
-  tick: number;            // current game tick
-  players: {
-    [playerId: string]: {
-      [key: string]: any;  // game-specific player data
-    };
-  };
-  gameData?: {
-    [key: string]: any;    // game-specific state data
-  };
-  metadata?: {
-    gameMode?: string;
-    round?: number;
-    phase?: string;
-    [key: string]: any;    // additional game metadata
-  };
-}
+// Game State Interface - REMOVED
+// Games should use their own specific state interfaces instead of this generic one
 
 // Client → Host
 export interface PlayerAction {

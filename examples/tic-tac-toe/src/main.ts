@@ -1,15 +1,12 @@
-import { GameWork } from '../../../client';
-import { TicTacToeEngine } from './game-engine';
-import { TicTacToeUIEngine } from './ui-engine';
+import { TicTacToeGameWork } from './tic-tac-toe-gamework';
   
 
 // Initialize the game when the page loads
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    const gameEngine = new TicTacToeEngine();
-    const uiEngine = new TicTacToeUIEngine();
-    const gamework = new GameWork(gameEngine, uiEngine);
-    uiEngine.initialize();
+    // New pattern: Game-specific GameWork extension
+    const gamework = new TicTacToeGameWork();
+    gamework.initialize();
     
     // Make game available globally for debugging
     (window as any).gamework = gamework;

@@ -1,10 +1,17 @@
-import {GameState, PlayerAction, StateChange} from '../../../client/events/EventFlow';
-
+import {PlayerAction, StateChange} from '../../../client/events/EventFlow';
 import {GameEngine} from '../../../client/core/GameEngine';
+import { Player } from '../../../client/types';
+import { GameRoom } from '../../../shared/signaling-types';
 
-// Tic-Tac-Toe game state
-export interface TicTacToeState extends GameState {
+// Tic-Tac-Toe game state extends BaseGameWorkState
+export interface TicTacToeState {
+  // Base GameWork properties
+  room?: GameRoom;  // Single source of truth for all connection info
+  owner: Player;   // Owner info (no connection state here)
+  
+  // TicTacToe-specific properties
   stage: 'playing' | 'gameOver';
+  tick: number;            // current game tick
   players: {
     [playerId: string]: {
       symbol: 'X' | 'O' | null;
@@ -59,6 +66,12 @@ export class TicTacToeEngine extends GameEngine<TicTacToeState, TicTacToeAction>
       default:
         throw new Error(`Unknown action: ${action.action}`);
     }
+  }
+
+  applyStateChange(stateChange: StateChange): TicTacToeState {
+    // For TicTacToe, state changes are handled through actions
+    // This method is required by the base class but not used in TicTacToe
+    return this.state;
   }
 
   applyPlayerMove(action: TicTacToeAction): TicTacToeState {
@@ -130,5 +143,22 @@ export class TicTacToeEngine extends GameEngine<TicTacToeState, TicTacToeAction>
 
   isBoardFull(board: ('X' | 'O' | null)[]): boolean {
     return board.every(cell => cell !== null)
+  }
+
+  // === DIRECT METHOD CALLS (Hybrid Architecture) ===
+  
+  /**
+   * Process player action - called directly by GameWork
+   */
+  processAction(gameState: TicTacToeState, action: TicTacToeAction): TicTacToeState {
+    return this.applyAction(action);
+  }
+  
+  /**
+   * Update game state - called directly by GameWork
+   */
+  update(gameState: TicTacToeState, deltaTime: number): TicTacToeState {
+    // TicTacToe doesn't need continuous updates, just return current state
+    return gameState;
   }
 }

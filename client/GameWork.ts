@@ -7,12 +7,12 @@ import {
   GameWorkConfig,
 } from './types';
 import { v4 as uuidv4 } from 'uuid';
-import { GameState, PlayerAction, StateChange, ThinClientEventFlow } from './events/EventFlow';
+import { PlayerAction, StateChange, ThinClientEventFlow } from './events/EventFlow';
 import { GameRoom } from '../shared/signaling-types';
 
 // Hybrid architecture: Direct calls for internal logic, events for external communication
-interface GameWorkState {
-  gameState: GameState;
+// Game-specific state should extend this base interface
+interface BaseGameWorkState {
   room?: GameRoom;  // Single source of truth for all connection info
   owner: Player;   // Owner info (no connection state here)
 }
@@ -39,55 +39,64 @@ const DEFAULT_GAMEWORK_CONFIG: GameWorkConfig = {
  * 
  * Uses direct method calls for internal game logic and events only for external communication.
  * Provides consistent state management and predictable performance.
+ * 
+ * For game-specific implementations, extend this class and override the abstract methods.
  */
-export class GameWork {
+export abstract class GameWork<T extends BaseGameWorkState = BaseGameWorkState> {
   private config: GameWorkConfig;
   private eventManager: EventManager;
-  private gameEngine: GameEngine<any, any>;
-  private uiEngine: UIEngine<any, any>;
+  protected gameEngine!: GameEngine<any, any>;
+  protected uiEngine!: UIEngine<any, any>;
   private network: NetworkEngine;
-  private state: GameWorkState;
+  protected state!: T;
   public eventFlow = ThinClientEventFlow;
   
   // Event bus for external communication only
   private eventBus = new Map<string, Function[]>();
 
-  constructor(gameEngine: GameEngine<any, any>, uiEngine: UIEngine<any, any>, config?: GameWorkConfig) {
+  constructor(config?: GameWorkConfig) {
     this.config = { ...DEFAULT_GAMEWORK_CONFIG, ...config };
     
-    // Initialize state
-    this.state = {
-      gameState: {
-        stage: 'lobby',
-        tick: 0,
-        players: {},
-        gameData: {},
-        metadata: {}
-      },
-      owner: {
-        id: uuidv4(),
-        name: 'Host',
-        lastSeen: Date.now()
-      }
-    };
-
     // Initialize networking with GameWork reference
     this.network = new NetworkEngine(this);
     
-    // Set GameWork reference in engines
-    this.gameEngine = gameEngine;
-    this.gameEngine.setGameWork(this);
-    this.uiEngine = uiEngine;
-    this.uiEngine.setGameWork(this);
-    
     // Initialize event manager for external communication
     this.eventManager = new EventManager(this);
+    
+    // Initialize game-specific components
+    this.initializeGame();
   }
+
+  // === ABSTRACT METHODS (Override in game-specific implementations) ===
+  
+  /**
+   * Initialize game-specific components
+   * Override this method to set up your game engine and UI engine
+   */
+  protected abstract initializeGame(): void;
+  
+  /**
+   * Get the initial game state
+   * Override this method to provide your game's initial state
+   */
+  protected abstract getInitialGameState(): T;
+  
+  /**
+   * Process a player action
+   * Override this method to implement your game's action processing logic
+   */
+  protected abstract handlePlayerAction(action: PlayerAction): T;
+  
+  /**
+   * Update the game state
+   * Override this method to implement your game's update logic
+   */
+  protected abstract handleGameUpdate(state: T, deltaTime: number): T;
 
   // === STATE MANAGEMENT (Direct calls) ===
   
-  getState(): GameState {
-    return this.state.gameState;
+  getState(): T {
+    return this.state;
   }
 
   getOwner(): Player {
@@ -124,28 +133,35 @@ export class GameWork {
    * Process player action internally and update state
    */
   processPlayerAction(action: PlayerAction): void {
-    // Update game state synchronously
-    this.state.gameState = this.gameEngine.processAction(this.state.gameState, action);
+    // Update game state synchronously using game-specific logic
+    this.state = this.processPlayerActionInternal(action);
     
     // Update UI directly
-    this.uiEngine.updateState(this.state.gameState);
+    this.uiEngine.updateState(this.state);
     
     // Emit event for external systems (network)
-    this.emit('playerActionProcessed', { action, state: this.state.gameState });
+    this.emit('playerActionProcessed', { action, state: this.state });
+  }
+
+  /**
+   * Internal method to process player action (calls abstract method)
+   */
+  private processPlayerActionInternal(action: PlayerAction): T {
+    return this.handlePlayerAction(action);
   }
 
   /**
    * Update game state and notify all components
    */
-  updateGameState(newState: GameState): void {
-    this.state.gameState = newState;
+  updateGameState(newState: T): void {
+    this.state = newState;
     
     // Update all components directly
-    this.uiEngine.updateState(this.state.gameState);
-    this.network.updateState(this.state.gameState);
+    this.uiEngine.updateState(this.state);
+    this.network.updateState(this.state);
     
     // Emit event for external systems
-    this.emit('gameStateChanged', this.state.gameState);
+    this.emit('gameStateChanged', this.state);
   }
 
   /**
@@ -170,8 +186,8 @@ export class GameWork {
       this.state.room.players.set(player.id, player);
       
       // Update components
-      this.uiEngine.updateState(this.state.gameState);
-      this.network.updateState(this.state.gameState);
+      this.uiEngine.updateState(this.state);
+      this.network.updateState(this.state);
       
       // Emit event for external systems
       this.emit('playerConnected', { player, connectedPlayers: this.state.room.players });
@@ -186,8 +202,8 @@ export class GameWork {
       this.state.room.players.delete(playerId);
       
       // Update components
-      this.uiEngine.updateState(this.state.gameState);
-      this.network.updateState(this.state.gameState);
+      this.uiEngine.updateState(this.state);
+      this.network.updateState(this.state);
       
       // Emit event for external systems
       this.emit('playerDisconnected', { playerId, connectedPlayers: this.state.room.players });
@@ -202,8 +218,8 @@ export class GameWork {
       this.state.room.players.set(player.id, player);
       
       // Update components
-      this.uiEngine.updateState(this.state.gameState);
-      this.network.updateState(this.state.gameState);
+      this.uiEngine.updateState(this.state);
+      this.network.updateState(this.state);
       
       // Emit event for external systems
       this.emit('playerUpdated', { player, connectedPlayers: this.state.room.players });
@@ -273,13 +289,13 @@ export class GameWork {
    */
   update(deltaTime: number): void {
     // Update game engine
-    this.state.gameState = this.gameEngine.update(this.state.gameState, deltaTime);
+    this.state = this.gameEngine.update(this.state, deltaTime);
     
     // Update all components with new state
-    this.uiEngine.updateState(this.state.gameState);
-    this.network.updateState(this.state.gameState);
+    this.uiEngine.updateState(this.state);
+    this.network.updateState(this.state);
     
     // Emit events for external systems
-    this.emit('gameUpdated', { state: this.state.gameState, deltaTime });
+    this.emit('gameUpdated', { state: this.state, deltaTime });
   }
 }
