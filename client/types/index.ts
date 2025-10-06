@@ -4,12 +4,7 @@ export interface Player {
   [key: string]: any;
 }
 
-export interface ConnectionInfo {
-  peerId: string;
-  connection: RTCPeerConnection;
-  dataChannel?: RTCDataChannel;
-  isConnected: boolean;
-}
+// ConnectionInfo interface removed - now using Player interface with WebRTC info
 
 // Re-export RTCIceServer for convenience
 export type RTCIceServer = {

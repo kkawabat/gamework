@@ -1,10 +1,4 @@
-// Import shared types
-import {
-  SignalingMessage,
-  GameRoom,
-  ClientMessage,
-  ServerMessage
-} from '../../shared/signaling-types';
+import { SignalingMessage } from '../../shared/signaling-types';
 
 export interface SignalingConfig {
   serverUrl: string;
@@ -16,12 +10,8 @@ export interface SignalingConfig {
 export class SignalingService {
   private ws?: WebSocket;
   private config: SignalingConfig;
-  private messageCallbacks: ((message: SignalingMessage) => void)[] = [];
-  private roomUpdateCallbacks: ((room: GameRoom) => void)[] = [];
-  private errorCallbacks: ((error: Error) => void)[] = [];
+  private messageCallback: (message: SignalingMessage) => void = () => {};
   private isConnected = false;
-  private currentRoom?: string;
-  private currentPlayerId?: string;
   private reconnectAttempts = 0;
   private reconnectTimeout?: NodeJS.Timeout;
   private pingInterval?: NodeJS.Timeout;
@@ -51,11 +41,6 @@ export class SignalingService {
           this.scheduleReconnect();
         };
         
-        this.ws.onerror = (error) => {
-          this.errorCallbacks.forEach(callback => callback(new Error('WebSocket connection failed')));
-          reject(error);
-        };
-        
       } catch (error) {
         reject(error);
       }
@@ -75,24 +60,6 @@ export class SignalingService {
     }
   }
 
-  async joinRoom(roomId: string, playerId: string): Promise<void> {
-    this.currentRoom = roomId;
-    this.currentPlayerId = playerId;
-    
-    if (this.isConnected && this.ws) {
-      await this.sendServerMessage('join_room', { roomId, playerId });
-    }
-  }
-
-  async leaveRoom(roomId: string, playerId: string): Promise<void> {
-    if (this.isConnected && this.ws) {
-      await this.sendServerMessage('leave_room', { roomId, playerId });
-    }
-    
-    this.currentRoom = undefined;
-    this.currentPlayerId = undefined;
-  }
-
   async sendMessage(message: SignalingMessage): Promise<void> {
     if (!this.isConnected || !this.ws) {
       throw new Error('Not connected to signaling service');
@@ -101,109 +68,21 @@ export class SignalingService {
     console.log(`[WebSocketSignalingService] Sending message:`, message.type, message);
     
     // For peer-to-peer signaling messages, use signaling_message
-    this.ws.send(JSON.stringify({
-      type: 'signaling_message',
-      payload: message
-    }));
+    this.ws.send(JSON.stringify(message));
   }
 
-  async sendServerMessage(messageType: string, payload: any): Promise<void> {
-    if (!this.isConnected || !this.ws) {
-      throw new Error('Not connected to signaling service');
-    }
-
-    console.log(`[WebSocketSignalingService] Sending server message:`, messageType, payload);
-    
-    this.ws.send(JSON.stringify({
-      type: 'server_message',
-      payload: {
-        message: messageType,
-        ...payload
-      }
-    }));
-  }
-
-  async handleSignalingMessage(message: SignalingMessage, webrtcManager: any, playerId: string): Promise<void> {
-    switch (message.type) {
-      case 'offer':
-        const answer = await webrtcManager.handleOffer(message.from, message.payload);
-        await this.sendMessage({
-          type: 'answer',
-          payload: answer,
-          from: playerId,
-          to: message.from,
-          roomId: message.roomId
-        });
-        break;
-        
-      case 'answer':
-        await webrtcManager.handleAnswer(message.from, message.payload);
-        break;
-        
-      case 'ice_candidate':
-        await webrtcManager.handleIceCandidate(message.from, message.payload);
-        break;
-    }
-  }
-
-  onMessage(callback: (message: SignalingMessage) => void): void {
-    this.messageCallbacks.push(callback);
-  }
-
-  offMessage(callback: (message: SignalingMessage) => void): void {
-    const index = this.messageCallbacks.indexOf(callback);
-    if (index > -1) {
-      this.messageCallbacks.splice(index, 1);
-    }
-  }
-
-  onRoomUpdate(callback: (room: GameRoom) => void): void {
-    this.roomUpdateCallbacks.push(callback);
-  }
-
-  onError(callback: (error: Error) => void): void {
-    this.errorCallbacks.push(callback);
-  }
 
   getServerUrl(): string {
     return this.config.serverUrl;
   }
 
-  private handleMessage(message: any): void {
+  onMessage(callback: (message: SignalingMessage) => void): void {
+    this.messageCallback = callback;
+  }
+
+  private handleMessage(message: SignalingMessage): void {
     console.log(`[WebSocketSignalingService] Received message:`, message.type, message);
-    
-    switch (message.type) {
-      case 'signaling_message':
-        const signalingMessage: SignalingMessage = message.payload;
-        this.messageCallbacks.forEach(callback => callback(signalingMessage));
-        break;
-      case 'room_update':
-        console.log(`[WebSocketSignalingService] Room update received:`, message);
-        const room: GameRoom = message.payload.room || message.payload;
-        this.roomUpdateCallbacks.forEach(callback => callback(room));
-        break;
-      case 'room_found':
-        console.log(`[WebSocketSignalingService] Room found, calling ${this.messageCallbacks.length} callbacks`);
-        // Handle room lookup response
-        this.messageCallbacks.forEach(callback => callback(message));
-        break;
-      case 'room_joined':
-        console.log(`[WebSocketSignalingService] Room joined, calling ${this.messageCallbacks.length} callbacks`);
-        // Handle room joined response - also trigger room update
-        this.messageCallbacks.forEach(callback => callback(message));
-        // Also trigger room update callback if room data is present
-        if (message.payload && message.payload.room) {
-          this.roomUpdateCallbacks.forEach(callback => callback(message.payload.room));
-        }
-        break;
-      case 'error':
-        console.log(`[WebSocketSignalingService] Error received:`, message.payload);
-        const error = new Error(message.payload.message || 'Unknown error');
-        this.errorCallbacks.forEach(callback => callback(error));
-        break;
-      default:
-        console.log(`[WebSocketSignalingService] Unknown message type:`, message.type);
-    }
+    this.messageCallback(message);
   }
 
   private scheduleReconnect(): void {

@@ -1,152 +1,194 @@
 import { WebRTCManager } from './WebRTCManager';
 import { SignalingService } from './SignalingService';
-import { Player, GameRoom } from '../../shared/signaling-types';
+import { Player, GameRoom, SignalingMessage, answerMessage, offerMessage, iceCandidateMessage } from '../../shared/signaling-types';
 import { v4 as uuidv4 } from 'uuid';
 import { PlayerAction, StateChange } from '../events/EventFlow';
 
 export class NetworkEngine {
-  private webrtc: WebRTCManager;
+  private webrtc: WebRTCManager | null = null;
   private signaling: SignalingService;
   private owner: Player;
-  private isConnected = false;
   private room?: GameRoom;
   protected gameWork: any;
 
   constructor(gameWork: any) {
     this.gameWork = gameWork;
     this.owner = gameWork.owner;
-
-    // Initialize networking
-    this.webrtc = new WebRTCManager(this.gameWork.config.stunServers);
     this.signaling = new SignalingService(this.gameWork.config.signalServiceConfig);
+    
+    // Setup signaling message handlers
+    this.setupSignalingHandlers();
   }
 
   async onSendPlayerAction(payload: PlayerAction): Promise<void> {
-    this.webrtc.broadcastMessage(payload);
+    // send to the host of the room for processing
+    this.webrtc?.sendMessage(this.room?.hostId || "", payload);
   }
-  async onReceivePlayerAction(payload: PlayerAction): Promise<void> {
-    const action = payload.action;
+  async onReceivePlayerAction(paction: PlayerAction): Promise<void> {
+    const action = paction.action;
     switch (action) {
-      case 'CreateRoom':
-        this.joinRoom();
+      case 'CreateRoomRequest':
+        const createRoomMessage: SignalingMessage = {
+          type: 'RoomUpdate',
+          action: action,
+          from: paction.playerId,
+          payload: {
+            ...paction.input || {}
+          }
+        } as SignalingMessage;
+        this.signaling.sendMessage(createRoomMessage);
         break;
-      case 'JoinRoom':
-        this.joinRoom(payload.input?.roomCode);
+
+      case 'JoinRoomRequest':
+        const joinRoomMessage: SignalingMessage = {
+          type: 'RoomUpdate',
+          action: action,
+          from: paction.playerId,
+          payload: {
+            ...paction.input || {}
+          }
+        } as SignalingMessage;
+        this.signaling.sendMessage(joinRoomMessage);
         break;
-      case 'LeaveRoom':
-        this.leaveRoom();
+
+      case 'LeaveRoomRequest':
+        this.gameWork.sendStateChange({
+          type: 'system',
+          action: 'LeaveRoom',
+          payload: {
+            roomId: this.room?.id,
+            playerId: paction.playerId
+          }
+        });
         break;
       default:
         break;
     }
   }
-  async onSendStateChange(payload: StateChange): Promise<void> {
-    this.webrtc.broadcastMessage(payload);
+  async onSendStateChange(schange: StateChange): Promise<void> {
+    this.webrtc?.broadcastMessage(schange);
   }
-  async onReceiveStateChange(payload: StateChange): Promise<void> {
-    return;
+  async onReceiveStateChange(schange: StateChange): Promise<void> {
+    switch (schange.type) {
+      case 'system':
+        switch (schange.action) {
+          case 'CreateRoom':
+            this.room = {
+              id: schange.payload?.roomId,
+              hostId: this.owner.id,
+              players: new Map([[this.owner.id, this.owner]]),
+            } as GameRoom;
+            this.webrtc = new WebRTCManager(this.room, this.gameWork.config.stunServers);
+          break;
+          case 'JoinRoom':
+            this.room?.players.set(schange.payload?.playerId, schange.payload?.player);
+            break;
+          case 'LeaveRoom':
+            if (this.room?.hostId === this.owner.id) {
+              if (schange.payload?.playerId === this.owner.id) {
+                this.webrtc?.disconnectAll();
+                this.room = undefined;
+                
+                const leaveRoomMessage: SignalingMessage = {
+                  type: 'RoomUpdate',
+                  action: 'CloseRoomRequest',
+                  from: schange.payload?.playerId,
+                  payload: {
+                    roomId: schange.payload.roomId
+                  }
+                } as SignalingMessage;
+                this.signaling.sendMessage(leaveRoomMessage);
+                
+              }
+              else {
+                this.webrtc?.disconnectPeer(schange.payload?.playerId);
+                this.room?.players.delete(schange.payload?.playerId);
+              }
+            }
+            break;
+        }
+        break;
+      default:
+        break;
+    }
   }
 
   /**
-   * Host a new multiplayer game room
+   * Setup signaling message handlers for host-based room management
    */
-  async joinRoom(roomCode?: string): Promise<string> {
-    // Disconnect from current room if already connected
-    if (this.isConnected) {
-      await this.leaveRoom();
-    }
-
-    try {
-      let roomId: string | null;
-      if (roomCode) {
-        roomId = await this.lookupRoom(roomCode);
-        if (!roomId) {
-          throw new Error('Room not found');
-        }
-      } else {
-        roomId = uuidv4();
+  private setupSignalingHandlers(): void {
+    this.signaling.onMessage((message: any) => {
+      switch (message.type) {
+        case 'RoomUpdate':
+          this.handleRoomUpdate(message);
+          break;
+        case 'SignalingMessage':
+          this.handleSignalingMessages(message);
+          break;
       }
-
-      // Create room
-      this.room = {
-        id: roomId,
-        name: `Game Room ${roomId}`,
-        hostId: this.owner.id,
-        players: new Map([[this.owner.id, this.owner]]),
-        maxPlayers: 8,
-        gameType: 'generic',
-        createdAt: Date.now()
-      };
-
-      // Connect to signaling service
-      await this.signaling.connect();
-      await this.signaling.joinRoom(this.room.id, this.owner.id);
-
-      this.isConnected = true;
-
-      return this.room.id;
-    } catch (error) {
-      console.error('[NetworkEngine] Failed to host room:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Look up a room by room code (private method)
-   */
-  private async lookupRoom(roomCode: string): Promise<string | null> {
-    console.log(`[NetworkEngine] Looking up room with code: ${roomCode}`);
-
-    if (!this.isConnected) {
-      await this.signaling.connect();
-    }
-
-    return new Promise((resolve) => {
-      const messageHandler = (message: any) => {
-        if (message.type === 'room_found') {
-          const roomId = message.payload.roomId;
-          console.log(`[NetworkEngine] Room found: ${roomId}`);
-          this.signaling.offMessage(messageHandler);
-          resolve(roomId);
-        } else if (message.type === 'error' && message.payload.message?.includes('not found')) {
-          console.log(`[NetworkEngine] Room not found: ${roomCode}`);
-          this.signaling.offMessage(messageHandler);
-          resolve(null);
-        }
-      };
-
-      // Add temporary message handler
-      this.signaling.onMessage(messageHandler);
-
-      // Send lookup request
-      this.signaling.sendServerMessage('lookup_room', { roomCode });
     });
   }
 
-  /**
-   * Close the current room and disconnect from networking
-   */
-  async leaveRoom(): Promise<void> {
-    if (!this.isConnected) {
-      return;
+  private handleRoomUpdate(message: SignalingMessage): void {
+    switch (message.action) {
+      case 'CreateRoomRequest':
+        this.gameWork.sendStateChange({
+          type: 'system',
+          action: 'CreateRoom',
+          payload: {
+            roomId: message.payload.roomId,
+            roomCode: message.payload.roomCode
+          }
+        });
+        break;
+      case 'JoinRoomRequest':
+        // Create player with WebRTC info
+        const newPlayer: Player = {
+          id: message.from,
+          connection: undefined,
+          dataChannel: undefined,
+          isConnected: false
+        };
+        this.room?.players.set(message.from, newPlayer);
+        this.webrtc?.createOffer(message.from);
+        break;
+      case 'CloseRoomRequest':
+        this.gameWork.sendStateChange({
+          type: 'system',
+          action: 'LeaveRoom',
+          payload: {
+            roomId: message.payload.roomId,
+            roomCode: message.payload.roomCode
+          }
+        });
+        break;
     }
-
-    // Disconnect from signaling service
-    if (this.signaling) {
-      await this.signaling.disconnect();
-    }
-
-    // Clear room data
-    this.room = undefined;
-    this.isConnected = false;
   }
 
   /**
-   * Setup signaling updates
+   * Handle WebRTC signaling messages
    */
-  setupSignalingUpdates(): void {
-    this.signaling.onRoomUpdate((room: GameRoom) => {
-      this.room = room;
-    });
+  private async handleSignalingMessages(message: SignalingMessage): Promise<void> {
+    switch (message.action) {
+      case 'offer':
+        const answer = await this.webrtc?.handleOffer(message as offerMessage);
+        let msg =  {
+          type: 'SignalingMessage',
+          action: 'answer',
+          from: this.owner.id,
+          payload: {
+            to: message.from,
+            answer: answer
+          }
+        } as answerMessage;
+        await this.signaling.sendMessage(msg);
+        break;
+      case 'answer':
+        await this.webrtc?.handleAnswer(message as answerMessage);
+        break;
+      case 'ice_candidate':
+        await this.webrtc?.handleIceCandidate(message as iceCandidateMessage);
+        break;
+    }
   }
 }

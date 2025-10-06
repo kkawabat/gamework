@@ -1,112 +1,67 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import { v4 as uuidv4 } from 'uuid';
-import { RoomManager } from './room-manager';
-import { ClientMessage, ServerMessage, SignalingMessage, GameRoom } from '../shared/signaling-types';
+import { 
+  SignalingMessage, 
+  createRoomMessage, 
+  joinRoomMessage, 
+  closeRoomMessage,
+  offerMessage,
+  answerMessage,
+  iceCandidateMessage
+} from '../shared/signaling-types';
 
 interface ClientConnection {
   ws: WebSocket;
   playerId: string;
-  playerName: string;
   roomId?: string;
-  lastPing: number;
+  isHost: boolean;
+}
+
+interface Room {
+  id: string;
+  hostId: string;
+  roomCode: string; // Short code for easy joining
+  createdAt: number;
 }
 
 export class SignalingServer {
   private wss: WebSocketServer;
-  private roomManager: RoomManager;
   private connections = new Map<string, ClientConnection>();
-  private cleanupInterval: NodeJS.Timeout;
+  private rooms = new Map<string, Room>();
 
   constructor(port: number = 8080) {
     const server = createServer((req, res) => {
-      // Add CORS headers for all requests
+      // CORS headers
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-      res.setHeader('Access-Control-Max-Age', '86400');
       
-      // Handle preflight requests
       if (req.method === 'OPTIONS') {
         res.writeHead(200);
         res.end();
         return;
       }
       
-      // Handle the request normally
       if (req.url === '/health') {
-        const isHealthy = this.wss && this.roomManager;
-        const activeConnections = this.connections.size;
-        const uptime = process.uptime();
-        
-        if (isHealthy) {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ 
-            status: 'healthy',
-            timestamp: Date.now(),
-            uptime: Math.floor(uptime),
-            connections: activeConnections,
-            rooms: this.roomManager.getRoomCount(),
-            version: '1.0.0',
-            service: 'gamework-signaling-server'
-          }));
-        } else {
-          res.writeHead(503, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ 
-            status: 'unhealthy',
-            timestamp: Date.now(),
-            error: 'Service not ready'
-          }));
-        }
-      } else if (req.url === '/') {
-        // Handle root path for WebSocket connections
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ 
-          status: 'ok',
-          service: 'gamework-signaling-server',
-          message: 'WebSocket signaling server is running',
-          timestamp: Date.now(),
-          version: '1.0.0'
+          status: 'healthy',
+          connections: this.connections.size,
+          rooms: this.rooms.size
         }));
-      } else {
-        // Handle 404 for other paths
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          error: 'Not Found',
-          message: 'The requested resource was not found',
-          timestamp: Date.now()
-        }));
+        return;
       }
+      
+      res.writeHead(404);
+      res.end('Not Found');
     });
     
-    this.wss = new WebSocketServer({ 
-      server,
-      path: '/',
-      perMessageDeflate: false
-    });
-    this.roomManager = new RoomManager();
-
-    this.wss.on('connection', (ws: WebSocket) => {
-      this.handleConnection(ws);
-    });
-
-    // Health check endpoint is now handled inline in the request handler above
-
-    server.listen(port, '0.0.0.0', () => {
-      console.log(`Signaling server running on port ${port} (IPv4 all interfaces)`);
-    });
-
-    // Cleanup old rooms every hour
-    this.cleanupInterval = setInterval(() => {
-      this.roomManager.cleanup();
-    }, 60 * 60 * 1000);
-
-    // Handle graceful shutdown
-    process.on('SIGINT', () => {
-      console.log('Shutting down signaling server...');
-      clearInterval(this.cleanupInterval);
-      this.wss.close();
-      process.exit(0);
+    this.wss = new WebSocketServer({ server });
+    this.wss.on('connection', (ws: WebSocket) => this.handleConnection(ws));
+    
+    server.listen(port, () => {
+      console.log(`Signaling server running on port ${port}`);
     });
   }
 
@@ -117,23 +72,17 @@ export class SignalingServer {
     const connection: ClientConnection = {
       ws,
       playerId: '',
-      playerName: '',
-      lastPing: Date.now()
+      isHost: false
     };
 
     this.connections.set(connectionId, connection);
 
     ws.on('message', (data: Buffer) => {
-      const rawMessage = data.toString();
-      console.log(`[WebSocket] 📨 Received message from ${connectionId}:`, rawMessage);
-      
       try {
-        const message: ClientMessage = JSON.parse(rawMessage);
-        console.log(`[WebSocket] 📨 Parsed message from ${connectionId}:`, JSON.stringify(message, null, 2));
+        const message = JSON.parse(data.toString());
         this.handleMessage(connectionId, message);
       } catch (error) {
-        console.error(`[WebSocket] ❌ Error parsing message from ${connectionId}:`, error);
-        console.error(`[WebSocket] ❌ Raw message that failed to parse:`, rawMessage);
+        console.error(`Error parsing message:`, error);
         this.sendError(ws, 'Invalid message format');
       }
     });
@@ -143,256 +92,183 @@ export class SignalingServer {
     });
 
     ws.on('error', (error: Error) => {
-      console.error(`WebSocket error for ${connectionId}:`, error);
+      console.error(`WebSocket error:`, error);
       this.handleDisconnection(connectionId);
     });
-
-    // Connection established - no welcome message needed
   }
 
-  private handleMessage(connectionId: string, message: ClientMessage): void {
+  private handleMessage(connectionId: string, message: SignalingMessage): void {
     const connection = this.connections.get(connectionId);
-    if (!connection) {
-      console.warn(`[WebSocket] ⚠️ Received message for unknown connection: ${connectionId}`);
-      return;
-    }
+    if (!connection) return;
 
-    connection.lastPing = Date.now();
-    console.log(`[WebSocket] 🔄 Handling message type '${message.type}' from ${connectionId}`);
+    console.log(`Handling message:`, message.type);
 
     switch (message.type) {
-      case 'server_message':
-        this.handleServerMessage(connectionId, message);
+      case 'RoomUpdate':
+        this.handleRoomUpdate(connectionId, message);
         break;
-      case 'signaling_message':
+      case 'SignalingMessage':
         this.handleSignalingMessage(connectionId, message);
         break;
-      case 'ping':
-        this.handlePing(connectionId, message);
-        break;
       default:
-        console.warn(`[WebSocket] ⚠️ Unknown message type: ${message.type} from ${connectionId}`);
+        console.warn(`Unknown message type: ${message.type}`);
     }
   }
 
-  private handleServerMessage(connectionId: string, message: ClientMessage): void {
-    const { message: serverMessage } = message.payload;
-    
-    switch (serverMessage) {
-      case 'join_room':
-        this.handleJoinRoom(connectionId, message);
-        break;
-      case 'lookup_room':
-        this.handleLookupRoom(connectionId, message);
-        break;
-      case 'leave_room':
-        this.handleLeaveRoom(connectionId, message);
-        break;
-      default:
-        console.warn(`[WebSocket] ⚠️ Unknown server message: ${serverMessage} from ${connectionId}`);
-    }
-  }
-
-  private handleJoinRoom(connectionId: string, message: ClientMessage): void {
+  private handleRoomUpdate(connectionId: string, message: SignalingMessage): void {
     const connection = this.connections.get(connectionId);
     if (!connection) return;
 
-    const { roomId, playerId, playerName } = message.payload;
+    switch (message.action) {
+      case 'CreateRoomRequest':
+        this.handleCreateRoom(connectionId, message as createRoomMessage);
+        break;
+      case 'JoinRoomRequest':
+        this.handleJoinRoom(connectionId, message as joinRoomMessage);
+        break;
+      case 'CloseRoomRequest':
+        this.handleCloseRoom(connectionId, message as closeRoomMessage);
+        break;
+    }
+  }
+
+  private handleCreateRoom(connectionId: string, message: createRoomMessage): void {
+    const connection = this.connections.get(connectionId);
+    if (!connection) return;
+
+    const roomId = uuidv4();
+    const roomCode = this.generateRoomCode();
     
-    if (!roomId || !playerId) {
-      this.sendError(connection.ws, 'Missing required fields: roomId, playerId');
-      return;
-    }
-
-    // Leave previous room if any
-    if (connection.roomId) {
-      this.roomManager.leaveRoom(connection.roomId, connection.playerId);
-    }
-
-    // Join new room
-    const room = this.roomManager.joinRoom(roomId, playerId, playerName || 'Player');
+    // Create room
+    const room: Room = {
+      id: roomId,
+      hostId: message.from,
+      roomCode,
+      createdAt: Date.now()
+    };
     
-    if (!room) {
-      this.sendError(connection.ws, 'Room is full or invalid');
-      return;
-    }
-
-    // Update connection info
-    connection.playerId = playerId;
-    connection.playerName = playerName;
+    this.rooms.set(roomId, room);
+    
+    // Update connection
+    connection.playerId = message.from;
     connection.roomId = roomId;
+    connection.isHost = true;
 
-    // Send room info to the joining player
+    // Send confirmation to host
     this.sendMessage(connection.ws, {
-      type: 'room_joined',
+      type: 'RoomUpdate',
+      action: 'CreateRoomRequest',
+      from: 'server',
       payload: {
-        room: this.serializeRoom(room),
-        playerId,
-        playerName
-      },
-      roomId
+        roomId,
+        roomCode
+      }
     });
 
-    // Send pending messages
-    const pendingMessages = this.roomManager.getPendingMessages(roomId, playerId);
-    pendingMessages.forEach(msg => {
-      this.sendMessage(connection.ws, {
-        type: 'signaling_message',
-        payload: msg,
-        roomId
-      });
-    });
-
-    // Clear pending messages for this player
-    this.roomManager.clearPendingMessages(roomId, playerId);
-
-    // Broadcast room update to all players in the room
-    this.broadcastToRoom(roomId, {
-      type: 'room_update',
-      payload: { room: this.serializeRoom(room) },
-      roomId
-    }, playerId);
-
-    console.log(`Player ${playerId} joined room ${roomId}`);
+    console.log(`Room created: ${roomId} (${roomCode}) by ${message.from}`);
   }
 
-  private handleLookupRoom(connectionId: string, message: ClientMessage): void {
+  private handleJoinRoom(connectionId: string, message: joinRoomMessage): void {
     const connection = this.connections.get(connectionId);
     if (!connection) return;
 
-    const { roomCode } = message.payload;
-    
-    if (!roomCode) {
-      this.sendError(connection.ws, 'Missing required field: roomCode');
+    const { roomId, roomCode } = message.payload;
+    let targetRoom: Room | undefined;
+
+    if (roomId) {
+      targetRoom = this.rooms.get(roomId);
+    } else if (roomCode) {
+      // Find room by code
+      for (const room of this.rooms.values()) {
+        if (room.roomCode === roomCode) {
+          targetRoom = room;
+          break;
+        }
+      }
+    }
+
+    if (!targetRoom) {
+      this.sendError(connection.ws, 'Room not found');
       return;
     }
 
-    // Look up room by code
-    const room = this.roomManager.findRoomByCode(roomCode);
-    
-    if (room) {
-      this.sendMessage(connection.ws, {
-        type: 'room_found',
+    // Update connection
+    connection.playerId = message.from;
+    connection.roomId = targetRoom.id;
+    connection.isHost = false;
+
+    // Notify host about new player
+    const hostConnection = this.getHostConnection(targetRoom.id);
+    if (hostConnection) {
+      this.sendMessage(hostConnection.ws, {
+        type: 'RoomUpdate',
+        action: 'JoinRoomRequest',
+        from: 'server',
         payload: {
-          roomId: room.id,
-          roomCode: roomCode,
-          playerCount: room.players.size,
-          maxPlayers: room.maxPlayers
+          playerId: message.from
         }
       });
-      console.log(`Room lookup successful: ${roomCode} -> ${room.id}`);
-    } else {
-      this.sendError(connection.ws, `Room with code ${roomCode} not found`);
-      console.log(`Room lookup failed: ${roomCode} not found`);
     }
+
+    console.log(`Player ${message.from} joined room ${targetRoom.id}`);
   }
 
-  private handleLeaveRoom(connectionId: string, message: ClientMessage): void {
+  private handleCloseRoom(connectionId: string, message: closeRoomMessage): void {
     const connection = this.connections.get(connectionId);
     if (!connection || !connection.roomId) return;
 
-    const roomId = connection.roomId;
-    const playerId = connection.playerId;
-
-    const room = this.roomManager.leaveRoom(roomId, playerId);
-    
-    if (room) {
-      // Broadcast room update to remaining players
-      this.broadcastToRoom(roomId, {
-        type: 'room_update',
-        payload: { room: this.serializeRoom(room) },
-        roomId
-      });
+    // Only allow host to close room
+    if (!connection.isHost) {
+      this.sendError(connection.ws, 'Only host can close room');
+      return;
     }
 
-    // Clear connection room info
-    connection.roomId = undefined;
+    const roomId = connection.roomId;
+    const hostId = connection.playerId;
 
-    this.sendMessage(connection.ws, {
-      type: 'room_left',
-      payload: { roomId, playerId }
-    });
+    // Clean up all connections in this room
+    for (const [connId, conn] of this.connections.entries()) {
+      if (conn.roomId === roomId) {
+        conn.roomId = undefined;
+        conn.isHost = false;
+      }
+    }
 
-    console.log(`Player ${playerId} left room ${roomId}`);
+    // Delete the room
+    this.rooms.delete(roomId);
+
+    console.log(`Room ${roomId} closed by host ${hostId}`);
   }
 
-  private handleSignalingMessage(connectionId: string, message: ClientMessage): void {
+  private handleSignalingMessage(connectionId: string, message: SignalingMessage): void {
     const connection = this.connections.get(connectionId);
-    if (!connection || !connection.roomId) {
-      if (connection?.ws) {
-        this.sendError(connection.ws, 'Not in a room');
-      }
-      return;
-    }
+    if (!connection || !connection.roomId) return;
 
-    const signalingMessage: SignalingMessage = message.payload as SignalingMessage;
+    const { to } = message.payload;
     
-    if (!signalingMessage || !signalingMessage.type || !signalingMessage.payload) {
-      this.sendError(connection.ws, 'Invalid signaling message');
-      return;
-    }
-
-    // Set sender info
-    signalingMessage.from = connection.playerId;
-    signalingMessage.roomId = connection.roomId;
-
-    // Store message for potential future delivery
-    this.roomManager.storeMessage(connection.roomId, signalingMessage);
-
-    // Forward message to target player or broadcast to room
-    if (signalingMessage.to) {
+    if (to) {
       // Send to specific player
-      this.sendToPlayer(connection.roomId, signalingMessage.to, {
-        type: 'signaling_message',
-        payload: signalingMessage,
-        roomId: connection.roomId
-      });
+      this.sendToPlayer(connection.roomId, to, message);
     } else {
       // Broadcast to all players in room except sender
-      this.broadcastToRoom(connection.roomId, {
-        type: 'signaling_message',
-        payload: signalingMessage,
-        roomId: connection.roomId
-      }, connection.playerId);
+      this.broadcastToRoom(connection.roomId, message, connection.playerId);
     }
-
-    console.log(`Signaling message from ${connection.playerId} in room ${connection.roomId}: ${signalingMessage.type}`);
   }
 
-  private handlePing(connectionId: string, message: ClientMessage): void {
-    const connection = this.connections.get(connectionId);
-    if (!connection) return;
+  private getHostConnection(roomId: string): ClientConnection | null {
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
 
-    this.sendMessage(connection.ws, {
-      type: 'pong',
-      payload: { timestamp: Date.now() }
-    });
-  }
-
-  private handleDisconnection(connectionId: string): void {
-    const connection = this.connections.get(connectionId);
-    if (!connection) return;
-
-    // Leave room if in one
-    if (connection.roomId) {
-      const room = this.roomManager.leaveRoom(connection.roomId, connection.playerId);
-      
-      if (room) {
-        // Broadcast room update to remaining players
-        this.broadcastToRoom(connection.roomId, {
-          type: 'room_update',
-          payload: { room: this.serializeRoom(room) },
-          roomId: connection.roomId
-        });
+    for (const connection of this.connections.values()) {
+      if (connection.roomId === roomId && connection.playerId === room.hostId) {
+        return connection;
       }
     }
-
-    this.connections.delete(connectionId);
-    console.log(`Connection ${connectionId} disconnected`);
+    return null;
   }
 
-  private sendToPlayer(roomId: string, playerId: string, message: ServerMessage): void {
-    for (const [connectionId, connection] of this.connections.entries()) {
+  private sendToPlayer(roomId: string, playerId: string, message: SignalingMessage): void {
+    for (const connection of this.connections.values()) {
       if (connection.roomId === roomId && connection.playerId === playerId) {
         this.sendMessage(connection.ws, message);
         break;
@@ -400,20 +276,36 @@ export class SignalingServer {
     }
   }
 
-  private broadcastToRoom(roomId: string, message: ServerMessage, excludePlayerId?: string): void {
-    for (const [connectionId, connection] of this.connections.entries()) {
+  private broadcastToRoom(roomId: string, message: SignalingMessage, excludePlayerId?: string): void {
+    for (const connection of this.connections.values()) {
       if (connection.roomId === roomId && connection.playerId !== excludePlayerId) {
         this.sendMessage(connection.ws, message);
       }
     }
   }
 
-  private sendMessage(ws: WebSocket, message: ServerMessage, connectionId?: string): void {
+  private handleDisconnection(connectionId: string): void {
+    const connection = this.connections.get(connectionId);
+    if (!connection) return;
+
+    // If host disconnects, close the room
+    if (connection.isHost && connection.roomId) {
+      const closeMessage: closeRoomMessage = {
+        type: 'RoomUpdate',
+        action: 'CloseRoomRequest',
+        from: connection.playerId,
+        payload: { roomId: connection.roomId }
+      };
+      this.handleCloseRoom(connectionId, closeMessage);
+    }
+
+    this.connections.delete(connectionId);
+    console.log(`Connection ${connectionId} disconnected`);
+  }
+
+  private sendMessage(ws: WebSocket, message: SignalingMessage | { type: string; payload: any }): void {
     if (ws.readyState === WebSocket.OPEN) {
-      const messageStr = JSON.stringify(message);
-      const logPrefix = connectionId ? `[WebSocket] 📤 Sending message to ${connectionId}:` : `[WebSocket] 📤 Sending message:`;
-      console.log(logPrefix, messageStr);
-      ws.send(messageStr);
+      ws.send(JSON.stringify(message));
     }
   }
 
@@ -424,18 +316,10 @@ export class SignalingServer {
     });
   }
 
-  private serializeRoom(room: GameRoom): any {
-    return {
-      id: room.id,
-      name: room.name,
-      hostId: room.hostId,
-      players: Object.fromEntries(room.players),
-      maxPlayers: room.maxPlayers,
-      gameType: room.gameType,
-      createdAt: room.createdAt
-    };
+  private generateRoomCode(): string {
+    // Generate a 6-character room code
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
   }
-
 }
 
 // Start server if this file is run directly
@@ -443,7 +327,3 @@ if (require.main === module) {
   const port = process.env.PORT ? parseInt(process.env.PORT) : 8080;
   new SignalingServer(port);
 }
-
-
-
-

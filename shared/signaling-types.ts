@@ -4,36 +4,83 @@ export interface Player {
   id: string;
   name?: string;
   isHost?: boolean;
-  isConnected?: boolean;
   lastSeen?: number;
+  
+  // WebRTC connection info
+  connection?: RTCPeerConnection;
+  dataChannel?: RTCDataChannel;
+  isConnected?: boolean;
+  
   [key: string]: any;
 }
 
 export interface GameRoom {
   id: string;
-  name: string;
   hostId: string;
   players: Map<string, Player>;
-  maxPlayers: number;
-  gameType: string;
-  createdAt: number;
 }
 
 export interface SignalingMessage {
-  type: 'offer' | 'answer' | 'ice_candidate' | 'room_info' | 'join_request' | 'lookup_room' | 'room_found' | 'room_joined';
-  payload: any;
+  type: 'SignalingMessage' | "RoomUpdate";
+  action: string;
   from: string;
-  to?: string;
-  roomId: string;
+  payload: {
+    [key: string]: any;
+  };
 }
 
-export interface ClientMessage {
-  type: 'server_message' | 'signaling_message' | 'ping';
-  payload: any; // Can be server message structure or SignalingMessage
+export interface offerMessage extends SignalingMessage {
+  type: 'SignalingMessage';
+  action: 'offer';
+  from: string;
+  payload: {
+    to: string;
+    offer: RTCSessionDescriptionInit;
+  };
 }
 
-export interface ServerMessage {
-  type: 'room_joined' | 'room_left' | 'signaling_message' | 'room_update' | 'error' | 'pong' | 'room_found';
-  payload: any;
-  roomId?: string;
+export interface answerMessage extends SignalingMessage {
+  type: 'SignalingMessage';
+  action: 'answer';
+  from: string;
+  payload: {
+    to: string;
+    answer: RTCSessionDescriptionInit;
+  };
+}
+
+export interface iceCandidateMessage extends SignalingMessage {
+  type: 'SignalingMessage';
+  action: 'ice_candidate';
+  from: string;
+  payload: {
+    to: string;
+    candidate: RTCIceCandidateInit;
+  };
+}
+
+export interface createRoomMessage extends SignalingMessage {
+  type: 'RoomUpdate';
+  action: 'CreateRoomRequest';
+  from: string;
+  payload: {};
+}
+
+export interface joinRoomMessage extends SignalingMessage {
+  type: 'RoomUpdate';
+  action: 'JoinRoomRequest';
+  from: string;
+  payload: {
+    roomId?: string;
+    roomCode?: string
+  }
+}
+
+export interface closeRoomMessage extends SignalingMessage {
+  type: 'RoomUpdate';
+  action: 'CloseRoomRequest';
+  from: string;
+  payload: {
+    roomId: string;
+  };
 }

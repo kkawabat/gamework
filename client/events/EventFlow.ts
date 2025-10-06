@@ -20,7 +20,7 @@ export interface GameState {
 
 // Client → Host
 export interface PlayerAction {
-  action: "CreateRoom" | "JoinRoom" | "LeaveRoom" | "PlayerMove" | "RestartGame" | string;
+  action: "CreateRoomRequest" | "JoinRoomRequest" | "LeaveRoomRequest" | "PlayerMove" | "RestartGame" | string;
   tick?: number;            // game tick when action occurred
   seq?: number;             // per-player sequence number for dedup/reorder
   playerId: string;        // sender ID
@@ -31,21 +31,11 @@ export interface PlayerAction {
 
 // Host → Client
 export interface StateChange {
-  t: "stateChange";        // event type
-  tick: number;            // tick this state corresponds to
-  kind: "delta" | "snapshot" | "lobby" | "start" | "end" | "pause" | "resume" | "system";
-  
-  // delta-specific
-  baseTick?: number;       // for "delta": tick this delta is based on
-  changes?: any[];         // for "delta": compact list of state changes
-
-  // snapshot-specific
-  fullState?: GameState;         // for "snapshot": authoritative full game state
-
-  // optional metadata (for lifecycle/system)
-  meta?: {
-    reason?: string;       // e.g. why ended, why paused
-    [key: string]: any;    // flexible field for extra context
+  tick?: number;            // tick this state corresponds to
+  type: "delta" | "snapshot" | "system";
+  action: string;
+  payload?: {
+    [key: string]: any;
   };
 }
 

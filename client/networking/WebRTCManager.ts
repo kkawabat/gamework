@@ -1,16 +1,16 @@
-import { ConnectionInfo } from '../types';
-import { SignalingMessage } from '../../shared/signaling-types';
+import { answerMessage, iceCandidateMessage, offerMessage, SignalingMessage, GameRoom } from '../../shared/signaling-types';
 
 export class WebRTCManager {
-  private connections: Map<string, ConnectionInfo> = new Map();
   private onDataChannelMessage?: (peerId: string, message: any) => void;
   private onConnectionChange?: (peerId: string, isConnected: boolean) => void;
   private onIceCandidate?: (peerId: string, candidate: RTCIceCandidateInit) => void;
 
   private stunServers: RTCIceServer[];
   private iceCandidateQueue: Map<string, RTCIceCandidateInit[]> = new Map();
+  private room?: GameRoom;
 
-  constructor(stunServers: RTCIceServer[] = []) {
+  constructor(room: GameRoom, stunServers: RTCIceServer[] = []) {
+    this.room = room;
     this.stunServers = stunServers;
   }
 
@@ -29,12 +29,13 @@ export class WebRTCManager {
     const offer = await connection.createOffer();
     await connection.setLocalDescription(offer);
 
-    this.connections.set(peerId, {
-      peerId,
-      connection,
-      dataChannel,
-      isConnected: false
-    });
+    // Update player in room instead of connections map
+    const player = this.room?.players.get(peerId);
+    if (player) {
+      player.connection = connection;
+      player.dataChannel = dataChannel;
+      player.isConnected = false;
+    }
 
     // Process any queued ICE candidates for this peer
     this.processQueuedIceCandidates(peerId);
@@ -42,16 +43,20 @@ export class WebRTCManager {
     return offer;
   }
 
-  async handleAnswer(peerId: string, answer: RTCSessionDescriptionInit): Promise<void> {
-    const connectionInfo = this.connections.get(peerId);
-    if (!connectionInfo) {
+  async handleAnswer(msg: answerMessage): Promise<void> {
+    const peerId = msg.from;
+    const answer = msg.payload.answer;
+    const player = this.room?.players.get(peerId);
+    if (!player?.connection) {
       throw new Error(`No connection found for peer ${peerId}`);
     }
 
-    await connectionInfo.connection.setRemoteDescription(answer);
+    await player.connection.setRemoteDescription(answer);
   }
 
-  async handleOffer(peerId: string, offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> {
+  async handleOffer(msg: offerMessage): Promise<RTCSessionDescriptionInit> {
+    const peerId = msg.from;
+    const offer = msg.payload.offer;
     const connection = new RTCPeerConnection({
       iceServers: this.stunServers
     });
@@ -67,11 +72,12 @@ export class WebRTCManager {
     const answer = await connection.createAnswer();
     await connection.setLocalDescription(answer);
 
-    this.connections.set(peerId, {
-      peerId,
-      connection,
-      isConnected: false
-    });
+    // Update player in room instead of connections map
+    const player = this.room?.players.get(peerId);
+    if (player) {
+      player.connection = connection;
+      player.isConnected = false;
+    }
 
     // Process any queued ICE candidates for this peer
     this.processQueuedIceCandidates(peerId);
@@ -79,9 +85,11 @@ export class WebRTCManager {
     return answer;
   }
 
-  async handleIceCandidate(peerId: string, candidate: RTCIceCandidateInit): Promise<void> {
-    const connectionInfo = this.connections.get(peerId);
-    if (!connectionInfo) {
+  async handleIceCandidate(msg: iceCandidateMessage): Promise<void> {
+    const peerId = msg.from;
+    const candidate = msg.payload.candidate;
+    const player = this.room?.players.get(peerId);
+    if (!player?.connection) {
       // Queue the ICE candidate for later processing
       console.log(`[WebRTCManager] Queuing ICE candidate for peer ${peerId} (connection not ready)`);
       if (!this.iceCandidateQueue.has(peerId)) {
@@ -91,37 +99,7 @@ export class WebRTCManager {
       return;
     }
 
-    await connectionInfo.connection.addIceCandidate(candidate);
-  }
-
-  /**
-   * Create WebRTC offer and handle signaling automatically
-   */
-  async createOfferWithSignaling(peerId: string, signalingService: any, roomId: string, playerId: string): Promise<void> {
-    const offer = await this.createOffer(peerId);
-    
-    await signalingService.sendMessage({
-      type: 'offer',
-      payload: offer,
-      from: playerId,
-      to: peerId,
-      roomId: roomId
-    });
-  }
-
-  /**
-   * Handle ICE candidate and send through signaling
-   */
-  async handleIceCandidateWithSignaling(peerId: string, candidate: RTCIceCandidate, signalingService: any, roomId: string, playerId: string): Promise<void> {
-    await this.handleIceCandidate(peerId, candidate);
-    
-    await signalingService.sendMessage({
-      type: 'ice_candidate',
-      payload: candidate,
-      from: playerId,
-      to: peerId,
-      roomId: roomId
-    });
+    await player.connection.addIceCandidate(candidate);
   }
 
   private async processQueuedIceCandidates(peerId: string): Promise<void> {
@@ -132,8 +110,8 @@ export class WebRTCManager {
 
     console.log(`[WebRTCManager] Processing ${queuedCandidates.length} queued ICE candidates for peer ${peerId}`);
     
-    const connectionInfo = this.connections.get(peerId);
-    if (!connectionInfo) {
+    const player = this.room?.players.get(peerId);
+    if (!player?.connection) {
       console.warn(`[WebRTCManager] No connection found for peer ${peerId} when processing queued candidates`);
       return;
     }
@@ -141,7 +119,7 @@ export class WebRTCManager {
     // Process all queued ICE candidates
     for (const candidate of queuedCandidates) {
       try {
-        await connectionInfo.connection.addIceCandidate(candidate);
+        await player.connection.addIceCandidate(candidate);
         console.log(`[WebRTCManager] Processed queued ICE candidate for peer ${peerId}`);
       } catch (error) {
         console.error(`[WebRTCManager] Failed to process queued ICE candidate for peer ${peerId}:`, error);
@@ -153,8 +131,8 @@ export class WebRTCManager {
   }
 
   sendMessage(peerId: string, message: any): boolean {
-    const connectionInfo = this.connections.get(peerId);
-    if (!connectionInfo?.dataChannel || connectionInfo.dataChannel.readyState !== 'open') {
+    const player = this.room?.players.get(peerId);
+    if (!player?.dataChannel || player.dataChannel.readyState !== 'open') {
       console.warn(`[WebRTCManager] Cannot send message to ${peerId}: connection not ready`);
       return false;
     }
@@ -162,7 +140,7 @@ export class WebRTCManager {
     try {
       const messageStr = JSON.stringify(message);
       console.log(`[WebRTCManager] Sending message to ${peerId}:`, message.type || 'unknown', message);
-      connectionInfo.dataChannel.send(messageStr);
+      player.dataChannel.send(messageStr);
       return true;
     } catch (error) {
       console.error('Failed to send message:', error);
@@ -171,10 +149,10 @@ export class WebRTCManager {
   }
 
   broadcastMessage(message: any, excludePeerId?: string): void {
-    console.log(`[WebRTCManager] Broadcasting message to ${this.connections.size} connections`);
-    this.connections.forEach((connectionInfo, peerId) => {
-      console.log(`[WebRTCManager] Connection ${peerId}: connected=${connectionInfo.isConnected}`);
-      if (peerId !== excludePeerId && connectionInfo.isConnected) {
+    console.log(`[WebRTCManager] Broadcasting message to ${this.room?.players.size || 0} connections`);
+    this.room?.players.forEach((player, peerId) => {
+      console.log(`[WebRTCManager] Connection ${peerId}: connected=${player.isConnected}`);
+      if (peerId !== excludePeerId && player.isConnected) {
         console.log(`[WebRTCManager] Sending message to ${peerId}`);
         this.sendMessage(peerId, message);
       }
@@ -182,13 +160,17 @@ export class WebRTCManager {
   }
 
   disconnectPeer(peerId: string): void {
-    const connectionInfo = this.connections.get(peerId);
-    if (connectionInfo) {
-      if (connectionInfo.dataChannel) {
-        connectionInfo.dataChannel.close();
+    const player = this.room?.players.get(peerId);
+    if (player?.connection) {
+      if (player.dataChannel) {
+        player.dataChannel.close();
       }
-      connectionInfo.connection.close();
-      this.connections.delete(peerId);
+      player.connection.close();
+      
+      // Update player state
+      player.connection = undefined;
+      player.dataChannel = undefined;
+      player.isConnected = false;
       
       if (this.onConnectionChange) {
         this.onConnectionChange(peerId, false);
@@ -197,31 +179,36 @@ export class WebRTCManager {
   }
 
   disconnectAll(): void {
-    this.connections.forEach((connectionInfo) => {
-      if (connectionInfo.dataChannel) {
-        connectionInfo.dataChannel.close();
+    this.room?.players.forEach((player) => {
+      if (player.dataChannel) {
+        player.dataChannel.close();
       }
-      connectionInfo.connection.close();
+      if (player.connection) {
+        player.connection.close();
+      }
+      // Update player state
+      player.connection = undefined;
+      player.dataChannel = undefined;
+      player.isConnected = false;
     });
-    this.connections.clear();
   }
 
   getConnectedPeers(): string[] {
-    return Array.from(this.connections.entries())
-      .filter(([_, info]) => info.isConnected)
+    return Array.from(this.room?.players.entries() || [])
+      .filter(([_, player]) => player.isConnected)
       .map(([peerId, _]) => peerId);
   }
 
   isPeerConnected(peerId: string): boolean {
-    return this.connections.get(peerId)?.isConnected || false;
+    return this.room?.players.get(peerId)?.isConnected || false;
   }
 
   private setupDataChannel(dataChannel: RTCDataChannel, peerId: string): void {
     dataChannel.onopen = () => {
-      const connectionInfo = this.connections.get(peerId);
-      if (connectionInfo) {
-        connectionInfo.dataChannel = dataChannel;
-        connectionInfo.isConnected = true;
+      const player = this.room?.players.get(peerId);
+      if (player) {
+        player.dataChannel = dataChannel;
+        player.isConnected = true;
         
         if (this.onConnectionChange) {
           this.onConnectionChange(peerId, true);
@@ -230,9 +217,9 @@ export class WebRTCManager {
     };
 
     dataChannel.onclose = () => {
-      const connectionInfo = this.connections.get(peerId);
-      if (connectionInfo) {
-        connectionInfo.isConnected = false;
+      const player = this.room?.players.get(peerId);
+      if (player) {
+        player.isConnected = false;
         
         if (this.onConnectionChange) {
           this.onConnectionChange(peerId, false);
@@ -268,13 +255,13 @@ export class WebRTCManager {
     };
 
     connection.oniceconnectionstatechange = () => {
-      const connectionInfo = this.connections.get(peerId);
-      if (connectionInfo) {
-        const wasConnected = connectionInfo.isConnected;
-        connectionInfo.isConnected = connection.iceConnectionState === 'connected';
+      const player = this.room?.players.get(peerId);
+      if (player) {
+        const wasConnected = player.isConnected;
+        player.isConnected = connection.iceConnectionState === 'connected';
         
-        if (wasConnected !== connectionInfo.isConnected && this.onConnectionChange) {
-          this.onConnectionChange(peerId, connectionInfo.isConnected);
+        if (wasConnected !== player.isConnected && this.onConnectionChange) {
+          this.onConnectionChange(peerId, player.isConnected);
         }
       }
     };

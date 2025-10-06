@@ -13,24 +13,6 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
   private isHost: boolean = false;
 
   /**
-  * Add an entry to the game log
-  */
-  public addGameLogEntry(message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info'): void {
-    const gameLogElement = document.getElementById('gameLog');
-    if (!gameLogElement) return;
-
-    const timestamp = new Date().toLocaleTimeString();
-    const logEntry = document.createElement('div');
-    logEntry.className = `log-entry ${type}`;
-    logEntry.textContent = `[${timestamp}] ${message}`;
-    
-    gameLogElement.appendChild(logEntry);
-    
-    // Auto-scroll to bottom
-    gameLogElement.scrollTop = gameLogElement.scrollHeight;
-  }
-
-  /**
  * Initialize UI elements and event listeners
  */
   initialize(): void {
@@ -199,10 +181,7 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
     }
   }
 
-
-
-
-      /**
+  /**
    * Update join room button status
    */
   public updateJoinRoomButtonStatus(text: string, disabled: boolean = false): void {
@@ -237,24 +216,18 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
        // Join existing room by room code
        console.log(`Looking up room with code: ${roomParam}`);
        this.addGameLogEntry(`Looking up room: ${roomParam.toUpperCase()}`, 'info');
-       
-       try {
-         const fullRoomId = await this.gameWork.lookupRoom(roomParam);
-         if (fullRoomId) {
-           this.addGameLogEntry(`Found room: ${fullRoomId.substring(0, 6).toUpperCase()}`, 'success');
-           await this.gameWork.joinRoom(fullRoomId);
-           roomId = fullRoomId;
-         } else {
-           throw new Error('Room not found');
-         }
-       } catch (error) {
-         this.addGameLogEntry(`Room lookup failed: ${error.message}`, 'error');
-         throw error;
-       }
+       this.gameWork.sendPlayerAction({
+        action: 'JoinRoom',
+        playerId: this.gameWork.getOwner().id,
+        input: { roomCode: roomParam }
+       })
      } else {
        // Host a new room
        this.addGameLogEntry('Creating new game room...', 'info');
-       roomId = await this.gameWork.hostRoom();
+       this.gameWork.sendPlayerAction({
+        action: 'CreateRoom',
+        playerId: this.gameWork.getOwner().id,
+       })
      }
      
      // Determine if this player is the host
@@ -322,6 +295,25 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
       console.error('Failed to generate QR code:', error);
       qrContainer.innerHTML = '<p style="color: red;">Failed to generate QR code</p>';
     }
+  }
+
+
+    /**
+  * Add an entry to the game log
+  */
+  public addGameLogEntry(message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info'): void {
+    const gameLogElement = document.getElementById('gameLog');
+    if (!gameLogElement) return;
+
+    const timestamp = new Date().toLocaleTimeString();
+    const logEntry = document.createElement('div');
+    logEntry.className = `log-entry ${type}`;
+    logEntry.textContent = `[${timestamp}] ${message}`;
+    
+    gameLogElement.appendChild(logEntry);
+    
+    // Auto-scroll to bottom
+    gameLogElement.scrollTop = gameLogElement.scrollHeight;
   }
 }
 
