@@ -189,6 +189,7 @@ export class NetworkEngine {
         // Server confirmed room creation - update GameWork state directly
         const newRoom = {
           id: message.payload.roomId,
+          roomCode: message.payload.roomCode, // Store the server-generated room code
           hostId: this.owner!.id,
           players: new Map([[this.owner!.id, this.owner!]]),
         } as GameRoom;

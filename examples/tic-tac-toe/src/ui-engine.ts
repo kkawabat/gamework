@@ -38,8 +38,14 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
     
     console.log(`Room updated: ${room.id}, Host: ${actualIsHost}, Players: ${playerCount}`);
     
-    // Generate QR code for room joining
-    if (actualIsHost && room.id) {
+    // Generate QR code for room joining using server-generated room code
+    if (actualIsHost && room.roomCode) {
+      console.log('[TicTacToeUIEngine] Using server-generated room code:', room.roomCode);
+      this.updateRoomCode(room.roomCode);
+      this.generateQRCode(room.roomCode);
+    } else if (actualIsHost && room.id) {
+      // Fallback to room ID if roomCode not available
+      console.log('[TicTacToeUIEngine] Using room ID as fallback:', room.id.substring(0, 6));
       this.updateRoomCode(room.id.substring(0, 6).toUpperCase());
       this.generateQRCode(room.id.substring(0, 6).toUpperCase());
     }

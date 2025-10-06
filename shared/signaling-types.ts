@@ -16,6 +16,7 @@ export interface Player {
 
 export interface GameRoom {
   id: string;
+  roomCode?: string; // Server-generated room code for joining
   hostId: string;
   players: Map<string, Player>;
 }
