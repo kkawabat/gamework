@@ -172,7 +172,12 @@ export class SignalingServer {
     const connection = this.connections.get(connectionId);
     if (!connection) return;
 
+    console.log(`[Server] handleJoinRoom called with:`, message);
+    console.log(`[Server] Message payload:`, message.payload);
+    
     const { roomId, roomCode } = message.payload;
+    console.log(`[Server] Extracted roomId:`, roomId, `roomCode:`, roomCode);
+    
     let targetRoom: Room | undefined;
 
     if (roomId) {
@@ -188,9 +193,13 @@ export class SignalingServer {
     }
 
     if (!targetRoom) {
+      console.log(`[Server] Room not found for roomId:`, roomId, `roomCode:`, roomCode);
+      console.log(`[Server] Available rooms:`, Array.from(this.rooms.values()).map(r => ({ id: r.id, roomCode: r.roomCode })));
       this.sendError(connection.ws, 'Room not found');
       return;
     }
+    
+    console.log(`[Server] Found room:`, targetRoom.id, `with code:`, targetRoom.roomCode);
 
     // Update connection
     connection.playerId = message.from;

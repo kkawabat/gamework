@@ -143,3 +143,67 @@ Before making changes, ask:
 ## 🎯 KEY PRINCIPLE
 
 **Events are for external communication only. Internal communication must use direct method calls.**
+
+## 🔍 DEBUGGING & ANALYSIS PROCESS
+
+### ✅ CORRECT Analysis Process
+1. **Read logs carefully** - Look for actual evidence, not assumptions
+2. **Trace the data flow** - Follow the path from source to destination
+3. **Check component interactions** - Verify each step in the chain
+4. **Identify the gap** - Find where the flow breaks
+5. **Fix the root cause** - Don't add workarounds for symptoms
+
+### ❌ WRONG Analysis Process
+1. **Jump to conclusions** - Don't assume without evidence
+2. **Add debugging everywhere** - Don't scatter logs randomly
+3. **Fix symptoms** - Don't patch without understanding the cause
+4. **Ignore the evidence** - Don't dismiss what the logs actually show
+
+### 🔍 Evidence-Based Debugging
+```typescript
+// WRONG - Assumption-based
+"I see no response, must be server issue"
+
+// CORRECT - Evidence-based  
+"Logs show ICE candidates generated but not sent → 
+ Check WebRTC ICE candidate handler → 
+ Found missing onIceCandidate callback"
+```
+
+### 📋 Debugging Checklist
+Before making changes, ask:
+1. **What do the logs actually show?** (not what I think they show)
+2. **What is the expected flow?** (trace the complete path)
+3. **Where does the flow break?** (identify the specific step)
+4. **What's missing or broken?** (root cause, not symptom)
+5. **Does my fix address the root cause?** (not just the symptom)
+
+### 🎯 Analysis Questions
+- **What evidence do I have?** (logs, error messages, behavior)
+- **What should happen?** (expected flow and outcome)
+- **Where does it differ?** (specific point of failure)
+- **Why does it fail?** (root cause analysis)
+- **How do I fix it?** (targeted solution)
+
+### 🚫 Common Analysis Mistakes
+- **Assumption jumping** - "Must be server issue" without evidence
+- **Symptom fixing** - Adding workarounds instead of root cause fixes
+- **Scatter debugging** - Adding logs everywhere instead of targeted investigation
+- **Ignoring evidence** - Dismissing what logs actually show
+- **Quick fixes** - Patching without understanding the problem
+
+### ✅ Good Analysis Example
+```
+Evidence: "ICE candidates generated but not sent"
+Analysis: "WebRTC generates candidates but NetworkEngine doesn't forward them"
+Root Cause: "Missing onIceCandidate handler setup"
+Fix: "Set up ICE candidate forwarding in NetworkEngine"
+```
+
+### ❌ Bad Analysis Example
+```
+Evidence: "No response from server"
+Assumption: "Server must be broken"
+Action: "Add server debugging everywhere"
+Result: "Wasted time, missed the real issue"
+```

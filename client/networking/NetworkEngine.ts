@@ -197,6 +197,22 @@ export class NetworkEngine {
         // Initialize WebRTC manager
         this.webrtc = new WebRTCManager(newRoom, this.gameWork.config.stunServers);
         
+        // Set up ICE candidate handler
+        this.webrtc.onIceCandidate = (peerId: string, candidate: RTCIceCandidateInit) => {
+          console.log('[NetworkEngine] ICE candidate for peer:', peerId, candidate);
+          // Send ICE candidate via signaling service
+          const iceMessage: SignalingMessage = {
+            type: 'SignalingMessage',
+            action: 'ice_candidate',
+            from: this.owner!.id,
+            payload: {
+              to: peerId,
+              candidate: candidate
+            }
+          } as SignalingMessage;
+          this.signaling?.sendMessage(iceMessage);
+        };
+        
         // Update GameWork state directly (hybrid architecture)
         this.gameWork.handleRoomUpdate(newRoom);
         console.log('[NetworkEngine] Room created and GameWork state updated directly');
