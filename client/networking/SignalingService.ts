@@ -62,7 +62,12 @@ export class SignalingService {
 
   async sendMessage(message: SignalingMessage): Promise<void> {
     if (!this.isConnected || !this.ws) {
-      throw new Error('Not connected to signaling service');
+      console.log('[WebSocketSignalingService] Not connected, attempting to connect...');
+      await this.connect();
+    }
+
+    if (!this.isConnected || !this.ws) {
+      throw new Error('Failed to connect to signaling service');
     }
 
     console.log(`[WebSocketSignalingService] Sending message:`, message.type, message);
