@@ -80,12 +80,20 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
     this.roomCodeInput = document.getElementById('roomCodeInput') as HTMLInputElement;
     this.joinRoomBtn = document.getElementById('joinRoomBtn');
     if (this.joinRoomBtn) {
+      console.log('[TicTacToeUIEngine] Setting up join room button click handler');
       this.joinRoomBtn.addEventListener('click', () => {
+        console.log('[TicTacToeUIEngine] Join room button clicked');
         let roomCode = this.roomCodeInput?.value
+        console.log('[TicTacToeUIEngine] Room code:', roomCode);
         if (roomCode) {
+          console.log('[TicTacToeUIEngine] Calling gameWork.joinRoom with:', roomCode);
           this.gameWork.joinRoom(roomCode);
+        } else {
+          console.log('[TicTacToeUIEngine] No room code provided');
         }
       });
+    } else {
+      console.log('[TicTacToeUIEngine] Join room button not found');
     }
     
     
@@ -247,19 +255,22 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
   }
 
   async initializeQRCode(): Promise<void> {
+     console.log('[TicTacToeUIEngine] initializeQRCode called');
+     
      // Check if joining an existing room via URL parameter
      const urlParams = new URLSearchParams(window.location.search);
      const roomParam = urlParams.get('room');
      
-     let roomId: string;
+     console.log('[TicTacToeUIEngine] URL room parameter:', roomParam);
      
      if (roomParam) {
        // Join existing room by room code
-       console.log(`Looking up room with code: ${roomParam}`);
+       console.log(`[TicTacToeUIEngine] Looking up room with code: ${roomParam}`);
        this.addGameLogEntry(`Looking up room: ${roomParam.toUpperCase()}`, 'info');
        this.gameWork.joinRoom(roomParam);
      } else {
        // Host a new room
+       console.log('[TicTacToeUIEngine] No room parameter, creating new room');
        this.addGameLogEntry('Creating new game room...', 'info');
        this.gameWork.createRoom();
      }
