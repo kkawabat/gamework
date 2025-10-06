@@ -6,11 +6,11 @@ export interface Player {
   isHost?: boolean;
   lastSeen?: number;
   
-  // WebRTC connection info
-  connection?: RTCPeerConnection;
-  dataChannel?: RTCDataChannel;
+  // WebRTC connection info (using any to avoid server compilation issues)
+  connection?: any; // RTCPeerConnection
+  dataChannel?: any; // RTCDataChannel
   isConnected?: boolean;
-  
+  ~50
   [key: string]: any;
 }
 
@@ -35,7 +35,7 @@ export interface offerMessage extends SignalingMessage {
   from: string;
   payload: {
     to: string;
-    offer: RTCSessionDescriptionInit;
+    offer: any; // RTCSessionDescriptionInit
   };
 }
 
@@ -45,7 +45,7 @@ export interface answerMessage extends SignalingMessage {
   from: string;
   payload: {
     to: string;
-    answer: RTCSessionDescriptionInit;
+    answer: any; // RTCSessionDescriptionInit
   };
 }
 
@@ -55,7 +55,7 @@ export interface iceCandidateMessage extends SignalingMessage {
   from: string;
   payload: {
     to: string;
-    candidate: RTCIceCandidateInit;
+    candidate: any; // RTCIceCandidateInit
   };
 }
 
