@@ -19,7 +19,7 @@ export abstract class UIEngine<S, A = unknown> {
   }
 
   abstract render(): void;
-  abstract initialize?(): void;
+  abstract initialize(): void;
 
   // === DIRECT METHOD CALLS (Hybrid Architecture) ===
   

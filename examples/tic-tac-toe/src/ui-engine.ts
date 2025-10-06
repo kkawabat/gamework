@@ -51,8 +51,12 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
    * Initialize UI elements and event listeners
    */
   initialize(): void {
+    console.log('[TicTacToeUIEngine] initialize() called');
+    console.log('[TicTacToeUIEngine] Document ready state:', document.readyState);
+    
     // Get board elements
     this.boardElements = Array.from(document.querySelectorAll('.cell'));
+    console.log('[TicTacToeUIEngine] Board elements found:', this.boardElements.length);
     this.boardElements.forEach((cell, index) => {
       const action: TicTacToeAction = {
         action: 'playerMove',
@@ -78,7 +82,12 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
     
     
     this.roomCodeInput = document.getElementById('roomCodeInput') as HTMLInputElement;
+    console.log('[TicTacToeUIEngine] Room code input found:', !!this.roomCodeInput);
+    
     this.joinRoomBtn = document.getElementById('joinRoomBtn');
+    console.log('[TicTacToeUIEngine] Join room button found:', !!this.joinRoomBtn);
+    console.log('[TicTacToeUIEngine] Join room button element:', this.joinRoomBtn);
+    
     if (this.joinRoomBtn) {
       console.log('[TicTacToeUIEngine] Setting up join room button click handler');
       this.joinRoomBtn.addEventListener('click', () => {
@@ -94,6 +103,8 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
       });
     } else {
       console.log('[TicTacToeUIEngine] Join room button not found');
+      console.log('[TicTacToeUIEngine] Available elements with "join" in ID:', 
+        Array.from(document.querySelectorAll('[id*="join"]')).map(el => el.id));
     }
     
     

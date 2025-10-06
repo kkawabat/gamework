@@ -50,6 +50,10 @@ export class TicTacToeGameWork extends GameWork<TicTacToeState> {
     
     console.log('[TicTacToeGameWork] Initial state:', this.state);
     
+    // Initialize UI event handlers
+    console.log('[TicTacToeGameWork] Initializing UI engine');
+    this.uiEngine.initialize();
+
     // Initialize UI with initial game state
     console.log('[TicTacToeGameWork] Updating UI with initial state');
     this.uiEngine.updateState(this.state);
