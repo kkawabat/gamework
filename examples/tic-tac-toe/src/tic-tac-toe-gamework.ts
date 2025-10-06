@@ -3,6 +3,7 @@ import { TicTacToeEngine } from './game-engine';
 import { TicTacToeUIEngine } from './ui-engine';
 import { TicTacToeState, TicTacToeAction } from './game-engine';
 import { PlayerAction } from '../../../client/events/EventFlow';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * TicTacToeGameWork - Game-specific implementation of GameWork
@@ -27,22 +28,26 @@ export class TicTacToeGameWork extends GameWork<TicTacToeState> {
     this.gameEngine.setGameWork(this);
     this.uiEngine.setGameWork(this);
     
-    // Initialize state with game engine's initial state
+    // Initialize complete state in GameWork
     this.state = {
-      ...this.gameEngine.state as TicTacToeState,
+      // Base GameWork properties
+      room: undefined,
       owner: {
-        id: 'temp-id', // Will be set properly in constructor
+        id: this.generatePlayerId(),
         name: 'Host',
         lastSeen: Date.now()
-      }
-    };
+      },
+      
+      // TicTacToe-specific properties from engine
+      ...TicTacToeEngine.getInitialGameState()
+    } as TicTacToeState;
     
     // Initialize UI with initial game state
     this.uiEngine.updateState(this.state);
   }
 
   protected getInitialGameState(): TicTacToeState {
-    return this.gameEngine.state as TicTacToeState;
+    return this.state;
   }
 
   protected handlePlayerAction(action: PlayerAction): TicTacToeState {
@@ -104,5 +109,12 @@ export class TicTacToeGameWork extends GameWork<TicTacToeState> {
     };
     
     this.processPlayerAction(action);
+  }
+
+  /**
+   * Generate a unique player ID
+   */
+  private generatePlayerId(): string {
+    return uuidv4();
   }
 }

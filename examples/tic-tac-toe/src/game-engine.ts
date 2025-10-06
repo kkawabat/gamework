@@ -38,11 +38,8 @@ export interface TicTacToeAction extends PlayerAction {
  */
 export class TicTacToeEngine extends GameEngine<TicTacToeState, TicTacToeAction> {
   constructor() {
-    super(TicTacToeEngine.getInitialState());
-  }
-
-  static getInitialState(): TicTacToeState {
-    return {
+    // Initialize with minimal state - GameWork will provide complete state
+    super({
       stage: 'playing',
       tick: 0,
       players: {},
@@ -52,7 +49,22 @@ export class TicTacToeEngine extends GameEngine<TicTacToeState, TicTacToeAction>
         gameOver: false,
         winner: null
       }
-    } as TicTacToeState
+    } as TicTacToeState);
+  }
+
+  static getInitialGameState(): Partial<TicTacToeState> {
+    return {
+      // Only TicTacToe-specific properties
+      stage: 'playing',
+      tick: 0,
+      players: {},
+      gameData: {
+        board: Array(9).fill(null),
+        currentPlayer: null,
+        gameOver: false,
+        winner: null
+      }
+    }
   }
 
 
@@ -101,7 +113,10 @@ export class TicTacToeEngine extends GameEngine<TicTacToeState, TicTacToeAction>
   };
 
   applyRestartGame(): TicTacToeState {
-    return TicTacToeEngine.getInitialState();
+    return {
+      ...this.state,
+      ...TicTacToeEngine.getInitialGameState()
+    } as TicTacToeState;
   }
 
   updateState(state: TicTacToeState): TicTacToeState {
