@@ -25,10 +25,12 @@ export class NetworkEngine {
   }
 
   async onSendPlayerAction(payload: PlayerAction): Promise<void> {
+    console.log('[NetworkEngine] Sending player action:', payload.action);
     // send to the host of the room for processing
     this.webrtc?.sendMessage(this.room?.hostId || "", payload);
   }
   async onReceivePlayerAction(paction: PlayerAction): Promise<void> {
+    console.log('[NetworkEngine] Received player action:', paction.action);
     const action = paction.action;
     switch (action) {
       case 'CreateRoomRequest':
@@ -70,9 +72,11 @@ export class NetworkEngine {
     }
   }
   async onSendStateChange(schange: StateChange): Promise<void> {
+    console.log('[NetworkEngine] Sending state change:', schange.type);
     this.webrtc?.broadcastMessage(schange);
   }
   async onReceiveStateChange(schange: StateChange): Promise<void> {
+    console.log('[NetworkEngine] Received state change:', schange.type);
     switch (schange.type) {
       case 'system':
         switch (schange.action) {
