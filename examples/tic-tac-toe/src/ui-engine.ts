@@ -209,7 +209,7 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
     const me = this.gameWork.getOwner()
     const player1Status = document.getElementById('player1Status');
     if (player1Status) {
-      const role = state.players[me.id].symbol;
+      const role = state.players[me.id]?.symbol;
       player1Status.textContent = `You - ${role ? `Playing as ${role}` : 'Connected'}`;
     }
     
@@ -218,7 +218,7 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
     if (player2Status) {
       const player2Id = Object.keys(state.players).find(k => k !== me.id)!;
       if (player2Id) {
-        const role = state.players[player2Id].symbol;
+        const role = state.players[player2Id]?.symbol;
         player2Status.textContent = `Player 2 - ${role ? `Playing as ${role}` : 'Connected'}`;
       } else {
         player2Status.textContent = 'Waiting for player...';
