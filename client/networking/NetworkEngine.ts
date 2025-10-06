@@ -24,11 +24,11 @@ export class NetworkEngine {
     return this.room;
   }
 
-  async onReceivePlayerAction(payload: PlayerAction): Promise<void> {
+  async onSendPlayerAction(payload: PlayerAction): Promise<void> {
     // send to the host of the room for processing
     this.webrtc?.sendMessage(this.room?.hostId || "", payload);
   }
-  async onSendPlayerAction(paction: PlayerAction): Promise<void> {
+  async onReceivePlayerAction(paction: PlayerAction): Promise<void> {
     const action = paction.action;
     switch (action) {
       case 'CreateRoomRequest':
@@ -69,10 +69,10 @@ export class NetworkEngine {
         break;
     }
   }
-  async onSendStateChange(schange: StateChange): Promise<void> {
+  async onReceiveStateChange(schange: StateChange): Promise<void> {
     this.webrtc?.broadcastMessage(schange);
   }
-  async onReceiveStateChange(schange: StateChange): Promise<void> {
+  async onSendStateChange(schange: StateChange): Promise<void> {
     switch (schange.type) {
       case 'system':
         switch (schange.action) {

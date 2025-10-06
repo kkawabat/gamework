@@ -50,9 +50,14 @@ export interface EventPayloadMap {
 
 export type EventName = keyof EventPayloadMap
 
+export interface EventHandler<P> {
+  method: string;
+  component: string;
+}
+
 export interface EventConfig<P> {
-  senders: string[];
-  listeners: string[];
+  sender: EventHandler<P>;
+  listeners: EventHandler<P>[];
   __payloadType__?: (p: P) => void;
 }
 
@@ -63,54 +68,79 @@ export type EventFlows<M extends Record<string, any>> = {
 
 export const ThinClientEventFlow = {
   sendPlayerAction: {
-    senders: ['UIEngine'],
-    listeners: ['NetworkEngine'],
+    sender: { method: 'onSendPlayerAction', component: 'UIEngine' },
+    listeners: [
+      { method: 'onReceivePlayerAction', component: 'NetworkEngine' }
+    ],
   },
   receivePlayerAction: {
-    senders: ['NetworkEngine'],
-    listeners: ['GameEngine'],
+    sender: { method: 'onSendPlayerAction', component: 'NetworkEngine' },
+    listeners: [
+      { method: 'onReceivePlayerAction', component: 'GameEngine' }
+    ],
   },
   sendStateChange: {
-    senders: ['GameEngine'],
-    listeners: ['NetworkEngine'],
+    sender: { method: 'onSendStateChange', component: 'GameEngine' },
+    listeners: [
+      { method: 'onReceiveStateChange', component: 'NetworkEngine' }
+    ],
   },
   receiveStateChange: {
-    senders: ['NetworkEngine'],
-    listeners: ['UIEngine'],
+    sender: { method: 'onSendStateChange', component: 'NetworkEngine' },
+    listeners: [
+      { method: 'onReceiveStateChange', component: 'UIEngine' }
+    ],
   },
 } as const satisfies EventFlows<EventPayloadMap>
 
 export const ClientPredictionEventFlow = {
   sendPlayerAction: {
-    senders: ['UIEngine'],
-    listeners: ['NetworkEngine', 'GameEngine'],
+    sender: { method: 'onSendPlayerAction', component: 'UIEngine' },
+    listeners: [
+      { method: 'onReceivePlayerAction', component: 'NetworkEngine' },
+      { method: 'onReceivePlayerAction', component: 'GameEngine' }
+    ],
   },
   receivePlayerAction: {
-    senders: ['NetworkEngine'],
-    listeners: ['GameEngine'],
+    sender: { method: 'onSendPlayerAction', component: 'NetworkEngine' },
+    listeners: [
+      { method: 'onReceivePlayerAction', component: 'GameEngine' }
+    ],
   },
   sendStateChange: {
-    senders: ['GameEngine'],
-    listeners: ['NetworkEngine', 'UIEngine'],
+    sender: { method: 'onSendStateChange', component: 'GameEngine' },
+    listeners: [
+      { method: 'onReceiveStateChange', component: 'NetworkEngine' },
+      { method: 'onReceiveStateChange', component: 'UIEngine' }
+    ],
   },
   receiveStateChange: {
-    senders: ['NetworkEngine'],
-    listeners: ['UIEngine', 'GameEngine'],
+    sender: { method: 'onSendStateChange', component: 'NetworkEngine' },
+    listeners: [
+      { method: 'onReceiveStateChange', component: 'UIEngine' },
+      { method: 'onReceiveStateChange', component: 'GameEngine' }
+    ],
   },
 } as const satisfies EventFlows<EventPayloadMap>
 
 export const DeterministicLockstepEventFlow = {
   sendPlayerAction: {
-    senders: ['UIEngine'],
-    listeners: ['NetworkEngine'],
+    sender: { method: 'onSendPlayerAction', component: 'UIEngine' },
+    listeners: [
+      { method: 'onReceivePlayerAction', component: 'NetworkEngine' }
+    ],
   },
   receivePlayerAction: {
-    senders: ['NetworkEngine'],
-    listeners: ['GameEngine'],
+    sender: { method: 'onSendPlayerAction', component: 'NetworkEngine' },
+    listeners: [
+      { method: 'onReceivePlayerAction', component: 'GameEngine' }
+    ],
   },
   receiveStateChange: {
-    senders: ['GameEngine'],
-    listeners: ['UIEngine'],
+    sender: { method: 'onSendStateChange', component: 'GameEngine' },
+    listeners: [
+      { method: 'onReceiveStateChange', component: 'UIEngine' }
+    ],
   },
 } as const satisfies EventFlows<EventPayloadMap>
 

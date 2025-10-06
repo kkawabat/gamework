@@ -39,26 +39,35 @@ export class EventManager {
     this.gameEngine = this.gameWork.gameEngine;
     this.uiEngine = this.gameWork.uiEngine;
     
-    // Map of listener names to their component instances
-    const listenerMapping = new Map([
+    // Map of component names to their instances
+    const componentMapping = new Map([
       ['NetworkEngine', this.networkEngine],
       ['GameEngine', this.gameEngine],
       ['UIEngine', this.uiEngine],
       ['GameWork', this] // GameWork is the EventManager itself
     ]);
 
-    // Programmatically set up all event handlers based on this.events configuration
+    // Programmatically set up all event handlers based on event flow configuration
     Object.entries(this.eventFlow).forEach(([eventName, eventConfig]) => {
-      const handlerName = `on${eventName.charAt(0).toUpperCase() + eventName.slice(1)}`;
-      
       this.eventHandlers[eventName as EventName] = (payload: EventPayloadMap[EventName]) => {
-        
-        console.log(`[EventManager] Event ${eventName} emitted to ${eventConfig.listeners} with payload:`, payload);
+        console.log(`[EventManager] Event ${eventName} emitted to ${eventConfig.listeners.map(l => l.component)} with payload:`, payload);
 
-        eventConfig.listeners.forEach((listenerName: string) => {
-          const listener = listenerMapping.get(listenerName);
-          if (!listener) return;
-          listener[handlerName](payload);
+        // Call all listeners for this event
+        eventConfig.listeners.forEach((listener) => {
+          const component = componentMapping.get(listener.component);
+          if (!component) {
+            console.warn(`[EventManager] Component ${listener.component} not found for event ${eventName}`);
+            return;
+          }
+          
+          // Check if the method exists on the component
+          if (typeof component[listener.method] !== 'function') {
+            console.warn(`[EventManager] Method ${listener.method} not found on ${listener.component} for event ${eventName}`);
+            return;
+          }
+          
+          // Call the handler method
+          component[listener.method](payload);
         });
       };
     });
