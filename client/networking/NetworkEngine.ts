@@ -69,10 +69,10 @@ export class NetworkEngine {
         break;
     }
   }
-  async onReceiveStateChange(schange: StateChange): Promise<void> {
+  async onSendStateChange(schange: StateChange): Promise<void> {
     this.webrtc?.broadcastMessage(schange);
   }
-  async onSendStateChange(schange: StateChange): Promise<void> {
+  async onReceiveStateChange(schange: StateChange): Promise<void> {
     switch (schange.type) {
       case 'system':
         switch (schange.action) {
