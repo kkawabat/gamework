@@ -229,6 +229,45 @@ export abstract class GameWork<T extends BaseGameWorkState = BaseGameWorkState> 
     }
   }
 
+  // === ROOM MANAGEMENT (Base functionality) ===
+  
+  /**
+   * Create a new room
+   */
+  createRoom(): void {
+    const action: PlayerAction = {
+      action: 'CreateRoomRequest',
+      playerId: this.state.owner.id
+    };
+    
+    this.sendPlayerAction(action);
+  }
+
+  /**
+   * Join an existing room
+   */
+  joinRoom(roomCode: string): void {
+    const action: PlayerAction = {
+      action: 'JoinRoomRequest',
+      playerId: this.state.owner.id,
+      input: { roomCode }
+    };
+    
+    this.sendPlayerAction(action);
+  }
+
+  /**
+   * Leave the current room
+   */
+  leaveRoom(): void {
+    const action: PlayerAction = {
+      action: 'LeaveRoomRequest',
+      playerId: this.state.owner.id
+    };
+    
+    this.sendPlayerAction(action);
+  }
+
   // === EXTERNAL COMMUNICATION (Events) ===
   
   /**

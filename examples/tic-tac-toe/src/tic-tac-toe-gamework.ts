@@ -44,6 +44,9 @@ export class TicTacToeGameWork extends GameWork<TicTacToeState> {
     
     // Initialize UI with initial game state
     this.uiEngine.updateState(this.state);
+    
+    // Automatically create a room for the host
+    this.createRoom();
   }
 
   protected getInitialGameState(): TicTacToeState {
@@ -109,4 +112,5 @@ export class TicTacToeGameWork extends GameWork<TicTacToeState> {
   private generatePlayerId(): string {
     return uuidv4();
   }
+
 }

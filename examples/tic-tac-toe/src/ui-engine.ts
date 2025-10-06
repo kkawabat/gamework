@@ -77,12 +77,7 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
       this.joinRoomBtn.addEventListener('click', () => {
         let roomCode = this.roomCodeInput?.value
         if (roomCode) {
-          const action: TicTacToeAction = {
-            action: 'JoinRoom',
-            playerId: this.gameWork.getOwner().id,
-            input: { roomCode: roomCode }
-          }
-          this.gameWork.sendPlayerAction(action)
+          this.gameWork.joinRoom(roomCode);
         }
       });
     }
@@ -93,12 +88,7 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
         if (e.key === 'Enter') {
           let roomCode = this.roomCodeInput?.value
           if (roomCode) {
-            const action: TicTacToeAction = {
-              action: 'JoinRoom',
-              playerId: this.gameWork.getOwner().id,
-              input: { roomCode: roomCode }
-            }
-            this.gameWork.sendPlayerAction(action);
+          this.gameWork.joinRoom(roomCode);
           }
         }
       });
@@ -261,18 +251,11 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
        // Join existing room by room code
        console.log(`Looking up room with code: ${roomParam}`);
        this.addGameLogEntry(`Looking up room: ${roomParam.toUpperCase()}`, 'info');
-       this.gameWork.sendPlayerAction({
-        action: 'JoinRoomRequest',
-        playerId: this.gameWork.getOwner().id,
-        input: { roomCode: roomParam }
-       })
+       this.gameWork.joinRoom(roomParam);
      } else {
        // Host a new room
        this.addGameLogEntry('Creating new game room...', 'info');
-       this.gameWork.sendPlayerAction({
-        action: 'CreateRoomRequest',
-        playerId: this.gameWork.getOwner().id,
-       })
+       this.gameWork.createRoom();
      }
      
   }
