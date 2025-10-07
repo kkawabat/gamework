@@ -403,6 +403,18 @@ export class WebRTCManager {
         console.log(`[WebRTCManager] Client: Connection state changed to connecting, processing queued candidates`);
         this.processQueuedIceCandidates(peerId);
       }
+      
+      // Handle connection established
+      if (connection.connectionState === 'connected') {
+        console.log(`[WebRTCManager] Connection established for peer ${peerId}`);
+        const player = this.room?.players.get(peerId);
+        if (player) {
+          player.isConnected = true;
+          if (this.onConnectionChange) {
+            this.onConnectionChange(peerId, true);
+          }
+        }
+      }
     };
 
     connection.onicegatheringstatechange = () => {

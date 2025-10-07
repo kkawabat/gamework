@@ -207,3 +207,79 @@ Assumption: "Server must be broken"
 Action: "Add server debugging everywhere"
 Result: "Wasted time, missed the real issue"
 ```
+
+## 🚫 CRITICAL DEBUGGING MISTAKES TO AVOID
+
+### ❌ WRONG: Assumption-Based Debugging
+```typescript
+// WRONG - Jumping to conclusions without evidence
+"I see .local hostnames, must be mDNS issue"
+"I see same public IP, must be hairpin NAT issue"
+"I see connection failure, must be network issue"
+```
+
+### ✅ CORRECT: Evidence-Based Debugging
+```typescript
+// CORRECT - Analyze what the logs actually show
+"Host logs show: 'Client: Queuing ICE candidate'"
+"Host is NOT a client - this is wrong code path"
+"Host should process ICE candidates immediately"
+"Root cause: handleIceCandidate always uses client logic"
+```
+
+### 🔍 DEBUGGING PROCESS CHECKLIST
+
+Before making changes, ask:
+1. **What do the logs actually show?** (not what I think they show)
+2. **What is the expected flow?** (trace the complete path)
+3. **Where does the flow break?** (identify the specific step)
+4. **What's missing or broken?** (root cause, not symptom)
+5. **Does my fix address the root cause?** (not just the symptom)
+
+### 🎯 EVIDENCE-BASED ANALYSIS
+
+#### ✅ Good Analysis Process
+1. **Read logs carefully** - Look for actual evidence, not assumptions
+2. **Trace the data flow** - Follow the path from source to destination
+3. **Check component interactions** - Verify each step in the chain
+4. **Identify the gap** - Find where the flow breaks
+5. **Fix the root cause** - Don't add workarounds for symptoms
+
+#### ❌ Bad Analysis Process
+1. **Jump to conclusions** - Don't assume without evidence
+2. **Add debugging everywhere** - Don't scatter logs randomly
+3. **Fix symptoms** - Don't patch without understanding the cause
+4. **Ignore the evidence** - Don't dismiss what the logs actually show
+
+### 🔍 DEBUGGING QUESTIONS
+
+Before making changes, ask:
+- **What evidence do I have?** (logs, error messages, behavior)
+- **What should happen?** (expected flow and outcome)
+- **Where does it differ?** (specific point of failure)
+- **Why does it fail?** (root cause analysis)
+- **How do I fix it?** (targeted solution)
+
+### 🚫 COMMON MISTAKES
+
+1. **Assumption jumping** - "Must be network issue" without evidence
+2. **Symptom fixing** - Adding workarounds instead of root cause fixes
+3. **Scatter debugging** - Adding logs everywhere instead of targeted investigation
+4. **Ignoring evidence** - Dismissing what logs actually show
+5. **Quick fixes** - Patching without understanding the problem
+
+### ✅ GOOD DEBUGGING EXAMPLE
+```
+Evidence: "Host logs show 'Client: Queuing ICE candidate'"
+Analysis: "Host is not a client - wrong code path"
+Root Cause: "handleIceCandidate always uses client logic"
+Fix: "Add host/client logic separation"
+```
+
+### ❌ BAD DEBUGGING EXAMPLE
+```
+Evidence: "Connection fails after ICE exchange"
+Assumption: "Must be network/NAT issue"
+Action: "Disable STUN, change ICE servers"
+Result: "Wasted time, missed the real bug"
+```
