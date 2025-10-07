@@ -125,6 +125,7 @@ export class WebRTCManager {
     console.log('[WebRTCManager] Client: WebRTC connection established with host');
 
     // Process any queued ICE candidates for this peer
+    console.log('[WebRTCManager] Client: Processing any queued ICE candidates');
     this.processQueuedIceCandidates(peerId);
 
     return answer;
@@ -157,21 +158,17 @@ export class WebRTCManager {
       console.log(`[WebRTCManager] UNKNOWN CANDIDATE TYPE:`, candidateType);
     }
     
-    // Client: Use the stored connection to host
-    if (!this.clientConnection) {
-      console.log(`[WebRTCManager] Client: Queuing ICE candidate (connection not ready)`);
-      if (!this.iceCandidateQueue.has(peerId)) {
-        this.iceCandidateQueue.set(peerId, []);
-      }
-      this.iceCandidateQueue.get(peerId)!.push(candidate);
-      return;
+    // Client: Always queue ICE candidates, process them when connection is ready
+    console.log(`[WebRTCManager] Client: Queuing ICE candidate for processing`);
+    if (!this.iceCandidateQueue.has(peerId)) {
+      this.iceCandidateQueue.set(peerId, []);
     }
-
-    try {
-      await this.clientConnection.addIceCandidate(candidate);
-      console.log(`[WebRTCManager] SUCCESSFULLY ADDED ICE CANDIDATE for host`);
-    } catch (error) {
-      console.error(`[WebRTCManager] ERROR ADDING ICE CANDIDATE for host:`, error);
+    this.iceCandidateQueue.get(peerId)!.push(candidate);
+    
+    // If connection is ready, process immediately
+    if (this.clientConnection) {
+      console.log(`[WebRTCManager] Client: Connection ready, processing queued candidates`);
+      this.processQueuedIceCandidates(peerId);
     }
   }
 
@@ -368,6 +365,12 @@ export class WebRTCManager {
 
     connection.onconnectionstatechange = () => {
       console.log(`Connection state for peer ${peerId}:`, connection.connectionState);
+      
+      // When connection becomes ready, process any queued ICE candidates
+      if (connection.connectionState === 'connecting' && this.clientConnection) {
+        console.log(`[WebRTCManager] Client: Connection state changed to connecting, processing queued candidates`);
+        this.processQueuedIceCandidates(peerId);
+      }
     };
 
     connection.onicegatheringstatechange = () => {
