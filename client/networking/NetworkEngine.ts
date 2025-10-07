@@ -234,21 +234,18 @@ export class NetworkEngine {
           // Client: We joined a room
           console.log('[NetworkEngine] Client: Joined room, setting up WebRTC connection');
           
-          // Create room object for client
+          // Create room object for client (minimal - just for GameWork state)
           const clientRoom = {
             id: message.payload.roomId,
             roomCode: message.payload.roomCode,
             hostId: message.payload.hostId || message.from,
-            players: new Map([[this.owner!.id, this.owner!]]),
+            players: new Map([[this.owner!.id, this.owner!]]), // Only self
           } as GameRoom;
           
-          // Set room in WebRTC manager
-          this.webrtc.setRoom(clientRoom);
-          
-          // Update GameWork state
+          // Update GameWork state (this will update UI with room info)
           this.gameWork.handleRoomUpdate(clientRoom);
           
-          // Client waits for host's offer (no initiation needed)
+          // Client waits for host's offer (no WebRTC setup needed yet)
           console.log('[NetworkEngine] Client: Waiting for host offer');
         }
         
@@ -273,15 +270,9 @@ export class NetworkEngine {
   private async handleSignalingMessages(message: SignalingMessage): Promise<void> {
     switch (message.action) {
       case 'offer':
-        // Create new player and add to GameWork state
-        const newPlayer: Player = {
-          id: message.from,
-          connection: undefined,
-          dataChannel: undefined,
-          isConnected: false
-        };
-        this.gameWork.addConnectedPlayer(newPlayer);
+        console.log('[NetworkEngine] Received offer from:', message.from);
         
+        console.log('[NetworkEngine] Creating answer for offer from:', message.from);
         const answer = await this.webrtc?.handleOffer(message as offerMessage);
         let msg =  {
           type: 'SignalingMessage',
@@ -292,9 +283,11 @@ export class NetworkEngine {
             answer: answer
           }
         } as answerMessage;
+        console.log('[NetworkEngine] Sending answer to:', message.from);
         await this.signaling?.sendMessage(msg);
         break;
       case 'answer':
+        console.log('[NetworkEngine] Received answer from:', message.from);
         await this.webrtc?.handleAnswer(message as answerMessage);
         break;
       case 'ice_candidate':

@@ -8,6 +8,7 @@ export class WebRTCManager {
   private iceCandidateQueue: Map<string, RTCIceCandidateInit[]> = new Map();
   private room?: GameRoom;
   private networkEngine: any;
+  private clientConnection?: RTCPeerConnection; // For client: single connection to host
 
   constructor(networkEngine: any) {
     this.networkEngine = networkEngine;
@@ -23,7 +24,7 @@ export class WebRTCManager {
    */
   async initiateConnection(peerId: string): Promise<void> {
     try {
-      console.log('[WebRTCManager] Creating offer for peer:', peerId);
+      console.log('[WebRTCManager] INITIATING CONNECTION - Creating offer for peer:', peerId);
       const offer = await this.createOffer(peerId);
       
       // Send offer via signaling service
@@ -37,7 +38,7 @@ export class WebRTCManager {
         }
       } as SignalingMessage;
       
-      console.log('[WebRTCManager] Sending offer to peer:', peerId);
+      console.log('[WebRTCManager] INITIATING CONNECTION - Sending offer to peer:', peerId);
       this.networkEngine.signaling?.sendMessage(offerMessage);
     } catch (error) {
       console.error('[WebRTCManager] Error creating offer:', error);
@@ -48,7 +49,7 @@ export class WebRTCManager {
    * Internal ICE candidate handler
    */
   private onIceCandidate = (peerId: string, candidate: RTCIceCandidateInit) => {
-    console.log('[WebRTCManager] ICE candidate for peer:', peerId, candidate);
+    console.log('[WebRTCManager] SENDING ICE CANDIDATE to peer:', peerId, candidate.candidate);
     const iceMessage: SignalingMessage = {
       type: 'SignalingMessage',
       action: 'ice_candidate',
@@ -119,11 +120,27 @@ export class WebRTCManager {
     const answer = await connection.createAnswer();
     await connection.setLocalDescription(answer);
 
-    // Update player in room instead of connections map
-    const player = this.room?.players.get(peerId);
-    if (player) {
+    // For client: Store connection directly (no player management)
+    // For host: Create/update player in room
+    if (this.networkEngine.gameWork.isHost()) {
+      // Host: Manage players in room
+      let player = this.room?.players.get(peerId);
+      if (!player) {
+        player = {
+          id: peerId,
+          connection: undefined,
+          dataChannel: undefined,
+          isConnected: false
+        };
+        this.room?.players.set(peerId, player);
+        this.networkEngine.gameWork.addConnectedPlayer(player);
+      }
       player.connection = connection;
       player.isConnected = false;
+    } else {
+      // Client: Store the connection to host
+      this.clientConnection = connection;
+      console.log('[WebRTCManager] Client: WebRTC connection established with host');
     }
 
     // Process any queued ICE candidates for this peer
@@ -135,24 +152,44 @@ export class WebRTCManager {
   async handleIceCandidate(msg: iceCandidateMessage): Promise<void> {
     const peerId = msg.from;
     const candidate = msg.payload.candidate;
-    console.log(`[WebRTCManager] Handling ICE candidate for peer ${peerId}:`, candidate);
+    console.log(`[WebRTCManager] RECEIVED ICE CANDIDATE from ${peerId}:`, candidate.candidate);
     
-    const player = this.room?.players.get(peerId);
-    if (!player?.connection) {
-      // Queue the ICE candidate for later processing
-      console.log(`[WebRTCManager] Queuing ICE candidate for peer ${peerId} (connection not ready)`);
-      if (!this.iceCandidateQueue.has(peerId)) {
-        this.iceCandidateQueue.set(peerId, []);
+    if (this.networkEngine.gameWork.isHost()) {
+      // Host: Use player connection from room
+      const player = this.room?.players.get(peerId);
+      if (!player?.connection) {
+        // Queue the ICE candidate for later processing
+        console.log(`[WebRTCManager] Queuing ICE candidate for peer ${peerId} (connection not ready)`);
+        if (!this.iceCandidateQueue.has(peerId)) {
+          this.iceCandidateQueue.set(peerId, []);
+        }
+        this.iceCandidateQueue.get(peerId)!.push(candidate);
+        return;
       }
-      this.iceCandidateQueue.get(peerId)!.push(candidate);
-      return;
-    }
 
-    try {
-      await player.connection.addIceCandidate(candidate);
-      console.log(`[WebRTCManager] Successfully added ICE candidate for peer ${peerId}`);
-    } catch (error) {
-      console.error(`[WebRTCManager] Error adding ICE candidate for peer ${peerId}:`, error);
+      try {
+        await player.connection.addIceCandidate(candidate);
+        console.log(`[WebRTCManager] SUCCESSFULLY ADDED ICE CANDIDATE for peer ${peerId}`);
+      } catch (error) {
+        console.error(`[WebRTCManager] ERROR ADDING ICE CANDIDATE for peer ${peerId}:`, error);
+      }
+    } else {
+      // Client: Use the stored connection to host
+      if (!this.clientConnection) {
+        console.log(`[WebRTCManager] Client: Queuing ICE candidate (connection not ready)`);
+        if (!this.iceCandidateQueue.has(peerId)) {
+          this.iceCandidateQueue.set(peerId, []);
+        }
+        this.iceCandidateQueue.get(peerId)!.push(candidate);
+        return;
+      }
+
+      try {
+        await this.clientConnection.addIceCandidate(candidate);
+        console.log(`[WebRTCManager] SUCCESSFULLY ADDED ICE CANDIDATE for host`);
+      } catch (error) {
+        console.error(`[WebRTCManager] ERROR ADDING ICE CANDIDATE for host:`, error);
+      }
     }
   }
 
@@ -164,19 +201,38 @@ export class WebRTCManager {
 
     console.log(`[WebRTCManager] Processing ${queuedCandidates.length} queued ICE candidates for peer ${peerId}`);
     
-    const player = this.room?.players.get(peerId);
-    if (!player?.connection) {
-      console.warn(`[WebRTCManager] No connection found for peer ${peerId} when processing queued candidates`);
-      return;
-    }
+    if (this.networkEngine.gameWork.isHost()) {
+      // Host: Use player connection from room
+      const player = this.room?.players.get(peerId);
+      if (!player?.connection) {
+        console.warn(`[WebRTCManager] No connection found for peer ${peerId} when processing queued candidates`);
+        return;
+      }
 
-    // Process all queued ICE candidates
-    for (const candidate of queuedCandidates) {
-      try {
-        await player.connection.addIceCandidate(candidate);
-        console.log(`[WebRTCManager] Processed queued ICE candidate for peer ${peerId}`);
-      } catch (error) {
-        console.error(`[WebRTCManager] Failed to process queued ICE candidate for peer ${peerId}:`, error);
+      // Process all queued ICE candidates
+      for (const candidate of queuedCandidates) {
+        try {
+          await player.connection.addIceCandidate(candidate);
+          console.log(`[WebRTCManager] Processed queued ICE candidate for peer ${peerId}`);
+        } catch (error) {
+          console.error(`[WebRTCManager] Failed to process queued ICE candidate for peer ${peerId}:`, error);
+        }
+      }
+    } else {
+      // Client: Use stored connection to host
+      if (!this.clientConnection) {
+        console.warn(`[WebRTCManager] No client connection found when processing queued candidates`);
+        return;
+      }
+
+      // Process all queued ICE candidates
+      for (const candidate of queuedCandidates) {
+        try {
+          await this.clientConnection.addIceCandidate(candidate);
+          console.log(`[WebRTCManager] Processed queued ICE candidate for host`);
+        } catch (error) {
+          console.error(`[WebRTCManager] Failed to process queued ICE candidate for host:`, error);
+        }
       }
     }
 
@@ -324,7 +380,10 @@ export class WebRTCManager {
     };
 
     connection.onicegatheringstatechange = () => {
-      console.log(`ICE gathering state for peer ${peerId}:`, connection.iceGatheringState);
+      console.log(`[WebRTCManager] ICE GATHERING STATE for peer ${peerId}:`, connection.iceGatheringState);
+      if (connection.iceGatheringState === 'complete') {
+        console.log(`[WebRTCManager] ICE GATHERING COMPLETE for peer ${peerId}`);
+      }
     };
   }
 }
