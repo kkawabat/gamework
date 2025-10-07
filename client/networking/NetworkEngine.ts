@@ -218,16 +218,40 @@ export class NetworkEngine {
         console.log('[NetworkEngine] Room created and GameWork state updated directly');
         break;
       case 'JoinRoom':
-        // Create player with WebRTC info
-        const newPlayer: Player = {
-          id: message.from,
-          connection: undefined,
-          dataChannel: undefined,
-          isConnected: false
+        // Client joined room - set up WebRTC connection
+        console.log('[NetworkEngine] Client joined room, setting up WebRTC connection');
+        
+        // Create room object for client
+        const clientRoom = {
+          id: message.payload.roomId,
+          roomCode: message.payload.roomCode,
+          hostId: message.payload.hostId || message.from,
+          players: new Map([[this.owner!.id, this.owner!]]),
+        } as GameRoom;
+        
+        // Initialize WebRTC manager for client
+        this.webrtc = new WebRTCManager(clientRoom, this.gameWork.config.stunServers);
+        
+        // Set up ICE candidate handler for client
+        this.webrtc.onIceCandidate = (peerId: string, candidate: RTCIceCandidateInit) => {
+          console.log('[NetworkEngine] Client ICE candidate for peer:', peerId, candidate);
+          // Send ICE candidate via signaling service
+          const iceMessage: SignalingMessage = {
+            type: 'SignalingMessage',
+            action: 'ice_candidate',
+            from: this.owner!.id,
+            payload: {
+              to: peerId,
+              candidate: candidate
+            }
+          } as SignalingMessage;
+          this.signaling?.sendMessage(iceMessage);
         };
-        // Add player to GameWork state
-        this.gameWork.addConnectedPlayer(newPlayer);
-        this.webrtc?.createOffer(message.from);
+        
+        // Update GameWork state
+        this.gameWork.handleRoomUpdate(clientRoom);
+        
+        console.log('[NetworkEngine] Client WebRTC connection set up');
         break;
       case 'CloseRoomRequest':
         // Handle room closure directly
