@@ -218,40 +218,76 @@ export class NetworkEngine {
         console.log('[NetworkEngine] Room created and GameWork state updated directly');
         break;
       case 'JoinRoom':
-        // Client joined room - set up WebRTC connection~74
-        console.log('[NetworkEngine] Client joined room, setting up WebRTC connection');
+        console.log('[NetworkEngine] JoinRoom message received');
+        console.log('[NetworkEngine] Message payload:', message.payload);
         
-        // Create room object for client
-        const clientRoom = {
-          id: message.payload.roomId,
-          roomCode: message.payload.roomCode,
-          hostId: message.payload.hostId || message.from,
-          players: new Map([[this.owner!.id, this.owner!]]),
-        } as GameRoom;
+        // Check if we're the host or client
+        const isHost = this.owner?.id === message.payload.hostId;
+        console.log('[NetworkEngine] Is host:', isHost, 'Owner ID:', this.owner?.id, 'Host ID:', message.payload.hostId);
         
-        // Initialize WebRTC manager for client
-        this.webrtc = new WebRTCManager(clientRoom, this.gameWork.config.stunServers);
+        if (isHost) {
+          // Host: A client joined our room
+          console.log('[NetworkEngine] Host: Client joined room, setting up WebRTC connection');
+          
+          // Add the new player to our room
+          const newPlayer: Player = {
+            id: message.payload.playerId,
+            connection: undefined,
+            dataChannel: undefined,
+            isConnected: false
+          };
+          
+          // Update room with new player
+          const currentRoom = this.gameWork.getRoom();
+          if (currentRoom) {
+            currentRoom.players.set(newPlayer.id, newPlayer);
+            this.gameWork.addConnectedPlayer(newPlayer);
+          }
+          
+          // Initiate WebRTC connection with the new client
+          console.log('[NetworkEngine] Host: Initiating WebRTC connection with client:', message.payload.playerId);
+          this.initiateWebRTCConnection(message.payload.playerId);
+          
+        } else {
+          // Client: We joined a room
+          console.log('[NetworkEngine] Client: Joined room, setting up WebRTC connection');
+          
+          // Create room object for client
+          const clientRoom = {
+            id: message.payload.roomId,
+            roomCode: message.payload.roomCode,
+            hostId: message.payload.hostId || message.from,
+            players: new Map([[this.owner!.id, this.owner!]]),
+          } as GameRoom;
+          
+          // Initialize WebRTC manager for client
+          this.webrtc = new WebRTCManager(clientRoom, this.gameWork.config.stunServers);
+          
+          // Set up ICE candidate handler for client
+          this.webrtc.onIceCandidate = (peerId: string, candidate: RTCIceCandidateInit) => {
+            console.log('[NetworkEngine] Client ICE candidate for peer:', peerId, candidate);
+            // Send ICE candidate via signaling service
+            const iceMessage: SignalingMessage = {
+              type: 'SignalingMessage',
+              action: 'ice_candidate',
+              from: this.owner!.id,
+              payload: {
+                to: peerId,
+                candidate: candidate
+              }
+            } as SignalingMessage;
+            this.signaling?.sendMessage(iceMessage);
+          };
+          
+          // Update GameWork state
+          this.gameWork.handleRoomUpdate(clientRoom);
+          
+          // Initiate WebRTC connection with host
+          console.log('[NetworkEngine] Client: Initiating WebRTC connection with host:', message.payload.hostId);
+          this.initiateWebRTCConnection(message.payload.hostId);
+        }
         
-        // Set up ICE candidate handler for client
-        this.webrtc.onIceCandidate = (peerId: string, candidate: RTCIceCandidateInit) => {
-          console.log('[NetworkEngine] Client ICE candidate for peer:', peerId, candidate);
-          // Send ICE candidate via signaling service
-          const iceMessage: SignalingMessage = {
-            type: 'SignalingMessage',
-            action: 'ice_candidate',
-            from: this.owner!.id,
-            payload: {
-              to: peerId,
-              candidate: candidate
-            }
-          } as SignalingMessage;
-          this.signaling?.sendMessage(iceMessage);
-        };
-        
-        // Update GameWork state
-        this.gameWork.handleRoomUpdate(clientRoom);
-        
-        console.log('[NetworkEngine] Client WebRTC connection set up');
+        console.log('[NetworkEngine] JoinRoom handling complete');
         break;
       case 'CloseRoomRequest':
         // Handle room closure directly
@@ -262,6 +298,37 @@ export class NetworkEngine {
           this.gameWork.handleRoomUpdate(undefined as any);
         }
         break;
+    }
+  }
+
+  /**
+   * Initiate WebRTC connection with a peer
+   */
+  private async initiateWebRTCConnection(peerId: string): Promise<void> {
+    if (!this.webrtc) {
+      console.error('[NetworkEngine] WebRTC manager not initialized');
+      return;
+    }
+
+    try {
+      console.log('[NetworkEngine] Creating offer for peer:', peerId);
+      const offer = await this.webrtc.createOffer(peerId);
+      
+      // Send offer via signaling service
+      const offerMessage: SignalingMessage = {
+        type: 'SignalingMessage',
+        action: 'offer',
+        from: this.owner!.id,
+        payload: {
+          to: peerId,
+          offer: offer
+        }
+      } as SignalingMessage;
+      
+      console.log('[NetworkEngine] Sending offer to peer:', peerId);
+      this.signaling?.sendMessage(offerMessage);
+    } catch (error) {
+      console.error('[NetworkEngine] Error creating offer:', error);
     }
   }
 
