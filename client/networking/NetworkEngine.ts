@@ -218,7 +218,7 @@ export class NetworkEngine {
         console.log('[NetworkEngine] Room created and GameWork state updated directly');
         break;
       case 'JoinRoom':
-        // Client joined room - set up WebRTC connection
+        // Client joined room - set up WebRTC connection~74
         console.log('[NetworkEngine] Client joined room, setting up WebRTC connection');
         
         // Create room object for client

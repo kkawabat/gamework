@@ -214,7 +214,10 @@ export class SignalingServer {
         action: 'JoinRoom',
         from: 'server',
         payload: {
-          playerId: message.from
+          playerId: message.from,
+          roomId: targetRoom.id,
+          roomCode: targetRoom.roomCode,
+          hostId: targetRoom.hostId
         }
       });
     }
