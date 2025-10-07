@@ -134,8 +134,28 @@ export class WebRTCManager {
     const peerId = msg.from;
     const candidate = msg.payload.candidate;
     console.log(`[WebRTCManager] RECEIVED ICE CANDIDATE from ${peerId}:`, candidate.candidate);
-    console.log(`[WebRTCManager] Received candidate type:`, candidate.type);
-    console.log(`[WebRTCManager] Received candidate protocol:`, candidate.protocol);
+    
+    // Parse type and protocol from candidate string
+    const candidateStr = candidate.candidate;
+    const typeMatch = candidateStr.match(/typ (\w+)/);
+    const protocolMatch = candidateStr.match(/\d+ (\w+)/);
+    const candidateType = typeMatch ? typeMatch[1] : 'unknown';
+    const candidateProtocol = protocolMatch ? protocolMatch[1] : 'unknown';
+    
+    console.log(`[WebRTCManager] Parsed candidate type:`, candidateType);
+    console.log(`[WebRTCManager] Parsed candidate protocol:`, candidateProtocol);
+    console.log(`[WebRTCManager] Full candidate object:`, candidate);
+    
+    // Log candidate details for debugging
+    if (candidateType === 'host') {
+      console.log(`[WebRTCManager] HOST CANDIDATE - Local network only`);
+    } else if (candidateType === 'srflx') {
+      console.log(`[WebRTCManager] SRFLX CANDIDATE - STUN-reflexive (public IP)`);
+    } else if (candidateType === 'relay') {
+      console.log(`[WebRTCManager] RELAY CANDIDATE - TURN relay (fallback)`);
+    } else {
+      console.log(`[WebRTCManager] UNKNOWN CANDIDATE TYPE:`, candidateType);
+    }
     
     // Client: Use the stored connection to host
     if (!this.clientConnection) {
@@ -301,8 +321,17 @@ export class WebRTCManager {
     connection.onicecandidate = (event) => {
       if (event.candidate) {
         console.log(`[WebRTCManager] ICE CANDIDATE GENERATED for ${peerId}:`, event.candidate.candidate);
-        console.log(`[WebRTCManager] Candidate type:`, event.candidate.type);
-        console.log(`[WebRTCManager] Candidate protocol:`, event.candidate.protocol);
+        
+        // Parse type and protocol from candidate string
+        const candidateStr = event.candidate.candidate;
+        const typeMatch = candidateStr.match(/typ (\w+)/);
+        const protocolMatch = candidateStr.match(/\d+ (\w+)/);
+        const candidateType = typeMatch ? typeMatch[1] : 'unknown';
+        const candidateProtocol = protocolMatch ? protocolMatch[1] : 'unknown';
+        
+        console.log(`[WebRTCManager] Parsed generated candidate type:`, candidateType);
+        console.log(`[WebRTCManager] Parsed generated candidate protocol:`, candidateProtocol);
+        console.log(`[WebRTCManager] Full generated candidate:`, event.candidate);
         this.onIceCandidate(peerId, event.candidate);
       }
     };
@@ -311,6 +340,20 @@ export class WebRTCManager {
       console.log(`[WebRTCManager] ICE CONNECTION STATE CHANGE for ${peerId}:`, connection.iceConnectionState);
       console.log(`[WebRTCManager] ICE gathering state:`, connection.iceGatheringState);
       console.log(`[WebRTCManager] Connection state:`, connection.connectionState);
+      
+      // Log detailed failure information
+      if (connection.iceConnectionState === 'disconnected' || connection.iceConnectionState === 'failed') {
+        console.log(`[WebRTCManager] ICE CONNECTION FAILED for ${peerId}`);
+        console.log(`[WebRTCManager] ICE connection state:`, connection.iceConnectionState);
+        console.log(`[WebRTCManager] ICE gathering state:`, connection.iceGatheringState);
+        console.log(`[WebRTCManager] Connection state:`, connection.connectionState);
+        console.log(`[WebRTCManager] Local description:`, connection.localDescription);
+        console.log(`[WebRTCManager] Remote description:`, connection.remoteDescription);
+        console.log(`[WebRTCManager] ICE gathering state:`, connection.iceGatheringState);
+        console.log(`[WebRTCManager] ICE connection state:`, connection.iceConnectionState);
+        console.log(`[WebRTCManager] Connection state:`, connection.connectionState);
+        console.log(`[WebRTCManager] Signaling state:`, connection.signalingState);
+      }
       
       const player = this.room?.players.get(peerId);
       if (player) {
