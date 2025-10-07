@@ -189,10 +189,16 @@ export class WebRTCManager {
     // Process all queued ICE candidates
     for (const candidate of queuedCandidates) {
       try {
+        console.log(`[WebRTCManager] Adding ICE candidate:`, {
+          candidate: candidate.candidate,
+          sdpMLineIndex: candidate.sdpMLineIndex,
+          sdpMid: candidate.sdpMid
+        });
         await this.clientConnection.addIceCandidate(candidate);
-        console.log(`[WebRTCManager] Processed queued ICE candidate for host`);
+        console.log(`[WebRTCManager] SUCCESSFULLY ADDED ICE CANDIDATE for host`);
       } catch (error) {
-        console.error(`[WebRTCManager] Failed to process queued ICE candidate for host:`, error);
+        console.error(`[WebRTCManager] ERROR ADDING ICE CANDIDATE:`, error);
+        console.error(`[WebRTCManager] Candidate details:`, candidate);
       }
     }
 
