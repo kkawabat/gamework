@@ -3,16 +3,63 @@ import { answerMessage, iceCandidateMessage, offerMessage, SignalingMessage, Gam
 export class WebRTCManager {
   private onDataChannelMessage?: (peerId: string, message: any) => void;
   private onConnectionChange?: (peerId: string, isConnected: boolean) => void;
-  public onIceCandidate?: (peerId: string, candidate: RTCIceCandidateInit) => void;
 
   private stunServers: RTCIceServer[];
   private iceCandidateQueue: Map<string, RTCIceCandidateInit[]> = new Map();
   private room?: GameRoom;
+  private networkEngine: any;
 
-  constructor(room: GameRoom, stunServers: RTCIceServer[] = []) {
-    this.room = room;
-    this.stunServers = stunServers;
+  constructor(networkEngine: any) {
+    this.networkEngine = networkEngine;
+    this.stunServers = networkEngine.gameWork.config.stunServers;
   }
+
+  setRoom(room: GameRoom): void {
+    this.room = room;
+  }
+
+  /**
+   * Initiate WebRTC connection with a peer
+   */
+  async initiateConnection(peerId: string): Promise<void> {
+    try {
+      console.log('[WebRTCManager] Creating offer for peer:', peerId);
+      const offer = await this.createOffer(peerId);
+      
+      // Send offer via signaling service
+      const offerMessage: SignalingMessage = {
+        type: 'SignalingMessage',
+        action: 'offer',
+        from: this.networkEngine.owner.id,
+        payload: {
+          to: peerId,
+          offer: offer
+        }
+      } as SignalingMessage;
+      
+      console.log('[WebRTCManager] Sending offer to peer:', peerId);
+      this.networkEngine.signaling?.sendMessage(offerMessage);
+    } catch (error) {
+      console.error('[WebRTCManager] Error creating offer:', error);
+    }
+  }
+
+  /**
+   * Internal ICE candidate handler
+   */
+  private onIceCandidate = (peerId: string, candidate: RTCIceCandidateInit) => {
+    console.log('[WebRTCManager] ICE candidate for peer:', peerId, candidate);
+    const iceMessage: SignalingMessage = {
+      type: 'SignalingMessage',
+      action: 'ice_candidate',
+      from: this.networkEngine.owner.id,
+      payload: {
+        to: peerId,
+        candidate: candidate
+      }
+    } as SignalingMessage;
+    this.networkEngine.signaling?.sendMessage(iceMessage);
+  };
 
   async createOffer(peerId: string): Promise<RTCSessionDescriptionInit> {
     const connection = new RTCPeerConnection({
@@ -88,6 +135,8 @@ export class WebRTCManager {
   async handleIceCandidate(msg: iceCandidateMessage): Promise<void> {
     const peerId = msg.from;
     const candidate = msg.payload.candidate;
+    console.log(`[WebRTCManager] Handling ICE candidate for peer ${peerId}:`, candidate);
+    
     const player = this.room?.players.get(peerId);
     if (!player?.connection) {
       // Queue the ICE candidate for later processing
@@ -99,7 +148,12 @@ export class WebRTCManager {
       return;
     }
 
-    await player.connection.addIceCandidate(candidate);
+    try {
+      await player.connection.addIceCandidate(candidate);
+      console.log(`[WebRTCManager] Successfully added ICE candidate for peer ${peerId}`);
+    } catch (error) {
+      console.error(`[WebRTCManager] Error adding ICE candidate for peer ${peerId}:`, error);
+    }
   }
 
   private async processQueuedIceCandidates(peerId: string): Promise<void> {
@@ -248,13 +302,12 @@ export class WebRTCManager {
     connection.onicecandidate = (event) => {
       if (event.candidate) {
         console.log('ICE candidate generated:', event.candidate);
-        if (this.onIceCandidate) {
-          this.onIceCandidate(peerId, event.candidate);
-        }
+        this.onIceCandidate(peerId, event.candidate);
       }
     };
 
     connection.oniceconnectionstatechange = () => {
+      console.log(`ICE connection state for peer ${peerId}:`, connection.iceConnectionState);
       const player = this.room?.players.get(peerId);
       if (player) {
         const wasConnected = player.isConnected;
@@ -268,6 +321,10 @@ export class WebRTCManager {
 
     connection.onconnectionstatechange = () => {
       console.log(`Connection state for peer ${peerId}:`, connection.connectionState);
+    };
+
+    connection.onicegatheringstatechange = () => {
+      console.log(`ICE gathering state for peer ${peerId}:`, connection.iceGatheringState);
     };
   }
 }
