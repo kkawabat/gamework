@@ -23,7 +23,8 @@ interface BaseGameWorkState {
 const DEFAULT_GAMEWORK_CONFIG: GameWorkConfig = {
   stunServers: [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' }
   ],
   signalServiceConfig: {
     serverUrl: __SIGNALING_SERVER_URL__,

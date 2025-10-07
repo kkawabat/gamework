@@ -64,7 +64,10 @@ export class WebRTCManager {
 
   async createOffer(peerId: string): Promise<RTCSessionDescriptionInit> {
     const connection = new RTCPeerConnection({
-      iceServers: this.stunServers
+      iceServers: this.stunServers,
+      iceCandidatePoolSize: 10,
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require'
     });
 
     const dataChannel = connection.createDataChannel('game', {
@@ -106,7 +109,10 @@ export class WebRTCManager {
     const peerId = msg.from;
     const offer = msg.payload.offer;
     const connection = new RTCPeerConnection({
-      iceServers: this.stunServers
+      iceServers: this.stunServers,
+      iceCandidatePoolSize: 10,
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require'
     });
 
     this.setupConnectionHandlers(connection, peerId);
@@ -158,17 +164,31 @@ export class WebRTCManager {
       console.log(`[WebRTCManager] UNKNOWN CANDIDATE TYPE:`, candidateType);
     }
     
-    // Client: Always queue ICE candidates, process them when connection is ready
-    console.log(`[WebRTCManager] Client: Queuing ICE candidate for processing`);
-    if (!this.iceCandidateQueue.has(peerId)) {
-      this.iceCandidateQueue.set(peerId, []);
-    }
-    this.iceCandidateQueue.get(peerId)!.push(candidate);
-    
-    // If connection is ready, process immediately
-    if (this.clientConnection) {
-      console.log(`[WebRTCManager] Client: Connection ready, processing queued candidates`);
-      this.processQueuedIceCandidates(peerId);
+    // Check if we have a connection for this peer (host) or client connection
+    const player = this.room?.players.get(peerId);
+    const connection = player?.connection || this.clientConnection;
+    if (connection) {
+      // Host or Client: Process ICE candidate immediately
+      console.log(`[WebRTCManager] Processing ICE candidate immediately`);
+      try {
+        await connection.addIceCandidate(candidate);
+        console.log(`[WebRTCManager] SUCCESSFULLY ADDED ICE CANDIDATE for peer ${peerId}`);
+      } catch (error) {
+        console.error(`[WebRTCManager] ERROR ADDING ICE CANDIDATE for peer ${peerId}:`, error);
+      }
+    } else {
+      // Client: Queue ICE candidates for processing when connection is ready
+      console.log(`[WebRTCManager] Client: Queuing ICE candidate for processing`);
+      if (!this.iceCandidateQueue.has(peerId)) {
+        this.iceCandidateQueue.set(peerId, []);
+      }
+      this.iceCandidateQueue.get(peerId)!.push(candidate);
+      
+      // If connection is ready, process immediately
+      if (this.clientConnection) {
+        console.log(`[WebRTCManager] Client: Connection ready, processing queued candidates`);
+        this.processQueuedIceCandidates(peerId);
+      }
     }
   }
 
@@ -335,6 +355,12 @@ export class WebRTCManager {
         console.log(`[WebRTCManager] Parsed generated candidate type:`, candidateType);
         console.log(`[WebRTCManager] Parsed generated candidate protocol:`, candidateProtocol);
         console.log(`[WebRTCManager] Full generated candidate:`, event.candidate);
+        
+        // For same-network connections, prioritize host candidates
+        if (candidateType === 'host') {
+          console.log(`[WebRTCManager] PRIORITIZING HOST CANDIDATE for same-network connection`);
+        }
+        
         this.onIceCandidate(peerId, event.candidate);
       }
     };
