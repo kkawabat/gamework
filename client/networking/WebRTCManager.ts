@@ -3,7 +3,7 @@ import { answerMessage, iceCandidateMessage, offerMessage, SignalingMessage, Gam
 export class WebRTCManager {
   private onDataChannelMessage?: (peerId: string, message: any) => void;
   private onConnectionChange?: (peerId: string, isConnected: boolean) => void;
-  private onIceCandidate?: (peerId: string, candidate: RTCIceCandidateInit) => void;
+  public onIceCandidate?: (peerId: string, candidate: RTCIceCandidateInit) => void;
 
   private stunServers: RTCIceServer[];
   private iceCandidateQueue: Map<string, RTCIceCandidateInit[]> = new Map();
