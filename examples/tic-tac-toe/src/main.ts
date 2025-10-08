@@ -9,8 +9,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Make game available globally for debugging
     (window as any).gamework = gamework;
-    
-    console.log('Tic-Tac-Toe game initialized successfully');
   } catch (error) {
     console.error('Failed to initialize game:', error);
     

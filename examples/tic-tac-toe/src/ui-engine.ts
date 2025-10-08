@@ -36,16 +36,10 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
     const playerCount = this.gameWork.getPlayerCount();
     const actualIsHost = this.gameWork.isHost();
     
-    console.log(`Room updated: ${room.id}, Host: ${actualIsHost}, Players: ${playerCount}`);
-    
-    // Generate QR code for room joining using server-generated room code
     if (actualIsHost && room.roomCode) {
-      console.log('[TicTacToeUIEngine] Using server-generated room code:', room.roomCode);
       this.updateRoomCode(room.roomCode);
       this.generateQRCode(room.roomCode);
     } else if (actualIsHost && room.id) {
-      // Fallback to room ID if roomCode not available
-      console.log('[TicTacToeUIEngine] Using room ID as fallback:', room.id.substring(0, 6));
       this.updateRoomCode(room.id.substring(0, 6).toUpperCase());
       this.generateQRCode(room.id.substring(0, 6).toUpperCase());
     }
@@ -57,12 +51,7 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
    * Initialize UI elements and event listeners
    */
   initialize(): void {
-    console.log('[TicTacToeUIEngine] initialize() called');
-    console.log('[TicTacToeUIEngine] Document ready state:', document.readyState);
-    
-    // Get board elements
     this.boardElements = Array.from(document.querySelectorAll('.cell'));
-    console.log('[TicTacToeUIEngine] Board elements found:', this.boardElements.length);
     this.boardElements.forEach((cell, index) => {
       const action: TicTacToeAction = {
         action: 'playerMove',
@@ -88,31 +77,18 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
     
     
     this.roomCodeInput = document.getElementById('roomCodeInput') as HTMLInputElement;
-    console.log('[TicTacToeUIEngine] Room code input found:', !!this.roomCodeInput);
     
     this.joinRoomBtn = document.getElementById('joinRoomBtn');
-    console.log('[TicTacToeUIEngine] Join room button found:', !!this.joinRoomBtn);
-    console.log('[TicTacToeUIEngine] Join room button element:', this.joinRoomBtn);
     
     if (this.joinRoomBtn) {
-      console.log('[TicTacToeUIEngine] Setting up join room button click handler');
       this.joinRoomBtn.addEventListener('click', () => {
-        console.log('[TicTacToeUIEngine] Join room button clicked');
         let roomCode = this.roomCodeInput?.value
-        console.log('[TicTacToeUIEngine] Room code:', roomCode);
         if (roomCode) {
-          console.log('[TicTacToeUIEngine] Calling gameWork.joinRoom with:', roomCode);
           this.gameWork.joinRoom(roomCode);
         } else {
-          console.log('[TicTacToeUIEngine] No room code provided');
         }
       });
-    } else {
-      console.log('[TicTacToeUIEngine] Join room button not found');
-      console.log('[TicTacToeUIEngine] Available elements with "join" in ID:', 
-        Array.from(document.querySelectorAll('[id*="join"]')).map(el => el.id));
     }
-    
     
     if (this.roomCodeInput) {
       this.roomCodeInput.addEventListener('keypress', (e) => {
@@ -271,22 +247,14 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
   }
 
   async initializeQRCode(): Promise<void> {
-     console.log('[TicTacToeUIEngine] initializeQRCode called');
-     
-     // Check if joining an existing room via URL parameter
      const urlParams = new URLSearchParams(window.location.search);
      const roomParam = urlParams.get('room');
      
-     console.log('[TicTacToeUIEngine] URL room parameter:', roomParam);
      
      if (roomParam) {
-       // Join existing room by room code
-       console.log(`[TicTacToeUIEngine] Looking up room with code: ${roomParam}`);
        this.addGameLogEntry(`Looking up room: ${roomParam.toUpperCase()}`, 'info');
        this.gameWork.joinRoom(roomParam);
      } else {
-       // Host a new room
-       console.log('[TicTacToeUIEngine] No room parameter, creating new room');
        this.addGameLogEntry('Creating new game room...', 'info');
        this.gameWork.createRoom();
      }
