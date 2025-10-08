@@ -13,19 +13,26 @@ import { GameRoom } from '../shared/signaling-types';
 // Hybrid architecture: Direct calls for internal logic, events for external communication
 // Game-specific state should extend this base interface
 interface BaseGameWorkState {
-  room?: GameRoom;  // Single source of truth for all connection info
-  owner: Player;   // Owner info (no connection state here)
+  room: GameRoom;  // Single source of truth for all connection info
 }
-
-
 
 // Default configuration for GameWork
 const DEFAULT_GAMEWORK_CONFIG: GameWorkConfig = {
-  stunServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' }
-  ],
+  webrtcConfig: {
+    rtcConfig: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+      ],
+      iceCandidatePoolSize: 10,
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require'
+    },
+    dataChannelConfig: {
+      ordered: true,
+    },
+  },
   signalServiceConfig: {
     serverUrl: __SIGNALING_SERVER_URL__,
     reconnectInterval: 5000,
@@ -51,40 +58,33 @@ export abstract class GameWork<T extends BaseGameWorkState = BaseGameWorkState> 
   private network: NetworkEngine;
   protected state!: T;
   public eventFlow = ThinClientEventFlow;
+  public id: string = '';
   
   // Event bus for external communication only
   private eventBus = new Map<string, Function[]>();
 
   constructor(config?: GameWorkConfig) {
-    console.log('[GameWork] Constructor called');
+    this.id = uuidv4();
     this.config = { ...DEFAULT_GAMEWORK_CONFIG, ...config };
-    console.log('[GameWork] Config:', this.config);
     
     // Initialize networking with GameWork reference
-    console.log('[GameWork] Creating NetworkEngine');
     this.network = new NetworkEngine(this);
     
     // Initialize event manager for external communication
-    console.log('[GameWork] Creating EventManager');
     this.eventManager = new EventManager(this);
     
     // Initialize game-specific components
-    console.log('[GameWork] Calling initializeGame()');
     this.initializeGame();
     
     // Initialize networking after state is ready
-    console.log('[GameWork] Calling network.initialize()');
     this.network.initialize();
     
     // Update event manager with initialized components
-    console.log('[GameWork] Updating event manager with initialized components');
     this.eventManager.updateComponents(this.gameEngine, this.uiEngine);
     
     // Automatically create a room for the host after networking is ready
-    console.log('[GameWork] Creating room automatically after network initialization');
     this.createRoom();
     
-    console.log('[GameWork] Constructor complete');
   }
 
   // === ABSTRACT METHODS (Override in game-specific implementations) ===
@@ -119,16 +119,12 @@ export abstract class GameWork<T extends BaseGameWorkState = BaseGameWorkState> 
     return this.state;
   }
 
-  getOwner(): Player {
-    return this.state.owner;
-  }
-
   getRoom(): GameRoom | undefined {
     return this.state.room;
   }
 
   isHost(): boolean {
-    return this.state.room?.hostId === this.state.owner.id;
+    return this.state.room?.hostId === this.id;
   }
 
   isConnected(): boolean {
@@ -202,48 +198,44 @@ export abstract class GameWork<T extends BaseGameWorkState = BaseGameWorkState> 
    * Add a connected player
    */
   addConnectedPlayer(player: Player): void {
-    if (this.state.room) {
-      this.state.room.players.set(player.id, player);
-      
-      // Update components
-      this.uiEngine.updateState(this.state);
-      this.network.updateState(this.state);
-      
-      // Emit event for external systems
-      this.emit('playerConnected', { player, connectedPlayers: this.state.room.players });
-    }
+    this.state.room.players.set(player.id, player);
+    
+    // Update components
+    this.uiEngine.updateState(this.state);
+    this.network.updateState(this.state);
+    
+    // Emit event for external systems
+    this.emit('playerConnected', { player, connectedPlayers: this.state.room.players });
   }
 
   /**
    * Remove a disconnected player
    */
   removeConnectedPlayer(playerId: string): void {
-    if (this.state.room) {
-      this.state.room.players.delete(playerId);
-      
-      // Update components
-      this.uiEngine.updateState(this.state);
-      this.network.updateState(this.state);
-      
-      // Emit event for external systems
-      this.emit('playerDisconnected', { playerId, connectedPlayers: this.state.room.players });
-    }
+    this.state.room.players.delete(playerId);
+    
+    // Update components
+    this.uiEngine.updateState(this.state);
+    this.network.updateState(this.state);
+    
+    // Emit event for external systems
+    this.emit('playerDisconnected', { playerId, connectedPlayers: this.state.room.players });
+    
   }
 
   /**
    * Update player information
    */
   updatePlayer(player: Player): void {
-    if (this.state.room) {
-      this.state.room.players.set(player.id, player);
-      
-      // Update components
-      this.uiEngine.updateState(this.state);
-      this.network.updateState(this.state);
-      
-      // Emit event for external systems
-      this.emit('playerUpdated', { player, connectedPlayers: this.state.room.players });
-    }
+    this.state.room.players.set(player.id, player);
+    
+    // Update components
+    this.uiEngine.updateState(this.state);
+    this.network.updateState(this.state);
+    
+    // Emit event for external systems
+    this.emit('playerUpdated', { player, connectedPlayers: this.state.room.players });
+    
   }
 
   // === ROOM MANAGEMENT (Base functionality) ===
@@ -252,18 +244,13 @@ export abstract class GameWork<T extends BaseGameWorkState = BaseGameWorkState> 
    * Create a new room
    */
   createRoom(): void {
-    console.log('[GameWork] createRoom() called');
-    console.log('[GameWork] Owner ID:', this.state.owner.id);
     
     const action: PlayerAction = {
       action: 'CreateRoomRequest',
-      playerId: this.state.owner.id
+      playerId: this.id
     };
     
-    console.log('[GameWork] Created PlayerAction:', action);
-    console.log('[GameWork] Sending PlayerAction via event system');
     this.sendPlayerAction(action);
-    console.log('[GameWork] PlayerAction sent');
   }
 
   /**
@@ -272,7 +259,7 @@ export abstract class GameWork<T extends BaseGameWorkState = BaseGameWorkState> 
   joinRoom(roomCode: string): void {
     const action: PlayerAction = {
       action: 'JoinRoomRequest',
-      playerId: this.state.owner.id,
+      playerId: this.id,
       input: { roomCode }
     };
     
@@ -285,7 +272,7 @@ export abstract class GameWork<T extends BaseGameWorkState = BaseGameWorkState> 
   leaveRoom(): void {
     const action: PlayerAction = {
       action: 'LeaveRoomRequest',
-      playerId: this.state.owner.id
+      playerId: this.id
     };
     
     this.sendPlayerAction(action);
@@ -297,11 +284,7 @@ export abstract class GameWork<T extends BaseGameWorkState = BaseGameWorkState> 
    * Send player action to network (external)
    */
   sendPlayerAction(payload: PlayerAction): void {
-    console.log('[GameWork] sendPlayerAction called with:', payload.action);
-    console.log('[GameWork] EventManager:', this.eventManager);
-    console.log('[GameWork] Emitting sendPlayerAction event');
     this.eventManager.emit('sendPlayerAction', payload);
-    console.log('[GameWork] sendPlayerAction event emitted');
   }
 
   /**

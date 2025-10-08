@@ -7,7 +7,6 @@ import { GameRoom } from '../../../shared/signaling-types';
 export interface TicTacToeState {
   // Base GameWork properties
   room?: GameRoom;  // Single source of truth for all connection info
-  owner: Player;   // Owner info (no connection state here)
   
   // TicTacToe-specific properties
   stage: 'playing' | 'gameOver';

@@ -38,11 +38,7 @@ export class TicTacToeGameWork extends GameWork<TicTacToeState> {
     this.state = {
       // Base GameWork properties
       room: undefined,
-      owner: {
-        id: this.generatePlayerId(),
-        name: 'Host',
-        lastSeen: Date.now()
-      },
+      
       
       // TicTacToe-specific properties from engine
       ...TicTacToeEngine.getInitialGameState()
@@ -117,12 +113,4 @@ export class TicTacToeGameWork extends GameWork<TicTacToeState> {
     
     this.processPlayerAction(action);
   }
-
-  /**
-   * Generate a unique player ID
-   */
-  private generatePlayerId(): string {
-    return uuidv4();
-  }
-
 }

@@ -4,22 +4,24 @@ export interface Player {
   [key: string]: any;
 }
 
-// ConnectionInfo interface removed - now using Player interface with WebRTC info
-
-// Re-export RTCIceServer for convenience
-export type RTCIceServer = {
-  urls: string | string[];
-  username?: string;
-  credential?: string;
-};
-
 export interface GameWorkConfig {
-  stunServers?: RTCIceServer[];
+  webrtcConfig: WebRTCConfig;
   signalServiceConfig: {
     serverUrl: string;
     reconnectInterval?: number;
     maxReconnectAttempts?: number;
     pingInterval?: number;
   };
-  // GameWork-specific config can be added here
+}
+
+export interface WebRTCConfig {
+  rtcConfig: {
+    iceServers: RTCIceServer[];
+    iceCandidatePoolSize: number;
+    bundlePolicy: string;
+    rtcpMuxPolicy: string;
+  };
+  dataChannelConfig: {
+    ordered: boolean;
+  };
 }

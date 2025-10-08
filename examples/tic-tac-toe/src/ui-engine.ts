@@ -66,7 +66,7 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
     this.boardElements.forEach((cell, index) => {
       const action: TicTacToeAction = {
         action: 'playerMove',
-        playerId: this.gameWork.getOwner().id,
+        playerId: this.gameWork.id,
         input: {
           position: index
         }
@@ -81,7 +81,7 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
     if (this.restartButton) {
       const action: TicTacToeAction = {
         action: 'RestartGame',
-        playerId: this.gameWork.getOwner().id,
+        playerId: this.gameWork.id,
       }
       this.restartButton.addEventListener('click', () => this.gameWork.sendPlayerAction(action));
     }
@@ -227,17 +227,16 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
       playerCountElement.textContent = `Players: ${playerCount}`;
     }
 
-    const me = this.gameWork.getOwner()
     const player1Status = document.getElementById('player1Status');
     if (player1Status) {
-      const role = state.players[me.id]?.symbol;
+      const role = state.players[this.gameWork.id]?.symbol;
       player1Status.textContent = `You - ${role ? `Playing as ${role}` : 'Connected'}`;
     }
     
     // Update Player 2 status
     const player2Status = document.getElementById('player2Status');
     if (player2Status) {
-      const player2Id = Object.keys(state.players).find(k => k !== me.id)!;
+      const player2Id = Object.keys(state.players).find(k => k !== this.gameWork.id)!;
       if (player2Id) {
         const role = state.players[player2Id]?.symbol;
         player2Status.textContent = `Player 2 - ${role ? `Playing as ${role}` : 'Connected'}`;
