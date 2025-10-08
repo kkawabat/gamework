@@ -24,27 +24,23 @@ export class WebRTCManager {
    * Initiate WebRTC connection with a peer
    */
   async initiateConnection(peerId: string): Promise<void> {
-    try {
-      const connection = new RTCPeerConnection(this.config.rtcConfig as RTCConfiguration);
-  
-      const dataChannel = connection.createDataChannel('game', this.config.dataChannelConfig);
-  
-      this.setupDataChannel(dataChannel, peerId);
-      this.setupConnectionHandlers(connection, peerId);
+    console.log('initiating connection with', peerId);
+    const connection = new RTCPeerConnection(this.config.rtcConfig as RTCConfiguration);
 
-      let player = {
-        id: peerId,
-        connection: connection,
-        dataChannel: dataChannel,
-        isConnected: false
-      };
-      this.networkEngine.addConnectedPlayer(player);
+    const dataChannel = connection.createDataChannel('game', this.config.dataChannelConfig);
 
-      await this.sendOffer(player);
-      
-      
-    } catch (error) {
-    }
+    this.setupDataChannel(dataChannel, peerId);
+    this.setupConnectionHandlers(connection, peerId);
+
+    let player = {
+      id: peerId,
+      connection: connection,
+      dataChannel: dataChannel,
+      isConnected: false
+    };
+    this.networkEngine.addConnectedPlayer(player);
+
+    await this.sendOffer(player);
   }
 
   /**

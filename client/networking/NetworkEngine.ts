@@ -85,6 +85,7 @@ export class NetworkEngine {
     const action = paction.action;
     switch (action) {
       case 'CreateRoomRequest':
+        console.log('sending CreateRoomRequest');
         const createRoomMessage: SignalingMessage = {
           type: 'RoomUpdate',
           action: action,
@@ -97,6 +98,7 @@ export class NetworkEngine {
         break;
 
       case 'JoinRoomRequest':
+        console.log('sending JoinRoomRequest');
         const joinRoomMessage: SignalingMessage = {
           type: 'RoomUpdate',
           action: action,
@@ -154,6 +156,7 @@ export class NetworkEngine {
     
     switch (message.action) {
       case 'CreateRoom':
+        console.log('receiving CreateRoom from server');
         // Server confirmed room creation - update GameWork state directly
         const newRoom = {
           id: message.payload.roomId,
@@ -162,14 +165,11 @@ export class NetworkEngine {
           players: new Map([[this.id, {id: this.id, isHost: true}]]),
         } as GameRoom;
         
-        // Set room in WebRTC manager
-        this.webrtc.setRoom(newRoom);
-        
         // Update GameWork state directly (hybrid architecture)
         this.gameWork.handleRoomUpdate(newRoom);
         break;
       case 'JoinRoom':
-        
+        console.log('receiving CreateRoom request from ', message.payload.playerId, ' through server');
         // Check if we're the host or client
         const isHost = this.id === message.payload.hostId;
         if (!isHost) { break;}
