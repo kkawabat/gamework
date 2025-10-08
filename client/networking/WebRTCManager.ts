@@ -38,7 +38,7 @@ export class WebRTCManager {
       dataChannel: dataChannel,
       isConnected: false
     };
-    this.networkEngine.addConnectedPlayer(player);
+    this.networkEngine.gameWork.addConnectedPlayer(player);
 
     await this.sendOffer(player);
   }
