@@ -2,13 +2,11 @@ import { answerMessage, iceCandidateMessage, offerMessage, SignalingMessage, Gam
 import { GameWorkConfig, Player, WebRTCConfig } from '../types';
 
 export class WebRTCManager {
-  private onDataChannelMessage?: (peerId: string, message: any) => void;
-  private onConnectionChange?: (peerId: string, isConnected: boolean) => void;
 
   private iceCandidateQueue: Map<string, RTCIceCandidateInit[]> = new Map();
   private room?: GameRoom;
   private networkEngine: any;
-  private clientConnection?: RTCPeerConnection; // For client: single connection to host
+  private host?: Player;
   private config: WebRTCConfig;
 
   constructor(networkEngine: any) {
@@ -28,16 +26,17 @@ export class WebRTCManager {
     const connection = new RTCPeerConnection(this.config.rtcConfig as RTCConfiguration);
 
     const dataChannel = connection.createDataChannel('game', this.config.dataChannelConfig);
-
-    this.setupDataChannel(dataChannel, peerId);
-    this.setupConnectionHandlers(connection, peerId);
-
+    
     let player = {
       id: peerId,
       connection: connection,
       dataChannel: dataChannel,
       isConnected: false
-    };
+    } as Player;
+
+    this.setupDataChannel(dataChannel, player);
+    this.setupConnectionHandlers(connection, player);
+
     this.networkEngine.gameWork.addConnectedPlayer(player);
 
     await this.sendOffer(player);
@@ -64,7 +63,7 @@ export class WebRTCManager {
     const peerId = player.id;
     const offer = await connection.createOffer();
     await connection.setLocalDescription(offer);
-    // Send offer via signaling service
+    
     const offerMessage: SignalingMessage = {
       type: 'SignalingMessage',
       action: 'offer',
@@ -83,22 +82,27 @@ export class WebRTCManager {
   async handleOffer(msg: offerMessage): Promise<RTCSessionDescriptionInit> {
     const peerId = msg.from;
     const offer = msg.payload.offer;
+    
     const connection = new RTCPeerConnection(this.config.rtcConfig as RTCConfiguration);
 
-    this.setupConnectionHandlers(connection, peerId);
+    this.host = { 
+      id: peerId, 
+      connection: connection,
+      dataChannel: undefined,
+      isConnected: false
+    } as Player;
 
-    // Set up data channel event handler
+    this.setupConnectionHandlers(connection, this.host);
+
     connection.ondatachannel = (event) => {
-      this.setupDataChannel(event.channel, peerId);
+      this.host!.dataChannel = event.channel;
+      this.setupDataChannel(event.channel, this.host!);
     };
 
     await connection.setRemoteDescription(offer);
     const answer = await connection.createAnswer();
     await connection.setLocalDescription(answer);
 
-    // Client: Store the connection to host (no player management here)
-    this.clientConnection = connection;
-    // Process any queued ICE candidates for this peer
     this.processQueuedIceCandidates(peerId);
     console.log('Offer received from', peerId, 'and answer sent' );
     return answer;
@@ -123,7 +127,7 @@ export class WebRTCManager {
     
     // Check if we have a connection for this peer (host) or client connection
     const player = this.room?.players.get(peerId);
-    const connection = player?.connection || this.clientConnection;
+    const connection = player?.connection || this.host?.connection;
     if (connection) {
       // Host or Client: Process ICE candidate immediately
       try {
@@ -139,7 +143,7 @@ export class WebRTCManager {
       this.iceCandidateQueue.get(peerId)!.push(candidate);
       
       // If connection is ready, process immediately
-      if (this.clientConnection) {
+      if (this.host?.connection) {
         this.processQueuedIceCandidates(peerId);
       }
     }
@@ -153,14 +157,14 @@ export class WebRTCManager {
     }
 
     // Client: Use stored connection to host
-    if (!this.clientConnection) {
+    if (!this.host?.connection) {
       return;
     }
 
     // Process all queued ICE candidates
     for (const candidate of queuedCandidates) {
       try {
-        await this.clientConnection.addIceCandidate(candidate);
+        await this.host.connection.addIceCandidate(candidate);
       } catch (error) {
         // Error adding ICE candidate
       }
@@ -208,9 +212,8 @@ export class WebRTCManager {
       player.dataChannel = undefined;
       player.isConnected = false;
       
-      if (this.onConnectionChange) {
-        this.onConnectionChange(peerId, false);
-      }
+      // Notify NetworkEngine of connection change via direct method call
+      this.networkEngine.handleConnectionChange(peerId, false);
     }
   }
 
@@ -239,81 +242,59 @@ export class WebRTCManager {
     return this.room?.players.get(peerId)?.isConnected || false;
   }
 
-  private setupDataChannel(dataChannel: RTCDataChannel, peerId: string): void {
+  private setupDataChannel(dataChannel: RTCDataChannel, peer: Player): void {
     dataChannel.onopen = () => {
-      const player = this.room?.players.get(peerId);
-      if (player) {
-        player.dataChannel = dataChannel;
-        player.isConnected = true;
-        
-        if (this.onConnectionChange) {
-          this.onConnectionChange(peerId, true);
-        }
-      }
+      peer.dataChannel = dataChannel;
+      peer.isConnected = true;
+      this.networkEngine.handleConnectionChange(peer.id, true);
     };
 
     dataChannel.onclose = () => {
-      const player = this.room?.players.get(peerId);
-      if (player) {
-        player.isConnected = false;
-        
-        if (this.onConnectionChange) {
-          this.onConnectionChange(peerId, false);
-        }
-      }
+      peer.isConnected = false;  
+      this.networkEngine.handleConnectionChange(peer.id, false);
     };
 
     dataChannel.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
-        if (this.onDataChannelMessage) {
-          this.onDataChannelMessage(peerId, message);
-        }
+        this.networkEngine.handleDataChannelMessage(peer.id, message);
       } catch (error) {
         console.error('Failed to parse message:', error);
       }
     };
 
     dataChannel.onerror = (error) => {
-      console.error(`Data channel error for peer ${peerId}:`, error);
+      console.error(`Data channel error for peer ${peer.id}:`, error);
     };
   }
 
-  private setupConnectionHandlers(connection: RTCPeerConnection, peerId: string): void {
+  private setupConnectionHandlers(connection: RTCPeerConnection, peer: Player): void {
     connection.onicecandidate = (event) => {
       if (event.candidate) {
-        this.onIceCandidate(peerId, event.candidate);
+        this.onIceCandidate(peer.id, event.candidate);
       }
     };
 
     connection.oniceconnectionstatechange = () => {
-      const player = this.room?.players.get(peerId);
-      if (player) {
-        const wasConnected = player.isConnected;
-        player.isConnected = connection.iceConnectionState === 'connected';
-        
-        if (wasConnected !== player.isConnected && this.onConnectionChange) {
-          this.onConnectionChange(peerId, player.isConnected);
-        }
+      const wasConnected = peer.isConnected;
+      peer.isConnected = connection.iceConnectionState === 'connected';
+      
+      if (wasConnected !== peer.isConnected) {
+        // Notify NetworkEngine of connection change via direct method call
+        this.networkEngine.handleConnectionChange(peer.id, peer.isConnected);
       }
     };
 
     connection.onconnectionstatechange = () => {
       
       // When connection becomes ready, process any queued ICE candidates
-      if (connection.connectionState === 'connecting' && this.clientConnection) {
-        this.processQueuedIceCandidates(peerId);
+      if (connection.connectionState === 'connecting' && this.host?.connection) {
+        this.processQueuedIceCandidates(peer.id);
       }
       
       // Handle connection established
       if (connection.connectionState === 'connected') {
-        const player = this.room?.players.get(peerId);
-        if (player) {
-          player.isConnected = true;
-          if (this.onConnectionChange) {
-            this.onConnectionChange(peerId, true);
-          }
-        }
+        peer.isConnected = true;
       }
     };
 

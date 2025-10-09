@@ -65,6 +65,38 @@ export class NetworkEngine {
     }
   }
 
+  /**
+   * Handle connection state changes from WebRTCManager
+   */
+  handleConnectionChange(peerId: string, isConnected: boolean): void {
+    console.log(`[NetworkEngine] Connection change: ${peerId} is ${isConnected ? 'connected' : 'disconnected'}`);
+    
+    // Update player connection state in GameWork
+    const room = this.gameWork.getRoom();
+    if (room) {
+      const player = room.players.get(peerId);
+      if (player) {
+        player.isConnected = isConnected;
+      }
+    }
+  }
+
+  /**
+   * Handle data channel messages from WebRTCManager
+   */
+  handleDataChannelMessage(peerId: string, message: any): void {
+    console.log(`[NetworkEngine] Received message from ${peerId}:`, message);
+    
+    // Process the message based on type
+    if (message.type === 'stateChange') {
+      // Handle state change from peer
+      this.gameWork.updateGameState(message.payload);
+    } else if (message.action) {
+      // Handle player action from peer
+      this.gameWork.processPlayerAction(message);
+    }
+  }
+
   async onSendPlayerAction(payload: PlayerAction): Promise<void> {
     
     // Only handle game actions (not room management)
