@@ -176,7 +176,7 @@ export class NetworkEngine {
           this.handleRoomUpdate(message);
           break;
         case 'SignalingMessage':
-          this.handleSignalingMessages(message);
+          this.webrtc?.handleSignalingMessages(message);
           break;
         default:
       }
@@ -208,7 +208,6 @@ export class NetworkEngine {
         
         // Host initiates WebRTC connection (creates offer)
         this.webrtc.initiateConnection(message.payload.playerId);
-
         
         break;
       case 'CloseRoomRequest':
@@ -219,35 +218,6 @@ export class NetworkEngine {
           this.webrtc?.disconnectAll();
           this.gameWork.handleRoomUpdate(undefined as any);
         }
-        break;
-    }
-  }
-
-
-  /**
-   * Handle WebRTC signaling messages
-   */
-  private async handleSignalingMessages(message: SignalingMessage): Promise<void> {
-    switch (message.action) {
-      case 'offer':
-        
-        const answer = await this.webrtc?.handleOffer(message as offerMessage);
-        let msg =  {
-          type: 'SignalingMessage',
-          action: 'answer',
-          from: this.id,
-          payload: {
-            to: message.from,
-            answer: answer
-          }
-        } as answerMessage;
-        await this.signaling?.sendMessage(msg);
-        break;
-      case 'answer':
-        await this.webrtc?.handleAnswer(message as answerMessage);
-        break;
-      case 'ice_candidate':
-        await this.webrtc?.handleIceCandidate(message as iceCandidateMessage);
         break;
     }
   }

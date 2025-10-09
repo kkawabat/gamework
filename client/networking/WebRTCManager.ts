@@ -46,7 +46,7 @@ export class WebRTCManager {
   /**
    * Internal ICE candidate handler
    */
-  private onIceCandidate = (peerId: string, candidate: RTCIceCandidateInit) => {
+  private onIceCandidate = (peerId: string, candidate: RTCIceCandidateInit | null) => {
     console.log('[WEBRTC] ICE candidate generated for peer', peerId);
     const iceMessage: SignalingMessage = {
       type: 'SignalingMessage',
@@ -81,7 +81,7 @@ export class WebRTCManager {
     
   }
 
-  async handleOffer(msg: offerMessage): Promise<RTCSessionDescriptionInit> {
+  async handleOffer(msg: offerMessage): Promise<void> {
     const peerId = msg.from;
     const offer = msg.payload.offer;
     
@@ -108,8 +108,17 @@ export class WebRTCManager {
 
     this.processQueuedIceCandidates(this.host!);
     console.log('[WEBRTC] Offer received from', peerId, 'and answer sent' );
-    return answer;
-    
+
+    let answerMessage =  {
+      type: 'SignalingMessage',
+      action: 'answer',
+      from: this.networkEngine.id,
+      payload: {
+        to: msg.from,
+        answer: answer
+      }
+    } as answerMessage;
+    this.networkEngine.signaling?.sendMessage(answerMessage);
   }
 
   async handleAnswer(msg: answerMessage): Promise<void> {
@@ -140,8 +149,14 @@ export class WebRTCManager {
     }
 
     if (peer?.connection) {
-      console.log('[WEBRTC] Adding ICE candidate to connection', candidate);
-      await peer.connection.addIceCandidate(candidate);
+      
+      if (candidate) {
+        console.log('[WEBRTC] Adding ICE candidate to connection', candidate);
+        await peer.connection.addIceCandidate(candidate);
+      } else {
+        console.log('[WEBRTC] end-of-candidates');
+        await peer.connection.addIceCandidate();
+      }
     } else {
       peer?.queuedCandidates.push(candidate)
     }
@@ -242,9 +257,7 @@ export class WebRTCManager {
   private setupConnectionHandlers(peer: Player): void {
     const connection: RTCPeerConnection = peer.connection;
     connection.onicecandidate = (event) => {
-      if (event.candidate) {
-        this.onIceCandidate(peer.id, event.candidate);
-      }
+      this.onIceCandidate(peer.id, event.candidate);
     };
 
     connection.oniceconnectionstatechange = () => {
@@ -313,6 +326,20 @@ export class WebRTCManager {
       console.log(
         `[WEBRTC] No selected ICE pair yet (${transports.length} transport(s)). ICE=${pc.iceConnectionState}`
       );
+    }
+  }
+
+  public async handleSignalingMessages(message: SignalingMessage): Promise<void> {
+    switch (message.action) {
+      case 'offer':
+        await this.handleOffer(message as offerMessage);
+        break;
+      case 'answer':
+        await this.handleAnswer(message as answerMessage);
+        break;
+      case 'ice_candidate':
+        await this.handleIceCandidate(message as iceCandidateMessage);
+        break;
     }
   }
 }
