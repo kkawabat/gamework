@@ -47,7 +47,7 @@ export class WebRTCManager {
    * Internal ICE candidate handler
    */
   private onIceCandidate = (peerId: string, candidate: RTCIceCandidateInit) => {
-    console.log('[WEBRTC] ICE candidate received for peer', peerId);
+    console.log('[WEBRTC] ICE candidate generated for peer', peerId);
     const iceMessage: SignalingMessage = {
       type: 'SignalingMessage',
       action: 'ice_candidate',
@@ -140,7 +140,7 @@ export class WebRTCManager {
     }
 
     if (peer?.connection) {
-      console.log('[WEBRTC] Adding ICE candidate to connection');
+      console.log('[WEBRTC] Adding ICE candidate to connection', candidate);
       await peer.connection.addIceCandidate(candidate);
     } else {
       peer?.queuedCandidates.push(candidate)
