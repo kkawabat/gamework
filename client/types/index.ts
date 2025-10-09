@@ -1,6 +1,12 @@
 export interface Player {
   id: string;
   name?: string;
+  queuedCandidates?: RTCIceCandidateInit[];
+  connection?: RTCPeerConnection;
+  dataChannel?: RTCDataChannel;
+  isConnected?: boolean;
+  isHost?: boolean;
+  remoteSet?: boolean;
   [key: string]: any;
 }
 
