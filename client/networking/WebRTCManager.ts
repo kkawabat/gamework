@@ -31,7 +31,8 @@ export class WebRTCManager {
       id: peerId,
       connection: connection,
       dataChannel: dataChannel,
-      isConnected: false
+      isConnected: false,
+      queuedCandidates: []
     } as Player;
 
     this.setupDataChannel(dataChannel, player);
@@ -89,7 +90,8 @@ export class WebRTCManager {
       id: peerId, 
       connection: connection,
       dataChannel: undefined,
-      isConnected: false
+      isConnected: false,
+      queuedCandidates: []
     } as Player;
 
     this.setupConnectionHandlers(connection, this.host);
@@ -103,7 +105,7 @@ export class WebRTCManager {
     const answer = await connection.createAnswer();
     await connection.setLocalDescription(answer);
 
-    this.processQueuedIceCandidates(peerId);
+    this.processQueuedIceCandidates(this.host!);
     console.log('Offer received from', peerId, 'and answer sent' );
     return answer;
     
@@ -125,53 +127,27 @@ export class WebRTCManager {
     const peerId = msg.from;
     const candidate = msg.payload.candidate;
     
-    // Check if we have a connection for this peer (host) or client connection
-    const player = this.room?.players.get(peerId);
-    const connection = player?.connection || this.host?.connection;
-    if (connection) {
-      // Host or Client: Process ICE candidate immediately
-      try {
-        await connection.addIceCandidate(candidate);
-      } catch (error) {
-        // Error adding ICE candidate
-      }
+    
+    let peer: Player | undefined;
+    if (this.host?.id === peerId) {
+      peer = this.host;
     } else {
-      // Client: Queue ICE candidates for processing when connection is ready
-      if (!this.iceCandidateQueue.has(peerId)) {
-        this.iceCandidateQueue.set(peerId, []);
-      }
-      this.iceCandidateQueue.get(peerId)!.push(candidate);
-      
-      // If connection is ready, process immediately
-      if (this.host?.connection) {
-        this.processQueuedIceCandidates(peerId);
-      }
+      peer = this.room?.players.get(peerId);
     }
-    console.log('ICE candidate received from', peerId, 'and added to queue' );
+
+    if (peer?.connection) {
+      await peer.connection.addIceCandidate(candidate);
+    } else {
+      console.log('ICE candidate received from', peerId, 'and added to queue' );
+      peer?.queuedCandidates.push(candidate)
+    }
   }
 
-  private async processQueuedIceCandidates(peerId: string): Promise<void> {
-    const queuedCandidates = this.iceCandidateQueue.get(peerId);
-    if (!queuedCandidates || queuedCandidates.length === 0) {
-      return;
+  private async processQueuedIceCandidates(peer: Player): Promise<void> {
+    for (const candidate of peer.queuedCandidates) {
+      await peer.connection.addIceCandidate(candidate);
     }
-
-    // Client: Use stored connection to host
-    if (!this.host?.connection) {
-      return;
-    }
-
-    // Process all queued ICE candidates
-    for (const candidate of queuedCandidates) {
-      try {
-        await this.host.connection.addIceCandidate(candidate);
-      } catch (error) {
-        // Error adding ICE candidate
-      }
-    }
-
-    // Clear the queue for this peer
-    this.iceCandidateQueue.delete(peerId);
+    peer.queuedCandidates = [];
   }
 
   sendMessage(peerId: string, message: any): boolean {
@@ -289,7 +265,7 @@ export class WebRTCManager {
       
       // When connection becomes ready, process any queued ICE candidates
       if (connection.connectionState === 'connecting' && this.host?.connection) {
-        this.processQueuedIceCandidates(peer.id);
+        this.processQueuedIceCandidates(peer);
       }
       
       // Handle connection established
