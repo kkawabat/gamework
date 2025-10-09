@@ -254,9 +254,10 @@ export class WebRTCManager {
     };
 
     connection.onconnectionstatechange = () => {
-      console.log('[WEBRTC] ICE connection state for peer ', peer.id, ' changed to ', connection.connectionState);
-      if (connection.connectionState === 'connecting' && this.host?.connection) {
+      console.log('[WEBRTC] connection state for peer ', peer.id, ' changed to ', connection.connectionState);
+      if (connection.connectionState === 'connecting') {
         this.processQueuedIceCandidates(peer);
+        this.printStat(peer);
       }
       
       // Handle connection established
@@ -270,16 +271,48 @@ export class WebRTCManager {
   }
 
   private async printStat(peer: Player): Promise<void> {
-    console.log('[WEBRTC] Printing stats for peer ', peer.id);
-    const stats = await peer.connection.getStats();
+    const pc = peer.connection;
+    const stats = await pc.getStats();
+
+    // Basic high-level state summary
+    console.log(
+      `[WEBRTC] Peer ${peer.id}:`,
+      `ice=${pc.iceConnectionState},`,
+      `conn=${pc.connectionState},`,
+      `signaling=${pc.signalingState}`
+    );
+
     let pair: RTCIceCandidatePairStats | undefined;
+
     stats.forEach((r: any) => {
-      if (r.type === 'transport' && r.selectedCandidatePairId) pair = stats.get(r.selectedCandidatePairId);
+      if (r.type === 'transport') {
+        const transport = r as RTCTransportStats;
+        if (transport.selectedCandidatePairId) {
+          const candidatePair = stats.get(transport.selectedCandidatePairId);
+          if (candidatePair?.type === 'candidate-pair') {
+            pair = candidatePair as RTCIceCandidatePairStats;
+          }
+        }
+      }
     });
+
     if (pair) {
       const local = stats.get(pair.localCandidateId);
       const remote = stats.get(pair.remoteCandidateId);
-      console.log('[WEBRTC] pair', pair.state, local.candidateType, '→', remote.candidateType, local.protocol);
+
+      console.log(
+        `[WEBRTC] Pair:`,
+        `${pair.state.toUpperCase()} |`,
+        `${local?.candidateType ?? '?'}→${remote?.candidateType ?? '?'} (${local?.protocol ?? '?'}) |`,
+        `rtt=${pair.currentRoundTripTime?.toFixed(3) ?? '–'}s |`,
+        `sent=${pair.bytesSent ?? 0}B recv=${pair.bytesReceived ?? 0}B`
+      );
+    } else {
+      // No selected pair found
+      const transports = Array.from(stats.values()).filter((r: any) => r.type === 'transport');
+      console.log(
+        `[WEBRTC] No selected ICE pair yet (${transports.length} transport(s)). ICE=${pc.iceConnectionState}`
+      );
     }
   }
 }
