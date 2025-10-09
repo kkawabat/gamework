@@ -25,9 +25,9 @@ const DEFAULT_GAMEWORK_CONFIG: GameWorkConfig = {
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' }
       ],
-      iceCandidatePoolSize: 10,
-      bundlePolicy: 'max-bundle',
-      rtcpMuxPolicy: 'require'
+      iceTransportPolicy: 'all',     // allow host/srflx/relay
+      bundlePolicy: 'max-bundle',    // modern default; good
+      iceCandidatePoolSize: 0,   
     },
     dataChannelConfig: {
       ordered: true,
@@ -41,7 +41,7 @@ const DEFAULT_GAMEWORK_CONFIG: GameWorkConfig = {
   }
 };
 
-
+  
 /**
  * GameWork - Hybrid architecture for multiplayer games
  * 

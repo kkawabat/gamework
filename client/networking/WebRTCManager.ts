@@ -22,7 +22,7 @@ export class WebRTCManager {
    * Initiate WebRTC connection with a peer
    */
   async initiateConnection(peerId: string): Promise<void> {
-    console.log('initiating connection with', peerId);
+    console.log('[WEBRTC] initiating connection with', peerId);
     const connection = new RTCPeerConnection(this.config.rtcConfig as RTCConfiguration);
 
     const dataChannel = connection.createDataChannel('game', this.config.dataChannelConfig);
@@ -47,7 +47,7 @@ export class WebRTCManager {
    * Internal ICE candidate handler
    */
   private onIceCandidate = (peerId: string, candidate: RTCIceCandidateInit) => {
-    console.log('ICE candidate received for peer', peerId);
+    console.log('[WEBRTC] ICE candidate received for peer', peerId);
     const iceMessage: SignalingMessage = {
       type: 'SignalingMessage',
       action: 'ice_candidate',
@@ -77,7 +77,7 @@ export class WebRTCManager {
     } as SignalingMessage;
     
     this.networkEngine.signaling.sendMessage(offerMessage);
-    console.log('Offer sent to', peerId);
+    console.log('[WEBRTC] Offer sent to', peerId);
     
   }
 
@@ -107,7 +107,7 @@ export class WebRTCManager {
     await connection.setLocalDescription(answer);
 
     this.processQueuedIceCandidates(this.host!);
-    console.log('Offer received from', peerId, 'and answer sent' );
+    console.log('[WEBRTC] Offer received from', peerId, 'and answer sent' );
     return answer;
     
   }
@@ -121,28 +121,28 @@ export class WebRTCManager {
     }
 
     await player.connection.setRemoteDescription(answer);
-    console.log('Answer received from', peerId, 'and remote description set' );
+    console.log('[WEBRTC] Answer received from', peerId, 'and remote description set' );
   }
 
   async handleIceCandidate(msg: iceCandidateMessage): Promise<void> {
     
     const peerId = msg.from;
     const candidate = msg.payload.candidate;
-    console.log('ICE candidate received from', peerId);
+    
     
     let peer: Player | undefined;
     if (this.host?.id === peerId) {
+      console.log('[WEBRTC] ICE candidate received from host', peerId);
       peer = this.host;
     } else {
+      console.log('[WEBRTC] ICE candidate received from client', peerId);
       peer = this.room?.players.get(peerId);
     }
 
-    console.log('Peer', peer);
     if (peer?.connection) {
-      console.log('Adding ICE candidate to connection');
+      console.log('[WEBRTC] Adding ICE candidate to connection');
       await peer.connection.addIceCandidate(candidate);
     } else {
-      
       peer?.queuedCandidates.push(candidate)
     }
   }
@@ -248,16 +248,14 @@ export class WebRTCManager {
     };
 
     connection.oniceconnectionstatechange = () => {
-      const wasConnected = peer.isConnected;
-      console.log('ICE connection state for peer ', peer.id, ' changed to ', connection.iceConnectionState);
+      console.log('[WEBRTC] ICE connection state for peer ', peer.id, ' changed to ', connection.iceConnectionState);
       if (connection.iceConnectionState === 'connected') {
         this.processQueuedIceCandidates(peer);
       }
+      this.printStat(peer);
     };
 
     connection.onconnectionstatechange = () => {
-      
-      // When connection becomes ready, process any queued ICE candidates
       if (connection.connectionState === 'connecting' && this.host?.connection) {
         this.processQueuedIceCandidates(peer);
       }
@@ -269,6 +267,19 @@ export class WebRTCManager {
     };
 
     connection.onicegatheringstatechange = () => {};
+  }
+
+  private async printStat(peer: Player): Promise<void> {
+    const stats = await peer.connection.getStats();
+    let pair: RTCIceCandidatePairStats | undefined;
+    stats.forEach((r: any) => {
+      if (r.type === 'transport' && r.selectedCandidatePairId) pair = stats.get(r.selectedCandidatePairId);
+    });
+    if (pair) {
+      const local = stats.get(pair.localCandidateId);
+      const remote = stats.get(pair.remoteCandidateId);
+      console.log('pair', pair.state, local.candidateType, '→', remote.candidateType, local.protocol);
+    }
   }
 }
 

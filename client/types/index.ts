@@ -17,9 +17,10 @@ export interface GameWorkConfig {
 export interface WebRTCConfig {
   rtcConfig: {
     iceServers: RTCIceServer[];
-    iceCandidatePoolSize: number;
-    bundlePolicy: string;
-    rtcpMuxPolicy: string;
+    iceCandidatePoolSize?: number;
+    bundlePolicy?: string;
+    rtcpMuxPolicy?: string;
+    iceTransportPolicy?: string;
   };
   dataChannelConfig: {
     ordered: boolean;
