@@ -155,15 +155,17 @@ export class WebRTCManager {
         await peer.connection.addIceCandidate(candidate);
       } else {
         console.log('[WEBRTC] end-of-candidates');
-        await peer.connection.addIceCandidate();
+        await peer.connection.addIceCandidate({ candidate: '', sdpMid: '0' });
       }
     } else {
       peer?.queuedCandidates.push(candidate)
     }
+    
   }
 
   private async processQueuedIceCandidates(peer: Player): Promise<void> {
     for (const candidate of peer.queuedCandidates) {
+      console.log('[WEBRTC] Processing queued ICE candidate', candidate);
       await peer.connection.addIceCandidate(candidate);
     }
     peer.queuedCandidates = [];
@@ -271,7 +273,6 @@ export class WebRTCManager {
       console.log('[WEBRTC] connection state for peer ', peer.id, ' changed to ', connection.connectionState);
       if (connection.connectionState === 'connecting') {
         this.processQueuedIceCandidates(peer);
-        this.printStat(peer);
       }
       
       // Handle connection established
