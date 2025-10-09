@@ -149,14 +149,7 @@ export class WebRTCManager {
     }
 
     if (peer?.connection) {
-      
-      if (candidate) {
-        console.log('[WEBRTC] Adding ICE candidate to connection', candidate);
-        await peer.connection.addIceCandidate(candidate);
-      } else {
-        console.log('[WEBRTC] end-of-candidates');
-        await peer.connection.addIceCandidate({ candidate: '', sdpMid: '0' });
-      }
+      this.addIceCandidate(peer, candidate);
     } else {
       peer?.queuedCandidates.push(candidate)
     }
@@ -166,7 +159,7 @@ export class WebRTCManager {
   private async processQueuedIceCandidates(peer: Player): Promise<void> {
     for (const candidate of peer.queuedCandidates) {
       console.log('[WEBRTC] Processing queued ICE candidate', candidate);
-      await peer.connection.addIceCandidate(candidate);
+      this.addIceCandidate(peer, candidate);
     }
     peer.queuedCandidates = [];
   }
@@ -342,6 +335,21 @@ export class WebRTCManager {
       case 'ice_candidate':
         await this.handleIceCandidate(message as iceCandidateMessage);
         break;
+    }
+  }
+
+  private addIceCandidate(peer: Player, candidate: RTCIceCandidateInit): void {
+    console.log(
+      `[ICE] rx mid=${candidate.sdpMid} idx=${candidate.sdpMLineIndex} ` +
+      `midsNow=[${peer.connection.getTransceivers().map((t: any)=>t.mid).join(',')}]`
+    );
+    
+    if (candidate) {
+      console.log('[WEBRTC] Adding ICE candidate to connection', candidate);
+      peer.connection.addIceCandidate(candidate);
+    } else {
+      console.log('[WEBRTC] end-of-candidates');
+      peer.connection.addIceCandidate({ candidate: '', sdpMid: '0' });
     }
   }
 }
