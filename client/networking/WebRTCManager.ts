@@ -257,6 +257,7 @@ export class WebRTCManager {
   private setupConnectionHandlers(peer: Player): void {
     const connection: RTCPeerConnection = peer.connection;
     connection.onicecandidate = (event) => {
+      console.log('[CONNECTION] ICE candidate', event);
       this.onIceCandidate(peer.id, event.candidate);
     };
 
