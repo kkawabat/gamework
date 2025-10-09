@@ -230,12 +230,12 @@ export class WebRTCManager {
         const message = JSON.parse(event.data);
         this.networkEngine.handleDataChannelMessage(peer.id, message);
       } catch (error) {
-        console.error('Failed to parse message:', error);
+        console.error('[WEBRTC] Failed to parse message:', error);
       }
     };
 
     dataChannel.onerror = (error) => {
-      console.error(`Data channel error for peer ${peer.id}:`, error);
+      console.error(`[WEBRTC] Data channel error for peer ${peer.id}:`, error);
     };
   }
 
@@ -249,13 +249,12 @@ export class WebRTCManager {
 
     connection.oniceconnectionstatechange = () => {
       console.log('[WEBRTC] ICE connection state for peer ', peer.id, ' changed to ', connection.iceConnectionState);
-      if (connection.iceConnectionState === 'connected') {
-        this.processQueuedIceCandidates(peer);
-      }
+      this.processQueuedIceCandidates(peer);
       this.printStat(peer);
     };
 
     connection.onconnectionstatechange = () => {
+      console.log('[WEBRTC] ICE connection state for peer ', peer.id, ' changed to ', connection.connectionState);
       if (connection.connectionState === 'connecting' && this.host?.connection) {
         this.processQueuedIceCandidates(peer);
       }
@@ -264,12 +263,14 @@ export class WebRTCManager {
       if (connection.connectionState === 'connected') {
         peer.isConnected = true;
       }
+      this.printStat(peer);
     };
 
     connection.onicegatheringstatechange = () => {};
   }
 
   private async printStat(peer: Player): Promise<void> {
+    console.log('[WEBRTC] Printing stats for peer ', peer.id);
     const stats = await peer.connection.getStats();
     let pair: RTCIceCandidatePairStats | undefined;
     stats.forEach((r: any) => {
@@ -278,7 +279,7 @@ export class WebRTCManager {
     if (pair) {
       const local = stats.get(pair.localCandidateId);
       const remote = stats.get(pair.remoteCandidateId);
-      console.log('pair', pair.state, local.candidateType, '→', remote.candidateType, local.protocol);
+      console.log('[WEBRTC] pair', pair.state, local.candidateType, '→', remote.candidateType, local.protocol);
     }
   }
 }
