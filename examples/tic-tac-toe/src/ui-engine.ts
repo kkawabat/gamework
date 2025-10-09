@@ -286,8 +286,9 @@ export class TicTacToeUIEngine extends UIEngine<TicTacToeState, TicTacToeAction>
     if (!qrContainer) return;
 
     try {
-      // Use the existing generateQRCode utility
-      const qrCodeDataURL = await generateQRCode(roomId);
+      // Use the existing generateQRCode utility with the current page URL as base
+      const baseUrl = window.location.href.split('?')[0]; // Remove any existing query parameters
+      const qrCodeDataURL = await generateQRCode(roomId, baseUrl);
       const shortCode = roomId.substring(0, 6).toUpperCase();
 
       // Update QR code container
