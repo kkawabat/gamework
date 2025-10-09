@@ -249,11 +249,9 @@ export class WebRTCManager {
 
     connection.oniceconnectionstatechange = () => {
       const wasConnected = peer.isConnected;
-      peer.isConnected = connection.iceConnectionState === 'connected';
-      
-      if (wasConnected !== peer.isConnected) {
-        // Notify NetworkEngine of connection change via direct method call
-        this.networkEngine.handleConnectionChange(peer.id, peer.isConnected);
+      console.log('ICE connection state for peer ', peer.id, ' changed to ', connection.iceConnectionState);
+      if (connection.iceConnectionState === 'connected') {
+        this.processQueuedIceCandidates(peer);
       }
     };
 
