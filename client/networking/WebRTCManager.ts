@@ -226,7 +226,7 @@ export class WebRTCManager {
   }
 
   private setupDataChannel(peer: Player): void {
-    const dataChannel: RTCDataChannel = peer.dataChannel;
+    const dataChannel: RTCDataChannel = peer.dataChannel!;
     dataChannel.onopen = () => {
       peer.dataChannel = dataChannel;
       peer.isConnected = true;
@@ -253,7 +253,7 @@ export class WebRTCManager {
   }
 
   private setupConnectionHandlers(peer: Player): void {
-    const connection: RTCPeerConnection = peer.connection;
+    const connection: RTCPeerConnection = peer.connection!;
     connection.onicecandidate = (event) => {
       console.log('[CONNECTION] ICE candidate', event);
       this.onIceCandidate(peer.id, event.candidate);
@@ -282,7 +282,7 @@ export class WebRTCManager {
   }
 
   private async printStat(peer: Player): Promise<void> {
-    const pc = peer.connection;
+    const pc = peer.connection!;
     const stats = await pc.getStats();
 
     // Basic high-level state summary
@@ -295,21 +295,35 @@ export class WebRTCManager {
 
     let pair: RTCIceCandidatePairStats | undefined;
 
+    // Find transport and candidate pair stats
+    let transport: RTCTransportStats | undefined;
+    let local: any;
+    let remote: any;
+    
     stats.forEach((r: any) => {
       if (r.type === 'transport') {
-        const transport = r as RTCTransportStats;
-        if (transport.selectedCandidatePairId) {
-          const candidatePair = stats.get(transport.selectedCandidatePairId);
-          if (candidatePair?.type === 'candidate-pair') {
-            pair = candidatePair as RTCIceCandidatePairStats;
-          }
-        }
+        transport = r as RTCTransportStats;
       }
     });
 
+    if (transport?.selectedCandidatePairId) {
+      stats.forEach((r: any) => {
+        if (r.id === transport!.selectedCandidatePairId && r.type === 'candidate-pair') {
+          pair = r as RTCIceCandidatePairStats;
+        }
+      });
+    }
+
     if (pair) {
-      const local = stats.get(pair.localCandidateId);
-      const remote = stats.get(pair.remoteCandidateId);
+      // Find local and remote candidate stats
+      stats.forEach((r: any) => {
+        if (r.id === pair!.localCandidateId) {
+          local = r;
+        }
+        if (r.id === pair!.remoteCandidateId) {
+          remote = r;
+        }
+      });
 
       console.log(
         `[WEBRTC] Pair:`,
@@ -320,9 +334,14 @@ export class WebRTCManager {
       );
     } else {
       // No selected pair found
-      const transports = Array.from(stats.values()).filter((r: any) => r.type === 'transport');
+      let transportCount = 0;
+      stats.forEach((r: any) => {
+        if (r.type === 'transport') {
+          transportCount++;
+        }
+      });
       console.log(
-        `[WEBRTC] No selected ICE pair yet (${transports.length} transport(s)). ICE=${pc.iceConnectionState}`
+        `[WEBRTC] No selected ICE pair yet (${transportCount} transport(s)). ICE=${pc.iceConnectionState}`
       );
     }
   }
@@ -346,12 +365,12 @@ export class WebRTCManager {
       console.log('[WEBRTC] Adding ICE candidate to connection', candidate);
       console.log(
         `[ICE] rx mid=${candidate.sdpMid} idx=${candidate.sdpMLineIndex} ` +
-        `midsNow=[${peer.connection.getTransceivers().map((t: any)=>t.mid).join(',')}]`
+        `midsNow=[${peer.connection!.getTransceivers().map((t: any)=>t.mid).join(',')}]`
       );
-      peer.connection.addIceCandidate(candidate);
+      peer.connection!.addIceCandidate(candidate);
     } else {
       console.log('[WEBRTC] end-of-candidates');
-      peer.connection.addIceCandidate({ candidate: '', sdpMid: '0' });
+      peer.connection!.addIceCandidate({ candidate: '', sdpMid: '0' });
     }
   }
 }
