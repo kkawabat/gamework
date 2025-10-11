@@ -1,15 +1,15 @@
 import { answerMessage, iceCandidateMessage, offerMessage, SignalingMessage, GameRoom } from '../../shared/signaling-types';
 import { GameWorkConfig, Player, WebRTCConfig } from '../types';
+import { NetworkEngine } from './NetworkEngine';
 
 export class WebRTCManager {
 
-  private iceCandidateQueue: Map<string, RTCIceCandidateInit[]> = new Map();
   private room?: GameRoom;
-  private networkEngine: any;
+  private networkEngine: NetworkEngine;
   private host?: Player;
   private config: WebRTCConfig;
 
-  constructor(networkEngine: any) {
+  constructor(networkEngine: NetworkEngine) {
     this.networkEngine = networkEngine;
     this.config = networkEngine.gameWork.config.webrtcConfig;
   }
@@ -58,7 +58,7 @@ export class WebRTCManager {
         candidate: candidate
       }
     } as SignalingMessage;
-    this.networkEngine.signaling?.sendMessage(iceMessage);
+    this.networkEngine.sendSignalingMessage(iceMessage);
   };
 
   async sendOffer(player: Player): Promise<void> {
@@ -77,7 +77,7 @@ export class WebRTCManager {
       }
     } as SignalingMessage;
     
-    this.networkEngine.signaling.sendMessage(offerMessage);
+    this.networkEngine.sendSignalingMessage(offerMessage);
     console.log('[WEBRTC] Offer sent to', peerId);
     
   }
@@ -121,7 +121,7 @@ export class WebRTCManager {
         answer: answer
       }
     } as answerMessage;
-    this.networkEngine.signaling?.sendMessage(answerMessage);
+    this.networkEngine.sendSignalingMessage(answerMessage);
   }
 
   async handleAnswer(msg: answerMessage): Promise<void> {
@@ -278,7 +278,10 @@ export class WebRTCManager {
       this.printStat(peer);
     };
 
-    connection.onicegatheringstatechange = () => {};
+    connection.onicegatheringstatechange = () => {
+      console.log('[WEBRTC] ICE gathering state for peer ', peer.id, ' changed to ', connection.iceGatheringState);
+      this.printStat(peer);
+    };
   }
 
   private async printStat(peer: Player): Promise<void> {

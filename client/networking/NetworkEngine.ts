@@ -3,14 +3,15 @@ import { SignalingService } from './SignalingService';
 import { Player, GameRoom, SignalingMessage, answerMessage, offerMessage, iceCandidateMessage } from '../../shared/signaling-types';
 import { v4 as uuidv4 } from 'uuid';
 import { PlayerAction, StateChange } from '../events/EventFlow';
+import { GameWork } from '../GameWork';
 
 export class NetworkEngine {
   private webrtc: WebRTCManager;
   private signaling: SignalingService | null = null;
-  private id: string = '';
-  protected gameWork: any;
+  public id: string = '';
+  public gameWork: GameWork;
 
-  constructor(gameWork: any) {
+  constructor(gameWork: GameWork) {
     this.gameWork = gameWork;
     this.webrtc = new WebRTCManager(this);
     // Defer initialization until GameWork is ready
@@ -63,6 +64,10 @@ export class NetworkEngine {
     if (this.webrtc && room) {
       this.webrtc.sendMessage(room.hostId, action);
     }
+  }
+
+  sendSignalingMessage(message: SignalingMessage): void {
+    this.signaling?.sendMessage(message);
   }
 
   /**
@@ -126,7 +131,7 @@ export class NetworkEngine {
             ...paction.input || {}
           }
         } as SignalingMessage;
-        this.signaling?.sendMessage(createRoomMessage);
+        this.sendSignalingMessage(createRoomMessage);
         break;
 
       case 'JoinRoomRequest':
@@ -139,7 +144,7 @@ export class NetworkEngine {
             ...paction.input || {}
           }
         } as SignalingMessage;
-        this.signaling?.sendMessage(joinRoomMessage);
+        this.sendSignalingMessage(joinRoomMessage);
         break;
 
       case 'LeaveRoomRequest':

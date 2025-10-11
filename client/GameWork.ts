@@ -51,7 +51,7 @@ const DEFAULT_GAMEWORK_CONFIG: GameWorkConfig = {
  * For game-specific implementations, extend this class and override the abstract methods.
  */
 export abstract class GameWork<T extends BaseGameWorkState = BaseGameWorkState> {
-  private config: GameWorkConfig;
+  public config: GameWorkConfig;
   private eventManager: EventManager;
   protected gameEngine!: GameEngine<any, any>;
   protected uiEngine!: UIEngine<any, any>;
