@@ -23,14 +23,15 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         input: {
           index: 'examples/index.html',
-          'tic-tac-toe': 'examples/tic-tac-toe/tic-tac-toe.html'
+          'tic-tac-toe': 'examples/tic-tac-toe/index.html'
         },
         output: {
           // Keep modules separate for better caching
           manualChunks: {
-            'gamework-core': ['client/core/GameEngine.ts'],
-            'gamework-networking': ['client/networking/WebRTCManager.ts', 'client/networking/SignalingService.ts'],
-            'gamework-main': ['client/GameWork.ts']
+            'gamework-core': ['src/core/StateStore.ts', 'src/core/EventBus.ts'],
+            'gamework-engines': ['src/engines/GameEngine.ts', 'src/engines/UIEngine.ts'],
+            'gamework-network': ['src/engines/NetworkEngine.ts'],
+            'gamework-main': ['src/core/GameWork.ts']
           }
         }
       },

@@ -15,7 +15,7 @@
     "resolveJsonModule": true,
     "moduleResolution": "node"
   },
-  "include": ["client/**/*", "shared/**/*"],
+  "include": ["src/**/*", "shared/**/*"],
   "exclude": ["node_modules", "dist", "server", "examples", "**/*.test.ts"]
 }
 
