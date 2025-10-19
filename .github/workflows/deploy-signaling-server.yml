@@ -3,7 +3,8 @@ name: Deploy Signaling Server to Droplet
 on:
   push:
     paths:
-      - 'signaling-server/**'
+      - 'server/**'
+      - 'shared/**'
       - '.github/workflows/deploy-signaling-server.yml'
   workflow_dispatch:
 
@@ -38,12 +39,9 @@ jobs:
           git fetch --all
           git reset --hard origin/main
           
-          print_status "Downloading deployment script..."
-          curl -fsSL https://raw.githubusercontent.com/kkawabat/gamework/main/signaling-server/deploy.sh -o /tmp/deploy.sh
-          chmod +x /tmp/deploy.sh
-          
           print_status "Running deployment script..."
-          /tmp/deploy.sh
+          chmod +x server/deploy.sh
+          ./server/deploy.sh
           
           print_status "✅ GitHub Actions deployment completed!"
           print_status "Container name: gamework-signalling-server"
