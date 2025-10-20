@@ -20,7 +20,7 @@
     "build:game": "chmod +x scripts/build-demos-vite.sh && ./scripts/build-demos-vite.sh",
     "dev:game": "vite",
     "preview:game": "vite preview",
-    "lint": "eslint client/**/*.ts shared/**/*.ts",
+    "lint": "eslint src/**/*.ts shared/**/*.ts",
     "lint:server": "cd server && npm run lint",
     "clean": "rm -rf dist demo-build server/dist"
   },

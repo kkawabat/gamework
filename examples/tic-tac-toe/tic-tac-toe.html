@@ -279,13 +279,16 @@
                 <p>Share this code with players to join!</p>
             </div>
             
-            <div class="join-room-section">
-                <h3>Join Existing Room</h3>
-                <div class="join-controls">
-                    <input type="text" id="roomCodeInput" placeholder="Enter room code" maxlength="6" style="padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; text-align: center; letter-spacing: 2px; font-family: monospace; width: 200px; margin-right: 10px;">
+            <div class="room-controls">
+                <h3>Room Controls</h3>
+                <div class="room-buttons">
+                    <button id="createRoomBtn" style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; margin-right: 10px;">Create Room</button>
                     <button id="joinRoomBtn" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;">Join Room</button>
                 </div>
-                <p style="font-size: 14px; color: #666; margin-top: 10px;">Enter a 6-character room code to join an existing game</p>
+                <div class="join-controls" style="margin-top: 15px;">
+                    <input type="text" id="roomCodeInput" placeholder="Enter room code" maxlength="6" style="padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; text-align: center; letter-spacing: 2px; font-family: monospace; width: 200px; margin-right: 10px;">
+                </div>
+                <p style="font-size: 14px; color: #666; margin-top: 10px;">Create a new room or join an existing one with a 6-character code</p>
             </div>
             
             <div class="connection-status">
@@ -344,6 +347,9 @@
         </div>
     </div>
 
+     <!-- QR Code Library -->
+     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+     
      <script type="module">
          // Import the TicTacToe game
          import { startTicTacToeGame } from './TicTacToeGame.ts';

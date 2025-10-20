@@ -1,14 +1,19 @@
 /**
- * TicTacToeGame - Example implementation using GameWork v2
+ * TicTacToeGame - Full multiplayer implementation using GameWork v2
  * 
  * Demonstrates clean architecture with:
  * - Type-safe game state
  * - Pure game logic
  * - Clean UI rendering
  * - Event-driven communication
+ * - WebRTC multiplayer networking
+ * - Room management
+ * - Real-time synchronization
  */
 
 import { GameWork, BaseGameState, GameAction, GameConfig } from '../../src';
+import { WebRTCNetworkEngine, WebRTCNetworkEngineConfig } from '../../src/engines/WebRTCNetworkEngine';
+import { NetworkMessage } from '../../src/types/GameTypes';
 
 // TicTacToe specific types
 export interface TicTacToeState extends BaseGameState {
@@ -219,10 +224,33 @@ export class TicTacToeUI {
   }
 }
 
-// TicTacToe Game Factory
-export function createTicTacToeGame(): GameWork<TicTacToeState, TicTacToeAction> {
+// Multiplayer TicTacToe Game Factory
+export function createTicTacToeGame(playerId: string, playerName: string): GameWork<TicTacToeState, TicTacToeAction> {
   const engine = new TicTacToeEngine();
   const ui = new TicTacToeUI();
+  
+  // Configure WebRTC network engine
+  const networkConfig: WebRTCNetworkEngineConfig = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ],
+    iceTransportPolicy: 'all',
+    bundlePolicy: 'balanced',
+    rtcpMuxPolicy: 'require',
+    iceCandidatePoolSize: 10,
+    signalingServerUrl: process.env.SIGNALING_SERVER_URL || 'ws://localhost:8080',
+    roomCodeLength: 6,
+    maxRetries: 5,
+    retryDelay: 2000
+  };
+
+  const dataChannelConfig = {
+    ordered: true,
+    maxRetransmits: 3
+  };
+
+  const networkEngine = new WebRTCNetworkEngine(networkConfig, dataChannelConfig, playerId);
   
   const config: GameConfig<TicTacToeState, TicTacToeAction> = {
     initialState: engine.getInitialState(),
@@ -237,50 +265,322 @@ export function createTicTacToeGame(): GameWork<TicTacToeState, TicTacToeAction>
   // Register engines with DI container
   game['container'].register('GameEngine', () => engine);
   game['container'].register('UIEngine', () => ui);
+  game['container'].register('NetworkEngine', () => networkEngine);
   
   return game;
 }
 
-// Example usage
-export function startTicTacToeGame(): void {
-  const game = createTicTacToeGame();
-  
-  game.initialize().then(() => {
-    console.log('TicTacToe game initialized');
+// Multiplayer TicTacToe Game Manager
+class MultiplayerTicTacToeManager {
+  private game: GameWork<TicTacToeState, TicTacToeAction> | null = null;
+  private networkEngine: WebRTCNetworkEngine | null = null;
+  private playerId: string;
+  private playerName: string;
+  private isHost: boolean = false;
+  private currentRoom: string = '';
+
+  constructor() {
+    this.playerId = this.generatePlayerId();
+    this.playerName = this.getPlayerName();
+  }
+
+  async initialize(): Promise<void> {
+    try {
+      // Create game instance
+      this.game = createTicTacToeGame(this.playerId, this.playerName);
+      this.networkEngine = this.game['container'].resolve('NetworkEngine') as WebRTCNetworkEngine;
+      
+      // Initialize network engine
+      await this.networkEngine.initialize();
+      
+      // Initialize game
+      await this.game.initialize();
+      
+      // Set up event handlers
+      this.setupEventHandlers();
+      
+      // Check for room parameter in URL
+      this.handleURLParameters();
+      
+      // Update UI
+      this.updateConnectionStatus('Connected', true);
+      this.logMessage('GameWork framework initialized', 'success');
+      
+    } catch (error) {
+      console.error('Failed to initialize game:', error);
+      this.updateConnectionStatus('Connection Failed', false);
+      this.logMessage(`Initialization failed: ${error}`, 'error');
+    }
+  }
+
+  private handleURLParameters(): void {
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomCode = urlParams.get('room');
     
-    // Set up UI event handlers
-    const boardElement = document.querySelector('.tic-tac-toe-board');
-    if (boardElement) {
-      boardElement.addEventListener('click', (event) => {
+    if (roomCode && roomCode.length === 6) {
+      // Auto-join room from URL
+      this.joinRoom(roomCode);
+      
+      // Update input field
+      const roomInput = document.getElementById('roomCodeInput') as HTMLInputElement;
+      if (roomInput) {
+        roomInput.value = roomCode;
+      }
+    }
+  }
+
+  async createRoom(): Promise<void> {
+    if (!this.networkEngine) return;
+    
+    try {
+      this.currentRoom = await this.networkEngine.createRoom();
+      this.isHost = true;
+      
+      // Update UI
+      this.updateRoomCode(this.currentRoom);
+      this.updatePlayerStatus('host', 'You are the host');
+      this.logMessage(`Room created: ${this.currentRoom}`, 'success');
+      
+    } catch (error) {
+      console.error('Failed to create room:', error);
+      this.logMessage(`Failed to create room: ${error}`, 'error');
+    }
+  }
+
+  async joinRoom(roomCode: string): Promise<void> {
+    if (!this.networkEngine) return;
+    
+    try {
+      const success = await this.networkEngine.joinRoom(roomCode);
+      if (success) {
+        this.currentRoom = roomCode;
+        this.isHost = false;
+        
+        // Update UI
+        this.updateRoomCode(roomCode);
+        this.updatePlayerStatus('guest', 'Connected to room');
+        this.logMessage(`Joined room: ${roomCode}`, 'success');
+      }
+    } catch (error) {
+      console.error('Failed to join room:', error);
+      this.logMessage(`Failed to join room: ${error}`, 'error');
+    }
+  }
+
+  private setupEventHandlers(): void {
+    if (!this.game || !this.networkEngine) return;
+
+    // Game state changes
+    this.game.on('game:stateChanged', (state) => {
+      const ui = this.game!['container'].resolve('UIEngine') as TicTacToeUI;
+      ui.render(state);
+    });
+
+    // Network messages
+    this.networkEngine.onMessage((peerId, message) => {
+      this.handleNetworkMessage(peerId, message);
+    });
+
+    // UI event handlers
+    this.setupUIEventHandlers();
+  }
+
+  private setupUIEventHandlers(): void {
+    // Board clicks
+    const gameBoard = document.getElementById('gameBoard');
+    if (gameBoard) {
+      gameBoard.addEventListener('click', (event) => {
         const target = event.target as HTMLElement;
-        if (target.classList.contains('cell')) {
-          const position = parseInt(target.dataset.position!);
-          game.dispatchAction({
-            type: 'MOVE',
-            playerId: 'player1',
-            timestamp: Date.now(),
-            payload: { position }
-          });
+        if (target.classList.contains('cell') && !target.classList.contains('disabled')) {
+          const position = parseInt(target.dataset.index!);
+          this.makeMove(position);
         }
       });
     }
-    
-    const restartButton = document.querySelector('button');
+
+    // Restart button
+    const restartButton = document.getElementById('restart');
     if (restartButton) {
       restartButton.addEventListener('click', () => {
-        game.dispatchAction({
-          type: 'RESTART',
-          playerId: 'player1',
-          timestamp: Date.now(),
-          payload: {}
-        });
+        this.restartGame();
       });
     }
+
+    // Join room button
+    const joinButton = document.getElementById('joinRoomBtn');
+    const roomInput = document.getElementById('roomCodeInput') as HTMLInputElement;
+    if (joinButton && roomInput) {
+      joinButton.addEventListener('click', () => {
+        const roomCode = roomInput.value.trim().toUpperCase();
+        if (roomCode.length === 6) {
+          this.joinRoom(roomCode);
+        } else {
+          this.logMessage('Please enter a valid 6-character room code', 'warning');
+        }
+      });
+    }
+
+    // Create room button (if exists)
+    const createRoomButton = document.getElementById('createRoomBtn');
+    if (createRoomButton) {
+      createRoomButton.addEventListener('click', () => {
+        this.createRoom();
+      });
+    }
+  }
+
+  private makeMove(position: number): void {
+    if (!this.game || !this.networkEngine) return;
+
+    const action: TicTacToeAction = {
+      type: 'MOVE',
+      playerId: this.playerId,
+      timestamp: Date.now(),
+      payload: { position }
+    };
+
+    // Dispatch locally
+    this.game.dispatchAction(action);
     
-    // Subscribe to state changes
-    game.on('game:stateChanged', (state) => {
-      const ui = game['container'].resolve('UIEngine');
-      ui.render(state);
-    });
+    // Broadcast to other players
+    const networkMessage: NetworkMessage = {
+      type: 'GAME_ACTION',
+      from: this.playerId,
+      to: 'all',
+      payload: action,
+      timestamp: Date.now()
+    };
+    
+    this.networkEngine.broadcast(networkMessage);
+  }
+
+  private restartGame(): void {
+    if (!this.game || !this.networkEngine) return;
+
+    const action: TicTacToeAction = {
+      type: 'RESTART',
+      playerId: this.playerId,
+      timestamp: Date.now(),
+      payload: {}
+    };
+
+    // Dispatch locally
+    this.game.dispatchAction(action);
+    
+    // Broadcast to other players
+    const networkMessage: NetworkMessage = {
+      type: 'GAME_ACTION',
+      from: this.playerId,
+      to: 'all',
+      payload: action,
+      timestamp: Date.now()
+    };
+    
+    this.networkEngine.broadcast(networkMessage);
+  }
+
+  private handleNetworkMessage(peerId: string, message: NetworkMessage): void {
+    if (message.type === 'GAME_ACTION' && message.payload) {
+      const action = message.payload as TicTacToeAction;
+      
+      // Only process actions from other players
+      if (action.playerId !== this.playerId) {
+        this.game?.dispatchAction(action);
+      }
+    }
+  }
+
+  private generatePlayerId(): string {
+    return 'player_' + Math.random().toString(36).substr(2, 9);
+  }
+
+  private getPlayerName(): string {
+    const nameInput = document.getElementById('player-name') as HTMLInputElement;
+    return nameInput?.value || 'Player';
+  }
+
+  private updateRoomCode(code: string): void {
+    const roomCodeElement = document.getElementById('roomCode');
+    if (roomCodeElement) {
+      roomCodeElement.textContent = code;
+    }
+    
+    // Generate QR code
+    this.generateQRCode(code);
+  }
+
+  private generateQRCode(roomCode: string): void {
+    const qrContainer = document.getElementById('qrCodeContainer');
+    if (!qrContainer) return;
+
+    // Clear previous QR code
+    qrContainer.innerHTML = '';
+
+    // Generate QR code URL
+    const currentUrl = window.location.origin + window.location.pathname;
+    const qrUrl = `${currentUrl}?room=${roomCode}`;
+
+    // Create QR code
+    if (typeof (window as any).QRCode !== 'undefined') {
+      (window as any).QRCode.toCanvas(qrContainer, qrUrl, {
+        width: 200,
+        height: 200,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      }, (error) => {
+        if (error) {
+          console.error('QR code generation failed:', error);
+          qrContainer.innerHTML = '<p>QR code generation failed</p>';
+        } else {
+          qrContainer.innerHTML += `<p style="margin-top: 10px; font-size: 12px; color: #666;">Scan to join room: ${roomCode}</p>`;
+        }
+      });
+    } else {
+      qrContainer.innerHTML = '<p>QR code library not loaded</p>';
+    }
+  }
+
+  private updatePlayerStatus(role: 'host' | 'guest', status: string): void {
+    const player1Status = document.getElementById('player1Status');
+    if (player1Status) {
+      player1Status.textContent = status;
+    }
+  }
+
+  private updateConnectionStatus(status: string, connected: boolean): void {
+    const statusElement = document.getElementById('connectionStatus');
+    const indicatorElement = document.getElementById('connectionIndicator');
+    
+    if (statusElement) {
+      statusElement.textContent = status;
+    }
+    
+    if (indicatorElement) {
+      indicatorElement.className = `connection-indicator ${connected ? 'connected' : ''}`;
+    }
+  }
+
+  private logMessage(message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info'): void {
+    const logElement = document.getElementById('gameLog');
+    if (logElement) {
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      logElement.appendChild(entry);
+      logElement.scrollTop = logElement.scrollHeight;
+    }
+  }
+}
+
+// Initialize multiplayer game
+export function startTicTacToeGame(): void {
+  const gameManager = new MultiplayerTicTacToeManager();
+  
+  // Initialize when DOM is ready
+  document.addEventListener('DOMContentLoaded', () => {
+    gameManager.initialize();
   });
 }
