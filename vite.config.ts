@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         input: {
           index: 'examples/index.html',
-          'tic-tac-toe': 'examples/tic-tac-toe/index.html'
+          'tic-tac-toe': 'examples/tic-tac-toe/tic-tac-toe.html'
         },
         output: {
           // Keep modules separate for better caching
