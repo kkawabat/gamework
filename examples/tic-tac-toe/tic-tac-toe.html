@@ -344,8 +344,14 @@
         </div>
     </div>
 
-    <script type="module">
-        import './src/main.ts';
-    </script>
+     <script type="module">
+         // Import the TicTacToe game
+         import { startTicTacToeGame } from './TicTacToeGame.ts';
+         
+         // Start the game when the page loads
+         document.addEventListener('DOMContentLoaded', () => {
+             startTicTacToeGame();
+         });
+     </script>
 </body>
 </html>
