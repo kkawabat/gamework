@@ -230,7 +230,9 @@ export class GameWork<TState extends BaseGameState, TAction extends GameAction> 
       // Route message based on type
       switch (message.type) {
         case 'GAME_ACTION':
-          this.dispatchAction(message.payload);
+          // Applying remote actions is owned by the app layer's own onMessage
+          // handler, which knows the game's echo/self-broadcast semantics.
+          // Dispatching here too would apply every remote action twice.
           break;
         case 'STATE_UPDATE':
           // Handle state update from network
