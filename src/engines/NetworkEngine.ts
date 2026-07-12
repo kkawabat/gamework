@@ -22,6 +22,7 @@ export interface NetworkEngine {
 export abstract class BaseNetworkEngine implements NetworkEngine {
   protected connections: Map<string, PeerConnection> = new Map();
   protected messageHandlers: Set<(peerId: string, message: NetworkMessage) => void> = new Set();
+  protected peerConnectedHandlers: Set<(peerId: string) => void> = new Set();
   protected config: NetworkConfig;
   protected dataChannelConfig: DataChannelConfig;
   protected isInitialized: boolean = false;
@@ -39,6 +40,11 @@ export abstract class BaseNetworkEngine implements NetworkEngine {
   onMessage(callback: (peerId: string, message: NetworkMessage) => void): () => void {
     this.messageHandlers.add(callback);
     return () => this.messageHandlers.delete(callback);
+  }
+
+  onPeerConnected(callback: (peerId: string) => void): () => void {
+    this.peerConnectedHandlers.add(callback);
+    return () => this.peerConnectedHandlers.delete(callback);
   }
 
   getConnectionState(peerId: string): ConnectionState {
@@ -93,6 +99,8 @@ export abstract class BaseNetworkEngine implements NetworkEngine {
   protected setupDataChannelHandlers(peerConnection: PeerConnection, dataChannel: RTCDataChannel): void {
     dataChannel.onopen = () => {
       peerConnection.dataChannelState = DataChannelState.OPEN;
+      peerConnection.state = ConnectionState.CONNECTED;
+      this.peerConnectedHandlers.forEach(handler => handler(peerConnection.id));
     };
     dataChannel.onclose = () => {
       peerConnection.dataChannelState = DataChannelState.CLOSED;

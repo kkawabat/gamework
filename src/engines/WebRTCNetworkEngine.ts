@@ -28,13 +28,15 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
   }
 
   createRoom(): Promise<string> {
-    this.sendToServer({ type: 'CREATE_ROOM', playerId: this.playerId });
-    return this.awaitRoom();
+    const room = this.awaitRoom();
+    this.sendRoomRequest({ type: 'CREATE_ROOM', playerId: this.playerId });
+    return room;
   }
 
   async joinRoom(roomCode: string): Promise<boolean> {
-    this.sendToServer({ type: 'JOIN_ROOM', playerId: this.playerId, roomCode });
-    await this.awaitRoom();
+    const room = this.awaitRoom();
+    this.sendRoomRequest({ type: 'JOIN_ROOM', playerId: this.playerId, roomCode });
+    await room;
     return true;
   }
 
@@ -79,6 +81,7 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
       const socket = new WebSocket(this.networkConfig.signalingServerUrl);
       socket.onopen = () => resolve(socket);
       socket.onerror = () => reject(new Error(`Could not connect to signaling server at ${this.networkConfig.signalingServerUrl}`));
+      socket.onclose = () => this.rejectRoom(new Error('Signaling connection closed'));
       socket.onmessage = (event) => {
         this.messageQueue = this.messageQueue.then(() => this.handleServerMessage(JSON.parse(event.data)));
       };
@@ -93,10 +96,16 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
         break;
       case 'ROOM_JOINED':
         this.roomCode = message.roomCode;
-        for (const peerId of message.peers) {
-          await this.connect(peerId);
-        }
+        // Resolve before dialing peers: a peer-connection failure must not leave the
+        // room request pending forever (it blocks every later create/join).
         this.resolveRoom(message.roomCode);
+        for (const peerId of message.peers) {
+          try {
+            await this.connect(peerId);
+          } catch (error) {
+            console.error(`Failed to start connection to peer ${peerId}:`, error);
+          }
+        }
         break;
       case 'SIGNAL':
         await this.handleSignal(message.from, message.data);
@@ -107,8 +116,7 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
       case 'ERROR': {
         const error = new Error(message.message);
         if (!this.pendingRoom) throw error;
-        this.pendingRoom.reject(error);
-        this.pendingRoom = null;
+        this.rejectRoom(error);
         break;
       }
     }
@@ -150,16 +158,36 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
     return peer;
   }
 
-  private awaitRoom(): Promise<string> {
+  private awaitRoom(timeoutMs: number = 10000): Promise<string> {
     if (this.pendingRoom) throw new Error('Room request already in progress');
     return new Promise((resolve, reject) => {
-      this.pendingRoom = { resolve, reject };
+      const timer = setTimeout(() => {
+        this.pendingRoom = null;
+        reject(new Error('Room request timed out'));
+      }, timeoutMs);
+      this.pendingRoom = {
+        resolve: (code: string) => { clearTimeout(timer); resolve(code); },
+        reject: (error: Error) => { clearTimeout(timer); reject(error); }
+      };
     });
   }
 
   private resolveRoom(roomCode: string): void {
     this.pendingRoom?.resolve(roomCode);
     this.pendingRoom = null;
+  }
+
+  private rejectRoom(error: Error): void {
+    this.pendingRoom?.reject(error);
+    this.pendingRoom = null;
+  }
+
+  private sendRoomRequest(message: ClientToServer): void {
+    try {
+      this.sendToServer(message);
+    } catch (error) {
+      this.rejectRoom(error as Error);
+    }
   }
 
   private sendToServer(message: ClientToServer): void {
