@@ -211,10 +211,14 @@ input::placeholder {
 .status.disconnected { border-color: #ff6b6b; color: #ff6b6b; }
 
 .game-board {
+    /* Fluid: fill the available space (esp. on phones), capped to a sane
+       max and kept on-screen for short/landscape viewports. Cells carry
+       aspect-ratio: 1, so the 3x3 grid stays square. */
+    --board: min(90vw, 78vh, 28rem);
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 0.5em;
-    max-width: 18em;
+    width: var(--board);
     margin: 1.5em auto;
 }
 
@@ -226,7 +230,7 @@ input::placeholder {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 2.5em;
+    font-size: calc(var(--board) / 3 * 0.55);
     font-weight: 700;
     cursor: pointer;
     transition: border-color 0.15s, transform 0.15s;
@@ -354,8 +358,12 @@ input::placeholder {
 /* --- connect four --- */
 
 .c4-board {
+    /* Fluid: the 7-wide x 6-tall grid is wider than tall, so size each round
+       cell against BOTH axes (7 across must fit the width, 6 down the height)
+       and let the board wrap them. */
+    --cell: min(12vw, 12vh, 3.5rem);
     display: grid;
-    grid-template-columns: repeat(7, 3em);
+    grid-template-columns: repeat(7, var(--cell));
     gap: 0.3em;
     justify-content: center;
     margin: 1em auto;
@@ -366,8 +374,8 @@ input::placeholder {
 }
 
 .c4-cell {
-    width: 3em;
-    height: 3em;
+    width: var(--cell);
+    height: var(--cell);
     border-radius: 50%;
     background: #222;
     cursor: pointer;
@@ -434,11 +442,6 @@ input::placeholder {
 
 .chess-square.last-move {
     background-color: rgba(255, 165, 0, 0.25);
-}
-
-@media (max-width: 600px) {
-    .c4-board { grid-template-columns: repeat(7, 2.2em); }
-    .c4-cell { width: 2.2em; height: 2.2em; }
 }
 
 @media (max-width: 600px) {
