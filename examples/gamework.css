@@ -393,15 +393,17 @@ input::placeholder {
 .chess-board {
     display: grid;
     grid-template-columns: repeat(8, 3em);
+    grid-auto-rows: 3em;
     justify-content: center;
     margin: 1em auto;
     width: fit-content;
     border: 2px solid #555;
 }
 
+/* Square size comes from the grid tracks (squares stretch to fill their
+   cell), so font-size only scales the piece glyph — using width/height in
+   em here would compound with font-size and overflow the tracks. */
 .chess-square {
-    width: 3em;
-    height: 3em;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -434,8 +436,8 @@ input::placeholder {
 @media (max-width: 600px) {
     .c4-board { grid-template-columns: repeat(7, 2.2em); }
     .c4-cell { width: 2.2em; height: 2.2em; }
-    .chess-board { grid-template-columns: repeat(8, 2.4em); }
-    .chess-square { width: 2.4em; height: 2.4em; font-size: 1.5em; }
+    .chess-board { grid-template-columns: repeat(8, 2.4em); grid-auto-rows: 2.4em; }
+    .chess-square { font-size: 1.5em; }
 }
 
 @media (max-width: 600px) {
