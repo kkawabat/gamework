@@ -51,8 +51,9 @@ export default defineConfig(({ mode }) => {
     define: {
       // Ensure proper global access
       global: 'globalThis',
-      // Inject signaling server URL at build time
-      __SIGNALING_SERVER_URL__: JSON.stringify(signalingServerUrl)
+      // Inject signaling server URL at build time; empty string when unset so
+      // the client falls back to ws://localhost:8080 for local dev
+      __SIGNALING_SERVER_URL__: JSON.stringify(signalingServerUrl ?? '')
     }
   };
 });

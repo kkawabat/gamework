@@ -1,49 +1,52 @@
-name: Deploy Signaling Server to Droplet
+name: Deploy Signaling Server to Cloud Run
 
 on:
   push:
+    branches: [main]
     paths:
       - 'server/**'
       - 'shared/**'
       - '.github/workflows/deploy-signaling-server.yml'
   workflow_dispatch:
 
+env:
+  PROJECT_ID: kan-kawabata-2026
+  REGION: us-west1
+  SERVICE: gamework-signaling
+  REPOSITORY: gamework
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: read
+      id-token: write
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      
-    - name: Deploy to Droplet
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.DROPLET_HOST }}
-        username: ${{ secrets.DROPLET_USER }}
-        key: ${{ secrets.DROPLET_SSH_KEY }}
-        port: ${{ secrets.DROPLET_PORT || 22 }}
-        script: |
-          set -e
-          
-          echo "🚀 Starting GameWork Signaling Server Deployment via GitHub Actions"
-          echo "=================================================================="
-          
-          # Download and run the deployment script
-          print_status() {
-              echo -e "\033[0;32m[INFO]\033[0m $1"
-          }
-          
-          print_status "Ensuring we have the latest code (handles force pushes)..."
-          cd /opt/gamework
-          git fetch --all
-          git reset --hard origin/main
-          
-          print_status "Running deployment script..."
-          chmod +x server/deploy.sh
-          ./server/deploy.sh
-          
-          print_status "✅ GitHub Actions deployment completed!"
-          print_status "Container name: gamework-signalling-server"
-          print_status "Network: app_network"
-          print_status "Ready for Caddy reverse proxy configuration!"
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push signaling server image
+        run: |
+          IMAGE=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE }}
+          docker build -f server/Dockerfile -t ${IMAGE}:${{ github.sha }} -t ${IMAGE}:latest .
+          docker push ${IMAGE}:${{ github.sha }}
+          docker push ${IMAGE}:latest
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE }}:${{ github.sha }}

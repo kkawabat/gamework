@@ -5,292 +5,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GameWork Tic-Tac-Toe - Multiplayer</title>
     <link rel="icon" type="image/x-icon" href="../../favicon.ico">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-
-        .game-container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            padding: 40px;
-            max-width: 500px;
-            width: 100%;
-            text-align: center;
-        }
-
-        h1 {
-            color: #333;
-            margin-bottom: 30px;
-            font-size: 2.5em;
-            font-weight: 300;
-        }
-
-        .game-info {
-            margin-bottom: 30px;
-        }
-
-        .room-info {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }
-
-        .room-code {
-            font-size: 2em;
-            font-weight: bold;
-            color: #667eea;
-            font-family: monospace;
-            letter-spacing: 3px;
-            margin: 10px 0;
-        }
-
-        .status {
-            font-size: 1.2em;
-            margin: 20px 0;
-            padding: 15px;
-            border-radius: 10px;
-            background: #e3f2fd;
-            color: #1976d2;
-        }
-
-        .status.connected { background: #e8f5e8; color: #2e7d32; }
-        .status.disconnected { background: #ffebee; color: #c62828; }
-        .status.waiting { background: #fff3e0; color: #ef6c00; }
-
-        .game-board {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            max-width: 300px;
-            margin: 30px auto;
-        }
-
-        .cell {
-            width: 80px;
-            height: 80px;
-            border: 3px solid #ddd;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2.5em;
-            font-weight: bold;
-            cursor: pointer;
-            background: white;
-            transition: all 0.3s ease;
-            position: relative;
-        }
-
-        .cell:hover {
-            background: #f0f0f0;
-            transform: scale(1.05);
-        }
-
-        .cell.x {
-            color: #e74c3c;
-            background: #ffeaea;
-        }
-
-        .cell.o {
-            color: #3498db;
-            background: #eaf4ff;
-        }
-
-        .cell.winning {
-            background: #d4edda;
-            border-color: #28a745;
-            animation: pulse 0.5s ease-in-out;
-        }
-
-        .cell.disabled {
-            cursor: not-allowed;
-            opacity: 0.6;
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-            100% { transform: scale(1); }
-        }
-
-        .controls {
-            margin: 30px 0;
-        }
-
-        button {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 25px;
-            cursor: pointer;
-            margin: 10px;
-            font-size: 16px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-        }
-
-        button:hover {
-            background: #5a6fd8;
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-        }
-
-        button:disabled {
-            background: #bdc3c7;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-
-        .players {
-            display: flex;
-            justify-content: space-around;
-            margin: 20px 0;
-        }
-
-        .player {
-            padding: 15px;
-            border-radius: 10px;
-            background: #f8f9fa;
-            min-width: 120px;
-        }
-
-        .player.host {
-            background: #e8f5e8;
-            border: 2px solid #28a745;
-        }
-
-        .player.current {
-            background: #fff3cd;
-            border: 2px solid #ffc107;
-        }
-
-        .player.connected {
-            background: #d4edda;
-            border: 2px solid #28a745;
-        }
-
-        .game-log {
-            max-height: 200px;
-            overflow-y: auto;
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 10px;
-            margin-top: 20px;
-            text-align: left;
-            font-family: monospace;
-            font-size: 14px;
-        }
-
-        .log-entry {
-            margin: 5px 0;
-            padding: 5px;
-            border-radius: 5px;
-        }
-
-        .log-entry.info { background: #d1ecf1; }
-        .log-entry.success { background: #d4edda; }
-        .log-entry.warning { background: #fff3cd; }
-        .log-entry.error { background: #f8d7da; }
-
-        .qr-section {
-            margin: 20px 0;
-        }
-
-        .qr-code {
-            margin: 15px 0;
-        }
-
-        .qr-code img {
-            border: 1px solid #ddd;
-            border-radius: 10px;
-        }
-
-        .connection-status {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin: 20px 0;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 10px;
-        }
-
-        .connection-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #dc3545;
-            margin-right: 10px;
-        }
-
-        .connection-indicator.connected {
-            background: #28a745;
-        }
-
-        @media (max-width: 600px) {
-            .game-container {
-                padding: 20px;
-                margin: 10px;
-            }
-            
-            h1 {
-                font-size: 2em;
-            }
-            
-            .cell {
-                width: 60px;
-                height: 60px;
-                font-size: 2em;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="../gamework.css">
 </head>
 <body>
-    <div class="game-container">
-        <h1>🎮 GameWork Tic-Tac-Toe</h1>
-        
+    <div class="container">
+        <h1>⭕ Tic-Tac-Toe</h1>
+
         <div class="game-info">
-            <div class="player-setup">
+            <div class="panel player-setup">
                 <h3>Player Setup</h3>
-                <input type="text" id="player-name" placeholder="Enter your name" style="padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; width: 200px; margin-bottom: 10px;">
+                <input type="text" id="player-name" placeholder="Enter your name">
             </div>
-            
-            <div class="room-info">
+
+            <div class="panel room-info">
                 <h3>Room Information</h3>
                 <div class="room-code" id="roomCode">Loading...</div>
-                <p>Share this code with players to join!</p>
+                <p class="muted">Share this code with players to join!</p>
             </div>
-            
-            <div class="room-controls">
+
+            <div class="panel room-controls">
                 <h3>Room Controls</h3>
                 <div class="room-buttons">
-                    <button id="createRoomBtn" style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; margin-right: 10px;">Create Room</button>
-                    <button id="joinRoomBtn" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;">Join Room</button>
+                    <button id="createRoomBtn">Create Room</button>
+                    <button id="joinRoomBtn">Join Room</button>
                 </div>
-                <div class="join-controls" style="margin-top: 15px;">
-                    <input type="text" id="roomCodeInput" placeholder="Enter room code" maxlength="6" style="padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; text-align: center; letter-spacing: 2px; font-family: monospace; width: 200px; margin-right: 10px;">
+                <div class="join-controls" style="margin-top: 0.75em;">
+                    <input type="text" id="roomCodeInput" placeholder="Enter room code" maxlength="6" style="text-align: center; letter-spacing: 0.2em;">
                 </div>
-                <p style="font-size: 14px; color: #666; margin-top: 10px;">Create a new room or join an existing one with a 6-character code</p>
+                <p class="muted" style="margin-top: 0.75em;">Create a new room or join an existing one with a 6-character code</p>
             </div>
-            
+
             <div class="connection-status">
                 <div>
                     <span class="connection-indicator" id="connectionIndicator"></span>
@@ -298,11 +42,11 @@
                 </div>
                 <div id="playerCount">Players: 0</div>
             </div>
-            
+
             <div class="qr-section">
                 <h3>QR Code for Easy Joining</h3>
                 <div class="qr-code" id="qrCodeContainer">
-                    <p>Generating QR code...</p>
+                    <p class="muted">Generating QR code...</p>
                 </div>
             </div>
         </div>
@@ -310,7 +54,7 @@
         <div class="status waiting" id="status">
             Connecting to GameWork framework...
         </div>
-        
+
         <div class="current-player" id="current-player">
             Current Player: X
         </div>
@@ -345,15 +89,17 @@
         <div class="game-log" id="gameLog">
             <div class="log-entry info">Initializing GameWork framework...</div>
         </div>
+
+        <p class="muted" style="margin-top: 1em;"><a href="./index.html">← all demos</a></p>
     </div>
 
      <!-- QR Code Library -->
      <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
-     
+
      <script type="module">
          // Import the TicTacToe game
          import { startTicTacToeGame } from './TicTacToeGame.ts';
-         
+
          // Start the game when the page loads
          document.addEventListener('DOMContentLoaded', () => {
              startTicTacToeGame();

@@ -38,10 +38,11 @@ mv "$PROJECT_ROOT/demo-build/examples/tic-tac-toe/tic-tac-toe.html" "$PROJECT_RO
 # Remove the empty examples directory structure
 rm -rf "$PROJECT_ROOT/demo-build/examples"
 
-# Fix asset paths in the HTML files (change ../../assets/ to ./assets/)
+# Fix asset paths in the HTML files (../../assets/ and ../assets/ both become ./assets/
+# since the pages were moved to the build root; the ../../ substitution must run first)
 echo "📝 Fixing asset paths in HTML files..."
-sed -i 's|../../assets/|./assets/|g' "$PROJECT_ROOT/demo-build/index.html"
-sed -i 's|../../assets/|./assets/|g' "$PROJECT_ROOT/demo-build/tic-tac-toe.html"
+sed -i -e 's|"\.\./\.\./assets/|"./assets/|g' -e 's|"\.\./assets/|"./assets/|g' "$PROJECT_ROOT/demo-build/index.html"
+sed -i -e 's|"\.\./\.\./assets/|"./assets/|g' -e 's|"\.\./assets/|"./assets/|g' "$PROJECT_ROOT/demo-build/tic-tac-toe.html"
 
 # Environment variables are handled by Vite's loadEnv and define config
 echo "📝 Using Vite environment variable injection..."

@@ -309,19 +309,23 @@ npm run dev:server
 
 ### Production
 
-```bash
-# Build everything
-npm run build
-npm run build:server
-npm run build:game
+Both halves deploy automatically from GitHub Actions on push to `main`:
 
-# Deploy server
-cd server
-docker-compose up -d
+- **Frontend (demos)** — `.github/workflows/deploy-demo.yml` builds `demo-build/`
+  and publishes it to GitHub Pages (games.kankawabata.com/gamework/). The
+  signaling server URL is injected at build time from the `SIGNALING_SERVER_URL`
+  repo secret (a `wss://...run.app` URL).
+- **Signaling server** — `.github/workflows/deploy-signaling-server.yml` builds
+  `server/Dockerfile` and deploys it to Google Cloud Run (service
+  `gamework-signaling`, project `kan-kawabata-2026`, region `us-west1`),
+  authenticating via Workload Identity Federation (`WIF_PROVIDER` /
+  `WIF_SERVICE_ACCOUNT` repo secrets).
 
-# Deploy frontend (static files)
-# Upload demo-build/ contents to CDN/static host
-```
+The Cloud Run service, Artifact Registry repo, and deploy identity are managed
+by Terraform in `infra/` (its own root module and state; the shared WIF pool
+lives in the portfolio repo's Terraform). The service runs with
+`min_instances=0` / `max_instances=1` — room state is in-memory, so a single
+instance keeps signaling consistent while idling at zero cost.
 
 ## 📊 **Performance**
 

@@ -15,6 +15,9 @@ import { GameWork, BaseGameState, GameAction, GameConfig } from '../../src';
 import { WebRTCNetworkEngine, WebRTCNetworkEngineConfig } from '../../src/engines/WebRTCNetworkEngine';
 import { NetworkMessage } from '../../src/types/GameTypes';
 
+// Replaced at build time by Vite's `define` (vite.config.ts); undefined in dev
+declare const __SIGNALING_SERVER_URL__: string | undefined;
+
 // TicTacToe specific types
 export interface TicTacToeState extends BaseGameState {
   board: ('X' | 'O' | null)[];
@@ -239,7 +242,9 @@ export function createTicTacToeGame(playerId: string, playerName: string): GameW
     bundlePolicy: 'balanced',
     rtcpMuxPolicy: 'require',
     iceCandidatePoolSize: 10,
-    signalingServerUrl: process.env.SIGNALING_SERVER_URL || 'ws://localhost:8080',
+    signalingServerUrl:
+      (typeof __SIGNALING_SERVER_URL__ !== 'undefined' && __SIGNALING_SERVER_URL__) ||
+      'ws://localhost:8080',
     roomCodeLength: 6,
     maxRetries: 5,
     retryDelay: 2000

@@ -158,3 +158,9 @@ config.local.json
 demo-build/
 
 .env
+# Terraform
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.backup
+infra/.terraform.lock.hcl
+infra/tfplan
