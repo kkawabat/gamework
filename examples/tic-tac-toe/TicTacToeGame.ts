@@ -232,22 +232,14 @@ export function createTicTacToeGame(playerId: string, playerName: string): GameW
   const engine = new TicTacToeEngine();
   const ui = new TicTacToeUI();
   
-  // Configure WebRTC network engine
   const networkConfig: WebRTCNetworkEngineConfig = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' }
     ],
-    iceTransportPolicy: 'all',
-    bundlePolicy: 'balanced',
-    rtcpMuxPolicy: 'require',
-    iceCandidatePoolSize: 10,
     signalingServerUrl:
       (typeof __SIGNALING_SERVER_URL__ !== 'undefined' && __SIGNALING_SERVER_URL__) ||
-      'ws://localhost:8080',
-    roomCodeLength: 6,
-    maxRetries: 5,
-    retryDelay: 2000
+      'ws://localhost:8080'
   };
 
   const dataChannelConfig = {
@@ -310,6 +302,17 @@ class MultiplayerTicTacToeManager {
       // Update UI
       this.updateConnectionStatus('Connected', true);
       this.logMessage('GameWork framework initialized', 'success');
+
+      if (!this.currentRoom) {
+        const roomCodeElement = document.getElementById('roomCode');
+        if (roomCodeElement) {
+          roomCodeElement.textContent = 'No room yet';
+        }
+        const qrContainer = document.getElementById('qrCodeContainer');
+        if (qrContainer) {
+          qrContainer.innerHTML = '<p class="muted">Create or join a room to get a QR code</p>';
+        }
+      }
       
     } catch (error) {
       console.error('Failed to initialize game:', error);
@@ -583,9 +586,10 @@ class MultiplayerTicTacToeManager {
 // Initialize multiplayer game
 export function startTicTacToeGame(): void {
   const gameManager = new MultiplayerTicTacToeManager();
-  
-  // Initialize when DOM is ready
-  document.addEventListener('DOMContentLoaded', () => {
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => gameManager.initialize());
+  } else {
     gameManager.initialize();
-  });
+  }
 }

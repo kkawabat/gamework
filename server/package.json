@@ -18,14 +18,10 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "ws": "^8.14.2",
-    "uuid": "^9.0.0",
-    "cors": "^2.8.5"
+    "ws": "^8.14.2"
   },
   "devDependencies": {
     "@types/ws": "^8.5.5",
-    "@types/uuid": "^10.0.0",
-    "@types/cors": "^2.8.13",
     "@types/node": "^20.0.0",
     "typescript": "^5.0.0",
     "ts-node": "^10.9.0"
