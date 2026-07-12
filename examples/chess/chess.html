@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GameWork Tic-Tac-Toe - Multiplayer</title>
+    <title>GameWork Chess - Multiplayer</title>
     <link rel="icon" type="image/x-icon" href="../../favicon.ico">
     <link rel="stylesheet" href="../gamework.css">
 </head>
@@ -11,7 +11,7 @@
     <a class="back-link" href="../index.html" title="Back to GameWork demos">←</a>
 
     <div class="container">
-        <h1>⭕ Tic-Tac-Toe</h1>
+        <h1>♔ Chess</h1>
 
         <div id="homeView">
             <div class="room-buttons">
@@ -33,17 +33,7 @@
 
         <div id="gameView" hidden>
             <div class="status" id="status"></div>
-            <div class="game-board" id="gameBoard">
-                <div class="cell" data-index="0"></div>
-                <div class="cell" data-index="1"></div>
-                <div class="cell" data-index="2"></div>
-                <div class="cell" data-index="3"></div>
-                <div class="cell" data-index="4"></div>
-                <div class="cell" data-index="5"></div>
-                <div class="cell" data-index="6"></div>
-                <div class="cell" data-index="7"></div>
-                <div class="cell" data-index="8"></div>
-            </div>
+            <div class="chess-board" id="gameBoard"></div>
             <button id="playAgainBtn" hidden>Play Again</button>
         </div>
 
@@ -51,10 +41,10 @@
     </div>
 
      <script type="module">
-         import { startTicTacToeGame } from './TicTacToeGame.ts';
+         import { startChessGame } from './ChessGame.ts';
 
          document.addEventListener('DOMContentLoaded', () => {
-             startTicTacToeGame();
+             startChessGame();
          });
      </script>
 </body>

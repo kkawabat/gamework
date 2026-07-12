@@ -33,16 +33,22 @@ fi
 # Move the built HTML files to the correct locations
 echo "📝 Moving HTML files to correct locations..."
 mv "$PROJECT_ROOT/demo-build/examples/index.html" "$PROJECT_ROOT/demo-build/index.html"
-mv "$PROJECT_ROOT/demo-build/examples/tic-tac-toe/tic-tac-toe.html" "$PROJECT_ROOT/demo-build/tic-tac-toe.html"
+GAME_PAGES="tic-tac-toe connect-four chess"
+for page in $GAME_PAGES; do
+    mv "$PROJECT_ROOT/demo-build/examples/$page/$page.html" "$PROJECT_ROOT/demo-build/$page.html"
+done
 
 # Remove the empty examples directory structure
 rm -rf "$PROJECT_ROOT/demo-build/examples"
 
-# Fix asset paths in the HTML files (../../assets/ and ../assets/ both become ./assets/
-# since the pages were moved to the build root; the ../../ substitution must run first)
+# Fix relative paths in the HTML files: assets (../../assets/ and ../assets/ both
+# become ./assets/; the ../../ substitution must run first) and the corner
+# back-link (../index.html works in the source tree, ./index.html at build root)
 echo "📝 Fixing asset paths in HTML files..."
 sed -i -e 's|"\.\./\.\./assets/|"./assets/|g' -e 's|"\.\./assets/|"./assets/|g' "$PROJECT_ROOT/demo-build/index.html"
-sed -i -e 's|"\.\./\.\./assets/|"./assets/|g' -e 's|"\.\./assets/|"./assets/|g' "$PROJECT_ROOT/demo-build/tic-tac-toe.html"
+for page in $GAME_PAGES; do
+    sed -i -e 's|"\.\./\.\./assets/|"./assets/|g' -e 's|"\.\./assets/|"./assets/|g' -e 's|"\.\./index\.html"|"./index.html"|g' "$PROJECT_ROOT/demo-build/$page.html"
+done
 
 # Environment variables are handled by Vite's loadEnv and define config
 echo "📝 Using Vite environment variable injection..."

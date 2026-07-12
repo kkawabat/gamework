@@ -1,14 +1,9 @@
 /**
- * TicTacToeGame - Full multiplayer implementation using GameWork v2
+ * ConnectFourGame - Multiplayer Connect Four using GameWork v2
  *
- * Demonstrates clean architecture with:
- * - Type-safe game state
- * - Pure game logic
- * - Clean UI rendering
- * - Event-driven communication
- * - WebRTC multiplayer networking
- * - Room management
- * - Real-time synchronization
+ * Same architecture as the tic-tac-toe example: pure game engine,
+ * DOM-bound UI engine, and a manager driving the invite/join lobby flow
+ * over the WebRTC network engine. Host plays red (R), joiner yellow (Y).
  */
 
 import QRCode from 'qrcode';
@@ -19,25 +14,30 @@ import { NetworkMessage } from '../../src/types/GameTypes';
 // Replaced at build time by Vite's `define` (vite.config.ts); undefined in dev
 declare const __SIGNALING_SERVER_URL__: string | undefined;
 
-// TicTacToe specific types
-export interface TicTacToeState extends BaseGameState {
-  board: ('X' | 'O' | null)[];
-  currentPlayer: 'X' | 'O';
-  winner: 'X' | 'O' | null;
+export const COLS = 7;
+export const ROWS = 6;
+
+export type C4Mark = 'R' | 'Y';
+
+export interface ConnectFourState extends BaseGameState {
+  board: (C4Mark | null)[]; // row-major, row 0 = top
+  currentPlayer: C4Mark;
+  winner: C4Mark | null;
+  winningCells: number[];
   gameOver: boolean;
   moveCount: number;
 }
 
-export interface TicTacToeAction extends GameAction {
+export interface ConnectFourAction extends GameAction {
   type: 'MOVE' | 'RESTART';
   payload: {
-    position?: number;
+    column?: number;
   };
 }
 
-// TicTacToe Game Engine
-export class TicTacToeEngine {
-  processAction(state: TicTacToeState, action: TicTacToeAction): TicTacToeState {
+// Connect Four Game Engine
+export class ConnectFourEngine {
+  processAction(state: ConnectFourState, action: ConnectFourAction): ConnectFourState {
     switch (action.type) {
       case 'MOVE':
         return this.processMove(state, action);
@@ -48,100 +48,122 @@ export class TicTacToeEngine {
     }
   }
 
-  update(state: TicTacToeState, deltaTime: number): TicTacToeState {
-    // TicTacToe doesn't need continuous updates
+  update(state: ConnectFourState, deltaTime: number): ConnectFourState {
     return state;
   }
 
-  validateAction(action: TicTacToeAction): boolean {
+  validateAction(action: ConnectFourAction): boolean {
     if (action.type === 'MOVE') {
-      return action.payload.position !== undefined &&
-             action.payload.position >= 0 &&
-             action.payload.position < 9;
+      return action.payload.column !== undefined &&
+             action.payload.column >= 0 &&
+             action.payload.column < COLS;
     }
     return action.type === 'RESTART';
   }
 
-  getInitialState(): TicTacToeState {
+  getInitialState(): ConnectFourState {
     return {
-      id: 'tic-tac-toe',
+      id: 'connect-four',
       timestamp: Date.now(),
       version: 1,
-      board: Array(9).fill(null),
-      currentPlayer: 'X',
+      board: Array(COLS * ROWS).fill(null),
+      currentPlayer: 'R',
       winner: null,
+      winningCells: [],
       gameOver: false,
       moveCount: 0
     };
   }
 
-  private processMove(state: TicTacToeState, action: TicTacToeAction): TicTacToeState {
-    const { position } = action.payload;
+  private processMove(state: ConnectFourState, action: ConnectFourAction): ConnectFourState {
+    const column = action.payload.column!;
 
-    if (state.gameOver || state.board[position!] !== null) {
-      return state; // Invalid move
+    if (state.gameOver) return state;
+
+    // Drop to the lowest empty row in the column
+    let landed = -1;
+    for (let row = ROWS - 1; row >= 0; row--) {
+      if (state.board[row * COLS + column] === null) {
+        landed = row * COLS + column;
+        break;
+      }
     }
+    if (landed === -1) return state; // Column full
 
     const newBoard = [...state.board];
-    newBoard[position!] = state.currentPlayer;
+    newBoard[landed] = state.currentPlayer;
 
-    const newState: TicTacToeState = {
+    const newState: ConnectFourState = {
       ...state,
       board: newBoard,
-      currentPlayer: state.currentPlayer === 'X' ? 'O' : 'X',
+      currentPlayer: state.currentPlayer === 'R' ? 'Y' : 'R',
       moveCount: state.moveCount + 1,
       timestamp: Date.now(),
       version: state.version + 1
     };
 
-    // Check for winner
-    const winner = this.checkWinner(newBoard);
-    if (winner) {
-      newState.winner = winner;
+    const winningCells = this.findWinningCells(newBoard, landed);
+    if (winningCells.length) {
+      newState.winner = state.currentPlayer;
+      newState.winningCells = winningCells;
       newState.gameOver = true;
-    } else if (newState.moveCount === 9) {
+    } else if (newState.moveCount === COLS * ROWS) {
       newState.gameOver = true;
     }
 
     return newState;
   }
 
-  private checkWinner(board: ('X' | 'O' | null)[]): 'X' | 'O' | null {
-    const winningLines = [
-      [0, 1, 2], [3, 4, 5], [6, 7, 8], // rows
-      [0, 3, 6], [1, 4, 7], [2, 5, 8], // columns
-      [0, 4, 8], [2, 4, 6] // diagonals
+  private findWinningCells(board: (C4Mark | null)[], lastIndex: number): number[] {
+    const mark = board[lastIndex];
+    if (!mark) return [];
+
+    const row = Math.floor(lastIndex / COLS);
+    const col = lastIndex % COLS;
+    const directions: [number, number][] = [
+      [0, 1],  // horizontal
+      [1, 0],  // vertical
+      [1, 1],  // diagonal down-right
+      [1, -1]  // diagonal down-left
     ];
 
-    for (const line of winningLines) {
-      const [a, b, c] = line;
-      if (board[a] && board[a] === board[b] && board[b] === board[c]) {
-        return board[a];
+    for (const [dr, dc] of directions) {
+      const line = [lastIndex];
+      for (const sign of [1, -1]) {
+        let r = row + dr * sign;
+        let c = col + dc * sign;
+        while (r >= 0 && r < ROWS && c >= 0 && c < COLS && board[r * COLS + c] === mark) {
+          line.push(r * COLS + c);
+          r += dr * sign;
+          c += dc * sign;
+        }
       }
+      if (line.length >= 4) return line;
     }
 
-    return null;
+    return [];
   }
 }
 
-// TicTacToe UI Engine — renders into the static #gameBoard / #status elements
-export class TicTacToeUI {
+// Connect Four UI Engine — renders into the static #gameBoard / #status elements
+export class ConnectFourUI {
   private boardElement: HTMLElement | null = null;
   private statusElement: HTMLElement | null = null;
   private playAgainButton: HTMLElement | null = null;
-  private localMark: 'X' | 'O' | null = null;
+  private localMark: C4Mark | null = null;
 
   initialize(): void {
     this.boardElement = document.getElementById('gameBoard');
     this.statusElement = document.getElementById('status');
     this.playAgainButton = document.getElementById('playAgainBtn');
+    this.createCells();
   }
 
-  setLocalMark(mark: 'X' | 'O'): void {
+  setLocalMark(mark: C4Mark): void {
     this.localMark = mark;
   }
 
-  render(state: TicTacToeState): void {
+  render(state: ConnectFourState): void {
     this.updateBoard(state);
     this.updateStatus(state);
     if (this.playAgainButton) {
@@ -156,24 +178,34 @@ export class TicTacToeUI {
   }
 
   updateRoom(room: any): void {
-    // Room updates not needed for TicTacToe
+    // Room updates not needed for Connect Four
   }
 
-  private updateBoard(state: TicTacToeState): void {
+  private createCells(): void {
+    if (!this.boardElement || this.boardElement.childElementCount) return;
+    for (let i = 0; i < COLS * ROWS; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'c4-cell';
+      cell.dataset.index = i.toString();
+      this.boardElement.appendChild(cell);
+    }
+  }
+
+  private updateBoard(state: ConnectFourState): void {
     if (!this.boardElement) return;
 
-    const cells = this.boardElement.querySelectorAll<HTMLElement>('.cell');
     const notMyTurn = this.localMark !== null && state.currentPlayer !== this.localMark;
+    const cells = this.boardElement.querySelectorAll<HTMLElement>('.c4-cell');
     cells.forEach((cell, index) => {
       const value = state.board[index];
-      cell.textContent = value || '';
-      cell.classList.toggle('x', value === 'X');
-      cell.classList.toggle('o', value === 'O');
-      cell.classList.toggle('disabled', value !== null || state.gameOver || notMyTurn);
+      cell.classList.toggle('r', value === 'R');
+      cell.classList.toggle('y', value === 'Y');
+      cell.classList.toggle('winning', state.winningCells.includes(index));
+      cell.classList.toggle('disabled', state.gameOver || notMyTurn);
     });
   }
 
-  private updateStatus(state: TicTacToeState): void {
+  private updateStatus(state: ConnectFourState): void {
     if (!this.statusElement) return;
 
     if (state.winner) {
@@ -183,15 +215,15 @@ export class TicTacToeUI {
     } else if (this.localMark) {
       this.statusElement.textContent = state.currentPlayer === this.localMark ? 'Your turn' : 'Their turn';
     } else {
-      this.statusElement.textContent = `Current Player: ${state.currentPlayer}`;
+      this.statusElement.textContent = `Current player: ${state.currentPlayer === 'R' ? 'Red' : 'Yellow'}`;
     }
   }
 }
 
-// Multiplayer TicTacToe Game Factory
-export function createTicTacToeGame(playerId: string): GameWork<TicTacToeState, TicTacToeAction> {
-  const engine = new TicTacToeEngine();
-  const ui = new TicTacToeUI();
+// Multiplayer Connect Four Game Factory
+export function createConnectFourGame(playerId: string): GameWork<ConnectFourState, ConnectFourAction> {
+  const engine = new ConnectFourEngine();
+  const ui = new ConnectFourUI();
 
   const networkConfig: WebRTCNetworkEngineConfig = {
     iceServers: [
@@ -210,17 +242,16 @@ export function createTicTacToeGame(playerId: string): GameWork<TicTacToeState, 
 
   const networkEngine = new WebRTCNetworkEngine(networkConfig, dataChannelConfig, playerId);
 
-  const config: GameConfig<TicTacToeState, TicTacToeAction> = {
+  const config: GameConfig<ConnectFourState, ConnectFourAction> = {
     initialState: engine.getInitialState(),
     maxPlayers: 2,
-    gameName: 'TicTacToe',
+    gameName: 'ConnectFour',
     version: '1.0.0',
     debugMode: true
   };
 
   const game = new GameWork(config);
 
-  // Register engines with DI container
   game['container'].register('GameEngine', () => engine);
   game['container'].register('UIEngine', () => ui);
   game['container'].register('NetworkEngine', () => networkEngine);
@@ -231,25 +262,25 @@ export function createTicTacToeGame(playerId: string): GameWork<TicTacToeState, 
 type ViewId = 'homeView' | 'inviteView' | 'joinView' | 'gameView';
 const ALL_VIEWS: ViewId[] = ['homeView', 'inviteView', 'joinView', 'gameView'];
 
-// Multiplayer TicTacToe Game Manager
-class MultiplayerTicTacToeManager {
-  private game: GameWork<TicTacToeState, TicTacToeAction> | null = null;
+// Multiplayer Connect Four Game Manager
+class MultiplayerConnectFourManager {
+  private game: GameWork<ConnectFourState, ConnectFourAction> | null = null;
   private networkEngine: WebRTCNetworkEngine | null = null;
-  private ui: TicTacToeUI | null = null;
+  private ui: ConnectFourUI | null = null;
   private playerId: string;
-  private lastState: TicTacToeState;
+  private lastState: ConnectFourState;
   private roomRequestInFlight: boolean = false;
 
   constructor() {
     this.playerId = this.generatePlayerId();
-    this.lastState = new TicTacToeEngine().getInitialState();
+    this.lastState = new ConnectFourEngine().getInitialState();
   }
 
   async initialize(): Promise<void> {
     try {
-      this.game = createTicTacToeGame(this.playerId);
+      this.game = createConnectFourGame(this.playerId);
       this.networkEngine = this.game['container'].resolve('NetworkEngine') as WebRTCNetworkEngine;
-      this.ui = this.game['container'].resolve('UIEngine') as TicTacToeUI;
+      this.ui = this.game['container'].resolve('UIEngine') as ConnectFourUI;
 
       await this.networkEngine.initialize();
       await this.game.initialize();
@@ -267,7 +298,6 @@ class MultiplayerTicTacToeManager {
     const roomCode = urlParams.get('room');
 
     if (roomCode && roomCode.length === 6) {
-      // Auto-join room from QR-code URL
       this.joinRoom(roomCode.toUpperCase());
     }
   }
@@ -278,7 +308,7 @@ class MultiplayerTicTacToeManager {
     this.roomRequestInFlight = true;
     try {
       const roomCode = await this.networkEngine.createRoom();
-      this.ui?.setLocalMark('X');
+      this.ui?.setLocalMark('R');
       this.showMessage(null);
       this.showRoomInvite(roomCode);
       await this.generateQRCode(roomCode);
@@ -297,7 +327,7 @@ class MultiplayerTicTacToeManager {
     this.roomRequestInFlight = true;
     try {
       await this.networkEngine.joinRoom(roomCode);
-      this.ui?.setLocalMark('O');
+      this.ui?.setLocalMark('Y');
       this.showMessage(null);
       this.startGame();
     } catch (error) {
@@ -326,8 +356,6 @@ class MultiplayerTicTacToeManager {
       this.handleNetworkMessage(peerId, message);
     });
 
-    // Both sides land on the board once the data channel is up:
-    // the host leaves the QR screen, the joiner gets its cells enabled.
     this.networkEngine.onPeerConnected(() => {
       this.startGame();
     });
@@ -336,13 +364,11 @@ class MultiplayerTicTacToeManager {
   }
 
   private setupUIEventHandlers(): void {
-    const inviteButton = document.getElementById('inviteBtn');
-    inviteButton?.addEventListener('click', () => {
+    document.getElementById('inviteBtn')?.addEventListener('click', () => {
       this.createRoom();
     });
 
-    const joinViewButton = document.getElementById('joinBtn');
-    joinViewButton?.addEventListener('click', () => {
+    document.getElementById('joinBtn')?.addEventListener('click', () => {
       this.showView('joinView');
       document.getElementById('roomCodeInput')?.focus();
     });
@@ -362,24 +388,40 @@ class MultiplayerTicTacToeManager {
       if (event.key === 'Enter') submitJoin();
     });
 
-    const gameBoard = document.getElementById('gameBoard');
-    gameBoard?.addEventListener('click', (event) => {
+    document.getElementById('gameBoard')?.addEventListener('click', (event) => {
       const target = event.target as HTMLElement;
-      if (target.classList.contains('cell') && !target.classList.contains('disabled')) {
-        this.makeMove(parseInt(target.dataset.index!));
+      if (target.classList.contains('c4-cell') && !target.classList.contains('disabled')) {
+        this.makeMove(parseInt(target.dataset.index!) % COLS);
       }
     });
 
-    const playAgainButton = document.getElementById('playAgainBtn');
-    playAgainButton?.addEventListener('click', () => {
+    document.getElementById('playAgainBtn')?.addEventListener('click', () => {
       this.restartGame();
     });
   }
 
-  private restartGame(): void {
+  private makeMove(column: number): void {
     if (!this.game || !this.networkEngine) return;
 
-    const action: TicTacToeAction = {
+    const hasOpponent = this.networkEngine.getConnections()
+      .some(peerId => this.networkEngine!.isConnected(peerId));
+    if (!hasOpponent) return;
+
+    const action: ConnectFourAction = {
+      type: 'MOVE',
+      playerId: this.playerId,
+      timestamp: Date.now(),
+      payload: { column }
+    };
+
+    this.game.dispatchAction(action);
+    this.broadcastAction(action);
+  }
+
+  private restartGame(): void {
+    if (!this.game) return;
+
+    const action: ConnectFourAction = {
       type: 'RESTART',
       playerId: this.playerId,
       timestamp: Date.now(),
@@ -387,34 +429,11 @@ class MultiplayerTicTacToeManager {
     };
 
     this.game.dispatchAction(action);
-
-    const networkMessage: NetworkMessage = {
-      type: 'GAME_ACTION',
-      from: this.playerId,
-      to: 'all',
-      payload: action,
-      timestamp: Date.now()
-    };
-
-    this.networkEngine.broadcast(networkMessage);
+    this.broadcastAction(action);
   }
 
-  private makeMove(position: number): void {
-    if (!this.game || !this.networkEngine) return;
-
-    // Don't play against yourself while the opponent's channel is still connecting
-    const hasOpponent = this.networkEngine.getConnections()
-      .some(peerId => this.networkEngine!.isConnected(peerId));
-    if (!hasOpponent) return;
-
-    const action: TicTacToeAction = {
-      type: 'MOVE',
-      playerId: this.playerId,
-      timestamp: Date.now(),
-      payload: { position }
-    };
-
-    this.game.dispatchAction(action);
+  private broadcastAction(action: ConnectFourAction): void {
+    if (!this.networkEngine) return;
 
     const networkMessage: NetworkMessage = {
       type: 'GAME_ACTION',
@@ -429,9 +448,8 @@ class MultiplayerTicTacToeManager {
 
   private handleNetworkMessage(peerId: string, message: NetworkMessage): void {
     if (message.type === 'GAME_ACTION' && message.payload) {
-      const action = message.payload as TicTacToeAction;
+      const action = message.payload as ConnectFourAction;
 
-      // Only process actions from other players
       if (action.playerId !== this.playerId) {
         this.game?.dispatchAction(action);
       }
@@ -481,8 +499,8 @@ class MultiplayerTicTacToeManager {
 }
 
 // Initialize multiplayer game
-export function startTicTacToeGame(): void {
-  const gameManager = new MultiplayerTicTacToeManager();
+export function startConnectFourGame(): void {
+  const gameManager = new MultiplayerConnectFourManager();
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => gameManager.initialize());

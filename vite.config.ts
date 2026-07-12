@@ -23,7 +23,9 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         input: {
           index: 'examples/index.html',
-          'tic-tac-toe': 'examples/tic-tac-toe/tic-tac-toe.html'
+          'tic-tac-toe': 'examples/tic-tac-toe/tic-tac-toe.html',
+          'connect-four': 'examples/connect-four/connect-four.html',
+          chess: 'examples/chess/chess.html'
         },
         output: {
           // Keep modules separate for better caching
@@ -45,7 +47,7 @@ export default defineConfig(({ mode }) => {
     },
     // Optimize dependencies
     optimizeDeps: {
-      include: ['uuid', 'qrcode']
+      include: ['uuid', 'qrcode', 'chess.js']
     },
     // Handle external dependencies properly
     define: {
