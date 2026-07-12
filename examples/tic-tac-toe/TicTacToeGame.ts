@@ -11,6 +11,7 @@
  * - Real-time synchronization
  */
 
+import QRCode from 'qrcode';
 import { GameWork, BaseGameState, GameAction, GameConfig } from '../../src';
 import { WebRTCNetworkEngine, WebRTCNetworkEngineConfig } from '../../src/engines/WebRTCNetworkEngine';
 import { NetworkMessage } from '../../src/types/GameTypes';
@@ -517,37 +518,21 @@ class MultiplayerTicTacToeManager {
     this.generateQRCode(code);
   }
 
-  private generateQRCode(roomCode: string): void {
+  private async generateQRCode(roomCode: string): Promise<void> {
     const qrContainer = document.getElementById('qrCodeContainer');
     if (!qrContainer) return;
 
-    // Clear previous QR code
-    qrContainer.innerHTML = '';
-
-    // Generate QR code URL
-    const currentUrl = window.location.origin + window.location.pathname;
-    const qrUrl = `${currentUrl}?room=${roomCode}`;
-
-    // Create QR code
-    if (typeof (window as any).QRCode !== 'undefined') {
-      (window as any).QRCode.toCanvas(qrContainer, qrUrl, {
-        width: 200,
-        height: 200,
-        margin: 2,
-        color: {
-          dark: '#000000',
-          light: '#FFFFFF'
-        }
-      }, (error) => {
-        if (error) {
-          console.error('QR code generation failed:', error);
-          qrContainer.innerHTML = '<p>QR code generation failed</p>';
-        } else {
-          qrContainer.innerHTML += `<p style="margin-top: 10px; font-size: 12px; color: #666;">Scan to join room: ${roomCode}</p>`;
-        }
-      });
-    } else {
-      qrContainer.innerHTML = '<p>QR code library not loaded</p>';
+    const qrUrl = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
+    const canvas = document.createElement('canvas');
+    try {
+      await QRCode.toCanvas(canvas, qrUrl, { width: 200, margin: 2 });
+      const caption = document.createElement('p');
+      caption.className = 'muted';
+      caption.textContent = `Scan to join room: ${roomCode}`;
+      qrContainer.replaceChildren(canvas, caption);
+    } catch (error) {
+      qrContainer.textContent = 'QR code generation failed';
+      this.logMessage(`QR code generation failed: ${error}`, 'error');
     }
   }
 
