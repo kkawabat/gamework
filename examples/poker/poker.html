@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GameWork Poker - Multiplayer</title>
+    <link rel="icon" type="image/x-icon" href="../../favicon.ico">
+    <link rel="stylesheet" href="../gamework.css">
+</head>
+<body>
+    <a class="back-link" href="../index.html" title="Back to GameWork demos">←</a>
+
+    <div class="container">
+        <h1>🃏 Poker</h1>
+
+        <div id="homeView">
+            <p class="muted">Texas Hold'em for 2–8 players — one host deals, everyone shares a deck.</p>
+            <div class="room-buttons">
+                <button id="inviteBtn">Host a Table</button>
+                <button id="joinBtn">Join a Game</button>
+            </div>
+        </div>
+
+        <div id="inviteView" hidden>
+            <div class="qr-code" id="qrCodeContainer"></div>
+            <div class="room-code" id="roomCode"></div>
+            <p class="muted">Share the code or QR. Players can join until you start.</p>
+            <ul class="player-list" id="playerList"></ul>
+            <button id="startBtn" hidden disabled>Waiting for players…</button>
+        </div>
+
+        <div id="joinView" hidden>
+            <input type="text" id="roomCodeInput" placeholder="Enter room code" maxlength="6" style="text-align: center; letter-spacing: 0.2em;">
+            <button id="joinRoomBtn">Join</button>
+        </div>
+
+        <div id="waitView" hidden>
+            <p class="muted" id="waitCount">Joined — waiting for the host to start…</p>
+            <ul class="player-list" id="playerList2"></ul>
+            <p class="muted">The host will deal when everyone's in.</p>
+        </div>
+
+        <div id="gameView" hidden>
+            <div class="poker-table">
+                <div class="opponents" id="opponents"></div>
+
+                <div class="board">
+                    <div class="pot" id="pot"></div>
+                    <div class="community" id="community"></div>
+                </div>
+
+                <div id="selfSeat"></div>
+            </div>
+
+            <div class="status" id="status"></div>
+
+            <div class="bet-controls" id="betControls" hidden>
+                <button id="foldBtn">Fold</button>
+                <button id="checkCallBtn" data-action="CHECK">Check</button>
+                <div class="raise-group">
+                    <input type="range" id="raiseSlider" class="raise-slider">
+                    <button id="raiseBtn">Raise</button>
+                    <span class="raise-amount" id="raiseAmount"></span>
+                </div>
+            </div>
+
+            <button id="nextHandBtn" hidden>Next Hand</button>
+            <button id="playAgainBtn" hidden>Play Again</button>
+        </div>
+
+        <p class="muted" id="message" hidden></p>
+    </div>
+
+    <script type="module">
+        import { startPokerGame } from './PokerGame.ts';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            startPokerGame();
+        });
+    </script>
+</body>
+</html>

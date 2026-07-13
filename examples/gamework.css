@@ -444,6 +444,211 @@ input::placeholder {
     background-color: rgba(255, 165, 0, 0.25);
 }
 
+/* --- poker --- */
+
+.poker-table {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75em;
+    margin: 1em auto;
+    padding: 1em;
+    background: radial-gradient(ellipse at center, #1f5c3a 0%, #143d27 100%);
+    border: 2px solid #0d2a1a;
+    border-radius: 1.5em;
+}
+
+.opponents {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5em;
+    width: 100%;
+}
+
+.poker-table .board {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4em;
+    min-height: 1.5em;
+}
+
+/* lobby player list */
+.player-list {
+    list-style: none;
+    margin: 0.75em auto;
+    padding: 0.5em 0.75em;
+    max-width: 18em;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+}
+
+.player-list li {
+    padding: 0.2em 0;
+    color: #ccc;
+}
+
+.poker-table .pot {
+    font-weight: 700;
+    color: orange;
+    min-height: 1.2em;
+}
+
+.community {
+    display: flex;
+    gap: 0.4em;
+    justify-content: center;
+}
+
+.seat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2em;
+    padding: 0.4em 0.6em;
+    border-radius: 0.6em;
+    border: 2px solid transparent;
+    background: rgba(0, 0, 0, 0.18);
+    min-width: 7em;
+}
+
+#selfSeat .seat {
+    min-width: 10em;
+    background: rgba(0, 0, 0, 0.28);
+}
+
+.seat.acting {
+    border-color: orange;
+    box-shadow: 0 0 0.6em rgba(255, 165, 0, 0.5);
+}
+
+.seat.is-folded {
+    opacity: 0.45;
+}
+
+.seat-label {
+    font-size: 0.85em;
+    color: #eaeaea;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.35em;
+}
+
+.seat .tag {
+    font-size: 0.75em;
+    font-weight: 400;
+    padding: 0 0.4em;
+    border-radius: 0.6em;
+}
+
+.seat .tag.fold { background: #555; color: #ccc; }
+.seat .tag.allin { background: #d21f3c; color: #fff; }
+
+.seat .bet {
+    font-size: 0.8em;
+    color: #ffce54;
+}
+
+.seat-label .dealer {
+    display: inline-block;
+    width: 1.3em;
+    height: 1.3em;
+    line-height: 1.3em;
+    border-radius: 50%;
+    background: #fff;
+    color: #333;
+    font-size: 0.75em;
+    text-align: center;
+    margin-left: 0.3em;
+}
+
+.seat .hole {
+    display: flex;
+    gap: 0.3em;
+    padding: 0.15em;
+    border-radius: 0.4em;
+}
+
+.seat .hole.winner {
+    box-shadow: 0 0 0 2px orange;
+}
+
+.seat .stack {
+    font-size: 0.85em;
+    color: #cde;
+}
+
+.seat .hand-name {
+    font-size: 0.8em;
+    color: orange;
+}
+
+/* playing cards */
+.card {
+    --cw: min(11vw, 3rem);
+    width: var(--cw);
+    height: calc(var(--cw) * 1.4);
+    background: #fff;
+    color: #1a1a1a;
+    border-radius: 0.35em;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    user-select: none;
+}
+
+.opponents .card { --cw: min(7vw, 2.1rem); }
+
+.card .rank { font-size: calc(var(--cw) * 0.5); font-weight: 700; }
+.card .suit { font-size: calc(var(--cw) * 0.45); }
+
+.card.red { color: #d21f3c; }
+
+.card.back {
+    background: repeating-linear-gradient(45deg, #b5462f, #b5462f 4px, #9a3826 4px, #9a3826 8px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.card.empty {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px dashed rgba(255, 255, 255, 0.25);
+    box-shadow: none;
+}
+
+/* betting controls */
+.bet-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5em;
+    margin: 0.5em 0;
+}
+
+.raise-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+}
+
+.raise-slider {
+    accent-color: orange;
+    cursor: pointer;
+}
+
+.raise-amount {
+    min-width: 2em;
+    color: orange;
+    font-weight: 700;
+}
+
 @media (max-width: 600px) {
     body {
         padding: 1.5em 0.75em;

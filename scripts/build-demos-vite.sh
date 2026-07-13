@@ -33,7 +33,7 @@ fi
 # Move the built HTML files to the correct locations
 echo "📝 Moving HTML files to correct locations..."
 mv "$PROJECT_ROOT/demo-build/examples/index.html" "$PROJECT_ROOT/demo-build/index.html"
-GAME_PAGES="tic-tac-toe connect-four chess"
+GAME_PAGES="tic-tac-toe connect-four chess poker"
 for page in $GAME_PAGES; do
     mv "$PROJECT_ROOT/demo-build/examples/$page/$page.html" "$PROJECT_ROOT/demo-build/$page.html"
 done
