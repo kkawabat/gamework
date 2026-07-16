@@ -132,11 +132,21 @@ Applies need an explicit token (ADC is work-impersonated):
 GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud --configuration=personal auth print-access-token) terraform apply
 ```
 
+`terraform plan` should come back clean. If it does not, a real change is
+pending — that property is the point, so keep it true. Two things were needed to
+get there, and both are easy to undo by accident:
+
+- Cloud Run reports a **service-level `scaling` block** (distinct from
+  `template.scaling`, despite the name) whether or not it is declared. The
+  provider treats its fields as optional-not-computed, so omitting it leaves a
+  phantom removal pending forever. It is declared to match reality.
+- The deploy action stamps `image`, a `commit-sha` label and its own
+  `client`/`client_version` on **every** deploy, so those are in
+  `ignore_changes`. Terraform cannot win there — `commit-sha` changes per commit
+  — and a plan that is never clean is a plan nobody reads.
+
 Known warts:
 
-- `terraform plan` is never clean. GCP populates a service-level `scaling` block
-  on the Cloud Run service that the config does not declare, so one in-place
-  change is always pending. Harmless, but it means real changes do not stand out.
 - `google_project_service` returns before an API has actually propagated, so a
   first apply on a fresh project fails with `SERVICE_DISABLED` on the compute
   resources. Retrying works; a `time_sleep` would fix it properly.

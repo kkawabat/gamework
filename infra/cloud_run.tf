@@ -75,8 +75,15 @@ resource "google_cloud_run_v2_service" "signaling" {
   }
 
   lifecycle {
+    # CI owns these. The deploy action stamps the image, a commit-sha label and
+    # its own client metadata on every deploy, so Terraform cannot win: reverting
+    # them just leaves a phantom diff on every plan until the next deploy puts
+    # them back. commit-sha is unfixable by definition — it changes per commit.
     ignore_changes = [
       template[0].containers[0].image,
+      template[0].labels,
+      client,
+      client_version,
     ]
   }
 
