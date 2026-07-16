@@ -3,6 +3,16 @@ resource "google_cloud_run_v2_service" "signaling" {
   location            = var.region
   deletion_protection = false
 
+  # Service-level scaling — a different block from the template.scaling below,
+  # despite the name. Cloud Run reports it populated whether or not it is
+  # declared, and the provider treats these fields as optional-not-computed, so
+  # omitting it leaves a phantom removal pending on every plan. Declared here so
+  # `plan` comes back clean and a real change actually stands out.
+  scaling {
+    min_instance_count    = 0
+    manual_instance_count = 0
+  }
+
   template {
     service_account = google_service_account.signaling_run.email
 
