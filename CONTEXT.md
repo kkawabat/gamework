@@ -102,6 +102,47 @@ It speaks real STUN/TURN and asserts that an *unauthenticated* Allocate is
 rejected with 401 — the check that would have caught the open relay — and that a
 server-minted credential actually gets a relay.
 
+## Infrastructure and state
+
+Terraform in `infra/` is applied **by hand**, deliberately. Only the app deploys
+are automated (demos → Pages, signaling image → Cloud Run). Putting Terraform in
+CI would mean granting the deploy service account `compute.admin` and
+`secretmanager.admin` — the ability to create VMs and read the TURN secret — to
+automate something touched a few times a year. App deploys are frequent and
+mechanical; infra is rare and consequential, so a human reading the plan is the
+point, not an oversight.
+
+State lives in `gs://kan-kawabata-2026-tfstate` (prefix `gamework`, versioned).
+It tracks the relay VM, its static IP and the TURN secret version, so a lost
+local file would orphan live infrastructure. The bucket is bootstrap
+infrastructure and is intentionally **not** managed by Terraform — it cannot
+sanely hold its own state. To recreate it:
+
+```
+gcloud --configuration=personal storage buckets create gs://kan-kawabata-2026-tfstate \
+  --project=kan-kawabata-2026 --location=us-west1 \
+  --uniform-bucket-level-access --public-access-prevention
+gcloud --configuration=personal storage buckets update gs://kan-kawabata-2026-tfstate \
+  --versioning --project=kan-kawabata-2026
+```
+
+Applies need an explicit token (ADC is work-impersonated):
+
+```
+GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud --configuration=personal auth print-access-token) terraform apply
+```
+
+Known warts:
+
+- `terraform plan` is never clean. GCP populates a service-level `scaling` block
+  on the Cloud Run service that the config does not declare, so one in-place
+  change is always pending. Harmless, but it means real changes do not stand out.
+- `google_project_service` returns before an API has actually propagated, so a
+  first apply on a fresh project fails with `SERVICE_DISABLED` on the compute
+  resources. Retrying works; a `time_sleep` would fix it properly.
+- Changing `coturn-startup.sh` **replaces the VM** (~90s with no relay).
+- coturn is installed with `apt-get` at boot, so its version is not pinned.
+
 ## Diagnosing connection failures
 
 A failed peer-to-peer connection looks *identical to success* in the Cloud Run

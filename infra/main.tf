@@ -1,6 +1,16 @@
 terraform {
   required_version = ">= 1.5"
 
+  # State tracks the relay VM, its static IP and the TURN secret version, so a
+  # lost local file would orphan live infrastructure. The bucket is versioned;
+  # it is bootstrap infrastructure created out of band (see CONTEXT.md) rather
+  # than managed here, since a bucket cannot sanely hold its own state.
+  # `prefix` keeps room for portfolio/infra to share the bucket later.
+  backend "gcs" {
+    bucket = "kan-kawabata-2026-tfstate"
+    prefix = "gamework"
+  }
+
   required_providers {
     google = {
       source  = "hashicorp/google"
