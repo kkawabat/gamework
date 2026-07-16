@@ -1,7 +1,7 @@
 import { BaseNetworkEngine } from './NetworkEngine';
 import { NetworkMessage } from '../types/GameTypes';
 import { ConnectionState, NetworkConfig, DataChannelConfig, PeerConnection } from '../types/NetworkTypes';
-import { ClientToServer, ServerToClient, SignalData } from '../../shared/signaling-types';
+import { ClientToServer, ServerToClient, SignalData, IceServerConfig } from '../../shared/signaling-types';
 
 export interface WebRTCNetworkEngineConfig extends NetworkConfig {
   signalingServerUrl: string;
@@ -14,6 +14,7 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
   private roomCode: string = '';
   private pendingRoom: { resolve: (code: string) => void; reject: (error: Error) => void } | null = null;
   private messageQueue: Promise<void> = Promise.resolve();
+  private pendingCandidates = new Map<string, RTCIceCandidateInit[]>();
 
   constructor(config: WebRTCNetworkEngineConfig, dataChannelConfig: DataChannelConfig, playerId: string) {
     super(config, dataChannelConfig);
@@ -69,10 +70,23 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
     });
   }
 
-  destroy(): void {
-    this.connections.forEach((_, peerId) => this.cleanupConnection(peerId));
+  /**
+   * Drop the signaling connection but keep every peer connection open. Once the
+   * data channels are up the server has no remaining part to play — it only ever
+   * relays offers, answers and candidates — and an idle socket would otherwise
+   * hold a Cloud Run instance billable for the whole game.
+   *
+   * One-way door: no peer can be dialed or re-dialed afterwards. That matches
+   * what the demos already do, since none of them attempt an ICE restart.
+   */
+  closeSignaling(): void {
     this.socket?.close();
     this.socket = null;
+  }
+
+  destroy(): void {
+    this.connections.forEach((_, peerId) => this.cleanupConnection(peerId));
+    this.closeSignaling();
     this.isInitialized = false;
   }
 
@@ -83,7 +97,11 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
       socket.onerror = () => reject(new Error(`Could not connect to signaling server at ${this.networkConfig.signalingServerUrl}`));
       socket.onclose = () => this.rejectRoom(new Error('Signaling connection closed'));
       socket.onmessage = (event) => {
-        this.messageQueue = this.messageQueue.then(() => this.handleServerMessage(JSON.parse(event.data)));
+        // Catch per message: a rejected queue skips the callback of every later
+        // .then, so one failure would silently end all signaling for this client.
+        this.messageQueue = this.messageQueue
+          .then(() => this.handleServerMessage(JSON.parse(event.data)))
+          .catch((error) => console.error('[gamework] Failed to handle signaling message:', error));
       };
     });
   }
@@ -92,10 +110,13 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
     switch (message.type) {
       case 'ROOM_CREATED':
         this.roomCode = message.roomCode;
+        this.applyIceServers(message.iceServers);
         this.resolveRoom(message.roomCode);
         break;
       case 'ROOM_JOINED':
         this.roomCode = message.roomCode;
+        // Must land before connect() below builds the first peer connection.
+        this.applyIceServers(message.iceServers);
         // Resolve before dialing peers: a peer-connection failure must not leave the
         // room request pending forever (it blocks every later create/join).
         this.resolveRoom(message.roomCode);
@@ -107,6 +128,11 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
           }
         }
         break;
+      case 'PEER_JOINED':
+        // Report only. The joiner dials us from its own ROOM_JOINED; offering
+        // back from here would have both sides offering at once.
+        this.notifyPeerJoined(message.peerId);
+        break;
       case 'SIGNAL':
         await this.handleSignal(message.from, message.data);
         break;
@@ -114,9 +140,8 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
         this.cleanupConnection(message.peerId);
         break;
       case 'ERROR': {
-        const error = new Error(message.message);
-        if (!this.pendingRoom) throw error;
-        this.rejectRoom(error);
+        if (this.pendingRoom) this.rejectRoom(new Error(message.message));
+        else console.error('[gamework] Signaling server error:', message.message);
         break;
       }
     }
@@ -127,6 +152,7 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
       case 'offer': {
         const peer = this.setupPeer(from);
         await peer.connection.setRemoteDescription(data.sdp as RTCSessionDescriptionInit);
+        await this.drainCandidates(from);
         const answer = await peer.connection.createAnswer();
         await peer.connection.setLocalDescription(answer);
         this.sendToServer({ type: 'SIGNAL', to: from, data: { kind: 'answer', sdp: answer } });
@@ -134,18 +160,56 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
       }
       case 'answer':
         await this.peer(from).connection.setRemoteDescription(data.sdp as RTCSessionDescriptionInit);
+        await this.drainCandidates(from);
         break;
-      case 'ice':
-        await this.peer(from).connection.addIceCandidate(data.candidate as RTCIceCandidateInit);
+      case 'ice': {
+        const peer = this.connections.get(from);
+        // A candidate can outrun the description it has to be added against.
+        // Holding it beats throwing, which used to take the whole client down.
+        if (!peer?.connection.remoteDescription) {
+          const queued = this.pendingCandidates.get(from) ?? [];
+          queued.push(data.candidate as RTCIceCandidateInit);
+          this.pendingCandidates.set(from, queued);
+          break;
+        }
+        await peer.connection.addIceCandidate(data.candidate as RTCIceCandidateInit);
         break;
+      }
     }
+  }
+
+  /**
+   * The signaling server is the source of truth for ICE servers: it holds the
+   * TURN secret and mints the credentials, so nothing long-lived ships in the
+   * bundle. The static config stays as the fallback for local dev.
+   */
+  private applyIceServers(iceServers: IceServerConfig[]): void {
+    if (!iceServers?.length) return;
+    this.config.iceServers = iceServers;
+  }
+
+  private async drainCandidates(peerId: string): Promise<void> {
+    const queued = this.pendingCandidates.get(peerId);
+    if (!queued) return;
+    this.pendingCandidates.delete(peerId);
+    for (const candidate of queued) {
+      await this.peer(peerId).connection.addIceCandidate(candidate);
+    }
+  }
+
+  protected cleanupConnection(peerId: string): void {
+    this.pendingCandidates.delete(peerId);
+    super.cleanupConnection(peerId);
   }
 
   private setupPeer(peerId: string): PeerConnection {
     const peer = this.createPeerConnection(peerId);
     this.setupConnectionHandlers(peer);
     peer.connection.onicecandidate = (event) => {
-      if (event.candidate) {
+      // Candidates can still trickle in after signaling is closed. There is
+      // nowhere to send them and the connection they would improve is already
+      // up, so drop them rather than throw inside the event handler.
+      if (event.candidate && this.socket) {
         this.sendToServer({ type: 'SIGNAL', to: peerId, data: { kind: 'ice', candidate: event.candidate.toJSON() } });
       }
     };

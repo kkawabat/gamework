@@ -53,6 +53,8 @@ export default defineConfig(({ mode }) => {
       global: 'globalThis',
       // Inject signaling server URL at build time; empty string when unset so
       // the client falls back to ws://localhost:8080 for local dev
+      // TURN is intentionally not injected here: the signaling server mints
+      // per-player relay credentials, keeping them out of this public bundle.
       __SIGNALING_SERVER_URL__: JSON.stringify(signalingServerUrl ?? '')
     }
   };

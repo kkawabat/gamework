@@ -8,11 +8,9 @@
 
 import QRCode from 'qrcode';
 import { GameWork, BaseGameState, GameAction, GameConfig } from '../../src';
-import { WebRTCNetworkEngine, WebRTCNetworkEngineConfig } from '../../src/engines/WebRTCNetworkEngine';
+import { WebRTCNetworkEngine } from '../../src/engines/WebRTCNetworkEngine';
 import { NetworkMessage } from '../../src/types/GameTypes';
-
-// Replaced at build time by Vite's `define` (vite.config.ts); undefined in dev
-declare const __SIGNALING_SERVER_URL__: string | undefined;
+import { createNetworkConfig, DATA_CHANNEL_CONFIG } from '../shared/network-config';
 
 export const COLS = 7;
 export const ROWS = 6;
@@ -225,22 +223,7 @@ export function createConnectFourGame(playerId: string): GameWork<ConnectFourSta
   const engine = new ConnectFourEngine();
   const ui = new ConnectFourUI();
 
-  const networkConfig: WebRTCNetworkEngineConfig = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
-    ],
-    signalingServerUrl:
-      (typeof __SIGNALING_SERVER_URL__ !== 'undefined' && __SIGNALING_SERVER_URL__) ||
-      'ws://localhost:8080'
-  };
-
-  const dataChannelConfig = {
-    ordered: true,
-    maxRetransmits: 3
-  };
-
-  const networkEngine = new WebRTCNetworkEngine(networkConfig, dataChannelConfig, playerId);
+  const networkEngine = new WebRTCNetworkEngine(createNetworkConfig(), DATA_CHANNEL_CONFIG, playerId);
 
   const config: GameConfig<ConnectFourState, ConnectFourAction> = {
     initialState: engine.getInitialState(),
@@ -356,8 +339,20 @@ class MultiplayerConnectFourManager {
       this.handleNetworkMessage(peerId, message);
     });
 
+    this.networkEngine.onPeerJoined(() => {
+      this.showMessage('Player joined, connecting…');
+    });
+
     this.networkEngine.onPeerConnected(() => {
+      this.showMessage(null);
+      // Both players are connected and this game takes no others, so the
+      // signaling server is done; the rest runs peer-to-peer.
+      this.networkEngine?.closeSignaling();
       this.startGame();
+    });
+
+    this.networkEngine.onPeerFailed(() => {
+      this.showMessage('Could not connect to the other player. If you are both on mobile data, try Wi-Fi.');
     });
 
     this.setupUIEventHandlers();

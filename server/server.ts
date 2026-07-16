@@ -1,10 +1,46 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
-import { ClientToServer, ServerToClient } from '../shared/signaling-types';
+import { createHmac } from 'crypto';
+import { ClientToServer, ServerToClient, IceServerConfig } from '../shared/signaling-types';
 
 interface Room {
   code: string;
   members: Map<string, WebSocket>;
+}
+
+const STUN_SERVERS: IceServerConfig[] = [
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+];
+
+// Long enough that a game started now still has working credentials later; short
+// enough that a leaked pair is worthless by tomorrow.
+const TURN_CREDENTIAL_TTL_SECONDS = 12 * 60 * 60;
+
+/**
+ * coturn's `use-auth-secret` mode: the username is an expiry timestamp and the
+ * password is an HMAC of it against the secret coturn also holds. Both sides
+ * compute it independently, so minting costs one hash and never talks to the
+ * relay. Falls back to STUN alone when no relay is configured (local dev).
+ */
+export function buildIceServers(options: {
+  playerId: string;
+  host?: string;
+  secret?: string;
+  now?: number;
+}): IceServerConfig[] {
+  const { playerId, host, secret, now = Date.now() } = options;
+  if (!host || !secret) return STUN_SERVERS;
+
+  const username = `${Math.floor(now / 1000) + TURN_CREDENTIAL_TTL_SECONDS}:${playerId}`;
+  return [
+    ...STUN_SERVERS,
+    {
+      // UDP first; the TCP entry is the fallback where UDP is blocked outright.
+      urls: [`turn:${host}:3478?transport=udp`, `turn:${host}:3478?transport=tcp`],
+      username,
+      credential: createHmac('sha1', secret).update(username).digest('base64')
+    }
+  ];
 }
 
 export class SignalingServer {
@@ -28,7 +64,9 @@ export class SignalingServer {
         try {
           this.handleMessage(ws, JSON.parse(data.toString()));
         } catch (error) {
-          this.send(ws, { type: 'ERROR', message: String(error instanceof Error ? error.message : error) });
+          const message = String(error instanceof Error ? error.message : error);
+          console.warn(`Signaling error from ${this.clients.get(ws)?.playerId ?? 'unknown client'}: ${message}`);
+          this.send(ws, { type: 'ERROR', message });
         }
       });
       ws.on('close', () => this.handleClose(ws));
@@ -44,7 +82,7 @@ export class SignalingServer {
         const room: Room = { code, members: new Map([[message.playerId, ws]]) };
         this.rooms.set(code, room);
         this.clients.set(ws, { playerId: message.playerId, room });
-        this.send(ws, { type: 'ROOM_CREATED', roomCode: code });
+        this.send(ws, { type: 'ROOM_CREATED', roomCode: code, iceServers: this.iceServers(message.playerId) });
         console.log(`Room ${code} created by ${message.playerId}`);
         break;
       }
@@ -54,8 +92,11 @@ export class SignalingServer {
         const peers = [...room.members.keys()];
         room.members.set(message.playerId, ws);
         this.clients.set(ws, { playerId: message.playerId, room });
-        this.send(ws, { type: 'ROOM_JOINED', roomCode: room.code, peers });
-        console.log(`${message.playerId} joined room ${room.code}`);
+        this.send(ws, { type: 'ROOM_JOINED', roomCode: room.code, peers, iceServers: this.iceServers(message.playerId) });
+        for (const peerId of peers) {
+          this.send(room.members.get(peerId)!, { type: 'PEER_JOINED', peerId: message.playerId });
+        }
+        console.log(`${message.playerId} joined room ${room.code} (${room.members.size} members)`);
         break;
       }
       case 'SIGNAL': {
@@ -64,6 +105,7 @@ export class SignalingServer {
         const target = client.room.members.get(message.to);
         if (!target) throw new Error(`Peer ${message.to} not in room`);
         this.send(target, { type: 'SIGNAL', from: client.playerId, data: message.data });
+        console.log(`${client.room.code}: ${message.data.kind} ${client.playerId} -> ${message.to}`);
         break;
       }
       default:
@@ -84,6 +126,10 @@ export class SignalingServer {
         this.send(member, { type: 'PEER_LEFT', peerId: client.playerId });
       }
     }
+  }
+
+  private iceServers(playerId: string): IceServerConfig[] {
+    return buildIceServers({ playerId, host: process.env.TURN_HOST, secret: process.env.TURN_SECRET });
   }
 
   private send(ws: WebSocket, message: ServerToClient): void {

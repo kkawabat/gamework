@@ -28,11 +28,9 @@
 
 import QRCode from 'qrcode';
 import { GameWork, BaseGameState, GameAction, GameConfig } from '../../src';
-import { WebRTCNetworkEngine, WebRTCNetworkEngineConfig } from '../../src/engines/WebRTCNetworkEngine';
+import { WebRTCNetworkEngine } from '../../src/engines/WebRTCNetworkEngine';
 import { NetworkMessage } from '../../src/types/GameTypes';
-
-// Replaced at build time by Vite's `define` (vite.config.ts); undefined in dev
-declare const __SIGNALING_SERVER_URL__: string | undefined;
+import { createNetworkConfig, DATA_CHANNEL_CONFIG } from '../shared/network-config';
 
 // --- Table constants -------------------------------------------------------
 
@@ -882,17 +880,7 @@ export function createPokerGame(playerId: string): { game: GameWork<PokerState, 
   const engine = new PokerEngine();
   const ui = new PokerUI();
 
-  const networkConfig: WebRTCNetworkEngineConfig = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
-    ],
-    signalingServerUrl:
-      (typeof __SIGNALING_SERVER_URL__ !== 'undefined' && __SIGNALING_SERVER_URL__) ||
-      'ws://localhost:8080'
-  };
-
-  const network = new WebRTCNetworkEngine(networkConfig, { ordered: true, maxRetransmits: 3 }, playerId);
+  const network = new WebRTCNetworkEngine(createNetworkConfig(), DATA_CHANNEL_CONFIG, playerId);
 
   const config: GameConfig<PokerState, PokerAction> = {
     initialState: engine.getInitialState(),
@@ -929,6 +917,7 @@ class MultiplayerPokerManager {
   private isHost = false;
   private localSeat = 0;
   private roster: string[] = [];   // seat -> playerId (agreed by all peers)
+  private connecting = new Set<string>();  // joined the room, data channel not open yet — not seatable
   private started = false;
   private lastState: PokerState;
   private roomRequestInFlight = false;
@@ -1010,12 +999,28 @@ class MultiplayerPokerManager {
 
     this.networkEngine.onMessage((peerId, message) => this.handleNetworkMessage(peerId, message));
 
+    // Show the player the moment the server sees them. They can't take a seat
+    // until their data channel opens — they could not be dealt to otherwise.
+    this.networkEngine.onPeerJoined((peerId) => {
+      if (this.isHost && !this.started) {
+        this.connecting.add(peerId);
+        this.renderLobby();
+      }
+    });
+
     this.networkEngine.onPeerConnected((peerId) => {
+      this.connecting.delete(peerId);
       if (this.isHost && !this.started && !this.roster.includes(peerId)) {
         if (this.roster.length < MAX_PLAYERS) this.roster.push(peerId);
         this.broadcastLobby();
         this.renderLobby();
       }
+    });
+
+    this.networkEngine.onPeerFailed((peerId) => {
+      if (!this.connecting.delete(peerId)) return;
+      this.showMessage('A player could not connect. If you are both on mobile data, try Wi-Fi.');
+      this.renderLobby();
     });
 
     this.setupUIEventHandlers();
@@ -1067,6 +1072,9 @@ class MultiplayerPokerManager {
     if (!this.game) return;
     this.roster = roster;
     this.started = true;
+    // The roster is locked and every seat's data channel is open, so the
+    // signaling server has nothing left to do for this game.
+    this.networkEngine?.closeSignaling();
     this.localSeat = roster.indexOf(this.playerId); // -1 => spectator
     const names = roster.map((_, seat) => `Player ${seat + 1}`);
     this.ui?.setSeating(this.localSeat, names);
@@ -1175,11 +1183,14 @@ class MultiplayerPokerManager {
   private renderLobby(): void {
     const roster = this.roster.length ? this.roster : [this.playerId];
     const count = roster.length;
-    const listHTML = roster.map((id, i) => {
+    const seatedHTML = roster.map((id, i) => {
       const you = id === this.playerId ? ' (you)' : '';
       const host = i === 0 ? ' — host' : '';
       return `<li>Player ${i + 1}${you}${host}</li>`;
     }).join('');
+    const listHTML = seatedHTML + [...this.connecting]
+      .map((_, i) => `<li class="muted">Player ${count + i + 1} — connecting…</li>`)
+      .join('');
     for (const id of ['playerList', 'playerList2']) {
       const el = document.getElementById(id);
       if (el) el.innerHTML = listHTML;

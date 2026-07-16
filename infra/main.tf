@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 6.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 }
 
@@ -29,6 +33,8 @@ resource "google_project_service" "apis" {
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
     "cloudscheduler.googleapis.com",
+    "compute.googleapis.com",
+    "secretmanager.googleapis.com",
   ])
   service            = each.value
   disable_on_destroy = false

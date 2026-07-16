@@ -14,6 +14,23 @@ resource "google_cloud_run_v2_service" "signaling" {
         container_port = 8080
       }
 
+      # The server mints short-lived TURN credentials from this secret with a
+      # local HMAC — no call out to the relay or any third party.
+      env {
+        name  = "TURN_HOST"
+        value = google_compute_address.turn.address
+      }
+
+      env {
+        name = "TURN_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.turn_secret.secret_id
+            version = "latest"
+          }
+        }
+      }
+
       resources {
         limits = {
           cpu    = "1"
@@ -40,8 +57,10 @@ resource "google_cloud_run_v2_service" "signaling" {
       max_instance_count = 1
     }
 
-    # Cloud Run's maximum; WebSocket connections are dropped at the request
-    # timeout and the client reconnects (WebRTCNetworkEngine retry logic).
+    # Cloud Run's maximum, and a backstop only: clients close their own socket
+    # once the game starts (WebRTCNetworkEngine.closeSignaling), so a connection
+    # should only live as long as a lobby. Nothing reconnects if this fires —
+    # the game itself is unaffected, but the room stops accepting players.
     timeout = "3600s"
   }
 

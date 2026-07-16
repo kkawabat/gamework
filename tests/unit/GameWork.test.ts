@@ -206,7 +206,9 @@ describe('GameWork v2', () => {
 
     it('should emit state change events', (done) => {
       game.on('game:stateChanged', (state) => {
-        expect(state.counter).toBe(1);
+        // game:stateChanged carries BaseGameState; the concrete state type is
+        // not threaded through EventPayload yet (PokerGame casts the same way).
+        expect((state as TestGameState).counter).toBe(1);
         done();
       });
 

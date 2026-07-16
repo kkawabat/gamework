@@ -14,6 +14,9 @@ export interface NetworkEngine {
   sendMessage(peerId: string, message: NetworkMessage): void;
   broadcast(message: NetworkMessage): void;
   onMessage(callback: (peerId: string, message: NetworkMessage) => void): () => void;
+  onPeerJoined(callback: (peerId: string) => void): () => void;
+  onPeerConnected(callback: (peerId: string) => void): () => void;
+  onPeerFailed(callback: (peerId: string) => void): () => void;
   getConnectionState(peerId: string): ConnectionState;
   getConnections(): string[];
   isConnected(peerId: string): boolean;
@@ -22,7 +25,9 @@ export interface NetworkEngine {
 export abstract class BaseNetworkEngine implements NetworkEngine {
   protected connections: Map<string, PeerConnection> = new Map();
   protected messageHandlers: Set<(peerId: string, message: NetworkMessage) => void> = new Set();
+  protected peerJoinedHandlers: Set<(peerId: string) => void> = new Set();
   protected peerConnectedHandlers: Set<(peerId: string) => void> = new Set();
+  protected peerFailedHandlers: Set<(peerId: string) => void> = new Set();
   protected config: NetworkConfig;
   protected dataChannelConfig: DataChannelConfig;
   protected isInitialized: boolean = false;
@@ -42,9 +47,26 @@ export abstract class BaseNetworkEngine implements NetworkEngine {
     return () => this.messageHandlers.delete(callback);
   }
 
+  /** The signaling server saw the peer join. Its data channel may still be connecting. */
+  onPeerJoined(callback: (peerId: string) => void): () => void {
+    this.peerJoinedHandlers.add(callback);
+    return () => this.peerJoinedHandlers.delete(callback);
+  }
+
+  /** The peer's data channel is open and ready to carry game messages. */
   onPeerConnected(callback: (peerId: string) => void): () => void {
     this.peerConnectedHandlers.add(callback);
     return () => this.peerConnectedHandlers.delete(callback);
+  }
+
+  /** The peer joined but no data channel could be established (usually NAT traversal). */
+  onPeerFailed(callback: (peerId: string) => void): () => void {
+    this.peerFailedHandlers.add(callback);
+    return () => this.peerFailedHandlers.delete(callback);
+  }
+
+  protected notifyPeerJoined(peerId: string): void {
+    this.peerJoinedHandlers.forEach(handler => handler(peerId));
   }
 
   getConnectionState(peerId: string): ConnectionState {
@@ -83,10 +105,13 @@ export abstract class BaseNetworkEngine implements NetworkEngine {
     connection.oniceconnectionstatechange = () => {
       const state = connection.iceConnectionState as ICEConnectionState;
       peerConnection.iceState = state;
+      console.log(`[gamework] ICE ${peerConnection.id}: ${state}`);
       if (state === ICEConnectionState.CONNECTED || state === ICEConnectionState.COMPLETED) {
         peerConnection.state = ConnectionState.CONNECTED;
       } else if (state === ICEConnectionState.FAILED || state === ICEConnectionState.DISCONNECTED) {
         peerConnection.state = ConnectionState.FAILED;
+        // 'disconnected' often recovers on its own, so only report the terminal state.
+        if (state === ICEConnectionState.FAILED) this.peerFailedHandlers.forEach(handler => handler(peerConnection.id));
       }
     };
 
