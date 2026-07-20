@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import { createServer } from 'http';
+import { createServer, Server } from 'http';
+import { AddressInfo } from 'net';
 import { createHmac } from 'crypto';
 import { ClientToServer, ServerToClient, IceServerConfig } from '../shared/signaling-types';
 
@@ -46,6 +47,9 @@ export function buildIceServers(options: {
 export class SignalingServer {
   private rooms = new Map<string, Room>();
   private clients = new Map<WebSocket, { playerId: string; room: Room }>();
+  private httpServer: Server;
+  /** Resolves with the bound port once listening (port 0 picks a free one). */
+  readonly ready: Promise<number>;
 
   constructor(port: number = 8080) {
     const server = createServer((req, res) => {
@@ -72,7 +76,20 @@ export class SignalingServer {
       ws.on('close', () => this.handleClose(ws));
     });
 
-    server.listen(port, () => console.log(`Signaling server listening on port ${port}`));
+    this.httpServer = server;
+    this.ready = new Promise((resolve) => {
+      server.listen(port, () => {
+        const bound = (server.address() as AddressInfo).port;
+        console.log(`Signaling server listening on port ${bound}`);
+        resolve(bound);
+      });
+    });
+  }
+
+  /** Stop listening and release the port. For tests and graceful shutdown. */
+  close(): Promise<void> {
+    return new Promise((resolve, reject) =>
+      this.httpServer.close((err) => (err ? reject(err) : resolve())));
   }
 
   private handleMessage(ws: WebSocket, message: ClientToServer): void {
@@ -108,20 +125,35 @@ export class SignalingServer {
         console.log(`${client.room.code}: ${message.data.kind} ${client.playerId} -> ${message.to}`);
         break;
       }
+      case 'LEAVE_ROOM':
+        // Explicit departure: the one case where we can be sure the peer is
+        // actually gone, so it is also the only one that announces PEER_LEFT.
+        this.removeFromRoom(ws, { announce: true });
+        break;
       default:
         throw new Error(`Unknown message type: ${(message as { type: string }).type}`);
     }
   }
 
   private handleClose(ws: WebSocket): void {
+    // A bare socket close is ambiguous. Clients drop signaling on purpose the
+    // moment their data channels are up (see WebRTCNetworkEngine.closeSignaling),
+    // so a close is not evidence the peer left the game — announcing PEER_LEFT
+    // here would tear down a healthy peer connection. Departures that really
+    // mean "gone" arrive as LEAVE_ROOM; genuine mid-connection drops surface on
+    // the client as ICE failure. So close silently, only reclaiming the room.
+    this.removeFromRoom(ws, { announce: false });
+  }
+
+  private removeFromRoom(ws: WebSocket, { announce }: { announce: boolean }): void {
     const client = this.clients.get(ws);
-    if (!client) return;
+    if (!client) return; // already removed (e.g. LEAVE_ROOM then socket close)
     this.clients.delete(ws);
     client.room.members.delete(client.playerId);
     if (client.room.members.size === 0) {
       this.rooms.delete(client.room.code);
       console.log(`Room ${client.room.code} deleted`);
-    } else {
+    } else if (announce) {
       for (const member of client.room.members.values()) {
         this.send(member, { type: 'PEER_LEFT', peerId: client.playerId });
       }

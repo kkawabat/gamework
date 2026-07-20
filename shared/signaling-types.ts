@@ -6,7 +6,11 @@ export type SignalData =
 export type ClientToServer =
   | { type: 'CREATE_ROOM'; playerId: string }
   | { type: 'JOIN_ROOM'; playerId: string; roomCode: string }
-  | { type: 'SIGNAL'; to: string; data: SignalData };
+  | { type: 'SIGNAL'; to: string; data: SignalData }
+  // A deliberate departure from the game. This is the only thing that makes the
+  // server announce a peer as gone: a bare socket close is ambiguous (clients
+  // drop signaling on purpose once connected) so it is treated as silent.
+  | { type: 'LEAVE_ROOM' };
 
 /** Matches RTCIceServer, but declared here so the server can build it without DOM types. */
 export interface IceServerConfig {
@@ -24,5 +28,7 @@ export type ServerToClient =
   // dials them from ROOM_JOINED, so acting on this would make both sides offer.
   | { type: 'PEER_JOINED'; peerId: string }
   | { type: 'SIGNAL'; from: string; data: SignalData }
+  // The peer deliberately left the game (sent LEAVE_ROOM). Not sent for a bare
+  // socket close, which is how a connected peer routinely drops signaling.
   | { type: 'PEER_LEFT'; peerId: string }
   | { type: 'ERROR'; message: string };

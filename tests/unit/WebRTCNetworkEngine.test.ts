@@ -103,6 +103,16 @@ describe('WebRTCNetworkEngine signaling', () => {
     expect(engine.getConnections()).toEqual([]); // no peers here, but none were torn down
   });
 
+  // A bare socket close is silent by design, so a deliberate teardown has to
+  // tell the server it is really leaving — otherwise the other peers are never
+  // told to tear down their side.
+  it('announces LEAVE_ROOM before closing on destroy', async () => {
+    engine.destroy();
+
+    expect(socket.sent.map((m) => JSON.parse(m).type)).toContain('LEAVE_ROOM');
+    expect(socket.readyState).toBe(3);
+  });
+
   it('drops late ICE candidates instead of throwing once signaling is closed', async () => {
     engine.closeSignaling();
 

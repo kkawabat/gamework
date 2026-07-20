@@ -35,6 +35,18 @@ peer can be dialled or re-dialled afterwards, and nobody can rejoin. Acceptable
 only because no demo attempts an ICE restart or reconnect anyway. If mid-game
 recovery is ever wanted, this is the decision to revisit first.
 
+**A bare socket close is silent; only `LEAVE_ROOM` announces a departure.**
+Because dropping signaling after connecting is normal and deliberate (above),
+the server cannot read a socket close as "this peer left" — doing so used to
+broadcast `PEER_LEFT` and make the other peers tear down a perfectly healthy
+connection. So a raw close only reclaims the room slot; the client sends an
+explicit `LEAVE_ROOM` (from `destroy()`) when it really means to leave, and only
+that emits `PEER_LEFT`. A peer that genuinely drops mid-connection is caught by
+the client's own ICE failure, not the server. The cost: a hard crash during the
+lobby is no longer announced promptly — the other side waits for ICE to fail —
+which is the honest price of not letting the server assert liveness it cannot
+observe.
+
 **Only the joiner dials.** On `ROOM_JOINED` the joiner offers to every existing
 peer. `PEER_JOINED` tells the members already in the room, but is informational
 only — offering back from it would have both sides offering at once.

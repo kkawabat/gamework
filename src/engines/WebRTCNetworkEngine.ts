@@ -78,6 +78,10 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
    *
    * One-way door: no peer can be dialed or re-dialed afterwards. That matches
    * what the demos already do, since none of them attempt an ICE restart.
+   *
+   * The server treats this bare close as silent — it never tells the remaining
+   * peers we left — so dropping signaling here cannot tear down a live peer
+   * connection. Only destroy() below announces a real departure.
    */
   closeSignaling(): void {
     this.socket?.close();
@@ -85,6 +89,12 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
   }
 
   destroy(): void {
+    // Announce the departure while the socket is still open: unlike a bare
+    // close, LEAVE_ROOM is what makes the server tell the other peers we are
+    // gone so they can tear down their side. Best-effort — never throw here.
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify({ type: 'LEAVE_ROOM' } as ClientToServer));
+    }
     this.connections.forEach((_, peerId) => this.cleanupConnection(peerId));
     this.closeSignaling();
     this.isInitialized = false;
@@ -137,6 +147,9 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
         await this.handleSignal(message.from, message.data);
         break;
       case 'PEER_LEFT':
+        // Only fires for a deliberate LEAVE_ROOM now, so the peer really is gone
+        // and tearing down its connection is correct. A peer that merely dropped
+        // signaling after connecting no longer reaches here.
         this.cleanupConnection(message.peerId);
         break;
       case 'ERROR': {

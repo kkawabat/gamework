@@ -1018,8 +1018,10 @@ class MultiplayerPokerManager {
     });
 
     this.networkEngine.onPeerFailed((peerId) => {
-      if (!this.connecting.delete(peerId)) return;
-      this.showMessage('A player could not connect. If you are both on mobile data, try Wi-Fi.');
+      if (!this.awaitingLobbyConnection(peerId)) return;
+      this.connecting.delete(peerId);
+      const problem = this.isHost ? 'A player could not connect' : 'Could not connect to the host';
+      this.showMessage(`${problem}. If you are both on mobile data, try Wi-Fi.`);
       this.renderLobby();
     });
 
@@ -1053,6 +1055,12 @@ class MultiplayerPokerManager {
 
     document.getElementById('nextHandBtn')?.addEventListener('click', () => this.requestDeal(false));
     document.getElementById('playAgainBtn')?.addEventListener('click', () => this.requestDeal(true));
+  }
+
+  private awaitingLobbyConnection(peerId: string): boolean {
+    if (this.started) return false;
+    if (!this.isHost) return true;  // a joiner is only ever connecting to the host
+    return this.connecting.has(peerId);
   }
 
   // --- Host: seating & dealing ---------------------------------------------
