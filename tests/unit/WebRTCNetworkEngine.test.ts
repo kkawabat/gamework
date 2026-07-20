@@ -113,6 +113,26 @@ describe('WebRTCNetworkEngine signaling', () => {
     expect(socket.readyState).toBe(3);
   });
 
+  it('derives the HTTP /log endpoint from the signaling URL', () => {
+    expect((engine as any).logUrl()).toBe('http://localhost:8080/log');
+  });
+
+  // The whole point of the probe: the diagnostic must travel when the signaling
+  // socket is exactly what died, so it beacons over HTTP on close.
+  it('beacons the socket close code for diagnostics', async () => {
+    const sendBeacon = jest.fn();
+    (globalThis as any).navigator = { sendBeacon };
+
+    expect(() => (socket as any).onclose?.({ code: 1006, wasClean: false, reason: '' })).not.toThrow();
+
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
+    const [url, payload] = sendBeacon.mock.calls[0];
+    expect(url).toBe('http://localhost:8080/log');
+    expect(JSON.parse(payload).events.join('\n')).toContain('ws close code=1006');
+
+    delete (globalThis as any).navigator;
+  });
+
   it('drops late ICE candidates instead of throwing once signaling is closed', async () => {
     engine.closeSignaling();
 

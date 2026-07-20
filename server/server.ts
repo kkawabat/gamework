@@ -1,5 +1,5 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import { createServer, Server } from 'http';
+import { createServer, Server, IncomingMessage, ServerResponse } from 'http';
 import { AddressInfo } from 'net';
 import { createHmac } from 'crypto';
 import { ClientToServer, ServerToClient, IceServerConfig } from '../shared/signaling-types';
@@ -56,10 +56,14 @@ export class SignalingServer {
       if (req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'healthy', rooms: this.rooms.size, clients: this.clients.size }));
-      } else {
-        res.writeHead(404);
-        res.end();
+        return;
       }
+      if (req.method === 'POST' && req.url === '/log') {
+        this.handleClientLog(req, res);
+        return;
+      }
+      res.writeHead(404);
+      res.end();
     });
 
     const wss = new WebSocketServer({ server });
@@ -158,6 +162,25 @@ export class SignalingServer {
         this.send(member, { type: 'PEER_LEFT', peerId: client.playerId });
       }
     }
+  }
+
+  // Temporary diagnostic sink. Browsers POST their WebRTC/socket-close trace
+  // here over HTTP — a separate channel from the signaling socket, so it still
+  // arrives when that socket is what died — and it lands in the Cloud Run logs.
+  // Capped and unauthenticated: fine as a probe, wants a rate limit before it
+  // stays. Remove once the ~1.8s socket deaths are understood.
+  private handleClientLog(req: IncomingMessage, res: ServerResponse): void {
+    let body = '';
+    req.on('data', (chunk) => {
+      body += chunk;
+      if (body.length > 8192) req.destroy(); // drop oversized noise
+    });
+    req.on('end', () => {
+      if (body) console.log(`[client-log] ${body}`);
+      res.writeHead(204, { 'Access-Control-Allow-Origin': '*' });
+      res.end();
+    });
+    req.on('error', () => undefined); // best-effort; a dropped probe is not an error
   }
 
   private iceServers(playerId: string): IceServerConfig[] {

@@ -15,6 +15,7 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
   private pendingRoom: { resolve: (code: string) => void; reject: (error: Error) => void } | null = null;
   private messageQueue: Promise<void> = Promise.resolve();
   private pendingCandidates = new Map<string, RTCIceCandidateInit[]>();
+  private diagnostics: string[] = [];
 
   constructor(config: WebRTCNetworkEngineConfig, dataChannelConfig: DataChannelConfig, playerId: string) {
     super(config, dataChannelConfig);
@@ -25,6 +26,10 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
     this.socket = await this.openSocket();
+    // Last chance to report if the tab is being closed/backgrounded mid-lobby.
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pagehide', () => this.flushDiagnostics('pagehide'));
+    }
     this.isInitialized = true;
   }
 
@@ -46,6 +51,7 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
   }
 
   async connect(peerId: string): Promise<void> {
+    this.diag(`dial ${peerId}`);
     const peer = this.setupPeer(peerId);
     peer.dataChannel = peer.connection.createDataChannel('gamework', this.dataChannelConfig);
     this.setupDataChannelHandlers(peer, peer.dataChannel);
@@ -103,9 +109,16 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
   private openSocket(): Promise<WebSocket> {
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(this.networkConfig.signalingServerUrl);
-      socket.onopen = () => resolve(socket);
+      socket.onopen = () => { this.diag('ws open'); resolve(socket); };
       socket.onerror = () => reject(new Error(`Could not connect to signaling server at ${this.networkConfig.signalingServerUrl}`));
-      socket.onclose = () => this.rejectRoom(new Error('Signaling connection closed'));
+      socket.onclose = (event) => {
+        // The close code is the one thing only the client can see, and the whole
+        // question about the ~1.8s socket deaths: 1006 = network/proxy dropped
+        // it, 1001 = tab went away, 1000 = we closed it deliberately.
+        this.diag(`ws close code=${event.code} clean=${event.wasClean}${event.reason ? ` reason=${event.reason}` : ''}`);
+        this.flushDiagnostics('ws-close');
+        this.rejectRoom(new Error('Signaling connection closed'));
+      };
       socket.onmessage = (event) => {
         // Catch per message: a rejected queue skips the callback of every later
         // .then, so one failure would silently end all signaling for this client.
@@ -218,6 +231,17 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
   private setupPeer(peerId: string): PeerConnection {
     const peer = this.createPeerConnection(peerId);
     this.setupConnectionHandlers(peer);
+    // Trace the ICE outcome so the log shows whether the channel actually came
+    // up despite the socket dying (which is what the server fix should allow).
+    if (typeof peer.connection.addEventListener === 'function') {
+      peer.connection.addEventListener('iceconnectionstatechange', () => {
+        const state = peer.connection.iceConnectionState;
+        this.diag(`ice ${peerId} ${state}`);
+        if (state === 'failed' || state === 'connected' || state === 'completed') {
+          this.flushDiagnostics(`ice-${state}`);
+        }
+      });
+    }
     peer.connection.onicecandidate = (event) => {
       // Candidates can still trickle in after signaling is closed. There is
       // nowhere to send them and the connection they would improve is already
@@ -272,5 +296,47 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
       throw new Error('Signaling socket is not open');
     }
     this.socket.send(JSON.stringify(message));
+  }
+
+  private diag(message: string): void {
+    this.diagnostics.push(`${Date.now()} ${message}`);
+    if (this.diagnostics.length > 40) this.diagnostics.shift();
+  }
+
+  /** The signaling socket's HTTP sibling — ws(s):// becomes http(s)://…/log. */
+  private logUrl(): string | null {
+    try {
+      const url = new URL(this.networkConfig.signalingServerUrl);
+      url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
+      url.pathname = '/log';
+      url.search = '';
+      return url.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Best-effort diagnostic beacon over HTTP, so it survives the signaling socket
+   * closing and the page unloading. Never throws — a lost probe must not affect
+   * a session. Temporary: paired with the server's /log sink to learn why the
+   * signaling sockets die early.
+   */
+  private flushDiagnostics(trigger: string): void {
+    if (!this.diagnostics.length) return;
+    const url = this.logUrl();
+    if (!url) return;
+    const payload = JSON.stringify({
+      trigger, playerId: this.playerId, roomCode: this.roomCode, events: this.diagnostics
+    });
+    try {
+      if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+        navigator.sendBeacon(url, payload);
+      } else if (typeof fetch !== 'undefined') {
+        void fetch(url, { method: 'POST', body: payload, keepalive: true }).catch(() => undefined);
+      }
+    } catch {
+      // Diagnostics must never break a session.
+    }
   }
 }
