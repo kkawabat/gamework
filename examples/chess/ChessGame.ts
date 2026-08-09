@@ -12,9 +12,8 @@
 
 import QRCode from 'qrcode';
 import { Chess } from 'chess.js';
-import { GameWork, BaseGameState, GameAction, GameConfig } from '../../src';
+import { GameWork, BaseGameState, GameAction, GameConfig, EntityHandle, Role, Session } from '../../src';
 import { WebRTCNetworkEngine } from '../../src/engines/WebRTCNetworkEngine';
-import { NetworkMessage } from '../../src/types/GameTypes';
 import { createNetworkConfig, DATA_CHANNEL_CONFIG } from '../shared/network-config';
 
 export type ChessColor = 'w' | 'b';
@@ -215,11 +214,24 @@ export class ChessUI {
 }
 
 // Multiplayer Chess Game Factory
-export function createChessGame(playerId: string): GameWork<ChessState, ChessAction> {
+// One role, one channel: both players write moves and both read them. Nothing
+// is nondeterministic and nothing is hidden, so there is no authority and no
+// private channel — the plainest wiring the session layer allows.
+const PLAYER_ROLE: Role = { name: 'player', reads: ['move'], writes: ['move'] };
+
+export function createChessGame(playerId: string): { game: GameWork<ChessState, ChessAction>; ui: ChessUI; session: Session } {
   const engine = new ChessEngine();
   const ui = new ChessUI();
 
   const networkEngine = new WebRTCNetworkEngine(createNetworkConfig(), DATA_CHANNEL_CONFIG, playerId);
+
+  const session = new Session(networkEngine, {
+    mode: { connectivity: 'mesh', authority: 'replicated' },
+    deviceId: playerId,
+    roles: [PLAYER_ROLE],
+    entities: [{ role: 'player' }],
+    maxEntities: { player: 2 }
+  });
 
   const config: GameConfig<ChessState, ChessAction> = {
     initialState: engine.getInitialState(),
@@ -235,7 +247,7 @@ export function createChessGame(playerId: string): GameWork<ChessState, ChessAct
   game['container'].register('UIEngine', () => ui);
   game['container'].register('NetworkEngine', () => networkEngine);
 
-  return game;
+  return { game, ui, session };
 }
 
 type ViewId = 'homeView' | 'inviteView' | 'joinView' | 'gameView';
@@ -244,13 +256,15 @@ const ALL_VIEWS: ViewId[] = ['homeView', 'inviteView', 'joinView', 'gameView'];
 // Multiplayer Chess Game Manager
 class MultiplayerChessManager {
   private game: GameWork<ChessState, ChessAction> | null = null;
-  private networkEngine: WebRTCNetworkEngine | null = null;
+  private session: Session | null = null;
   private ui: ChessUI | null = null;
   private playerId: string;
   private localColor: ChessColor | null = null;
   private lastState: ChessState;
   private selectedSquare: string | null = null;
   private roomRequestInFlight: boolean = false;
+  private playing: boolean = false;
+  private me: EntityHandle | null = null;
 
   constructor() {
     this.playerId = this.generatePlayerId();
@@ -259,11 +273,12 @@ class MultiplayerChessManager {
 
   async initialize(): Promise<void> {
     try {
-      this.game = createChessGame(this.playerId);
-      this.networkEngine = this.game['container'].resolve('NetworkEngine') as WebRTCNetworkEngine;
-      this.ui = this.game['container'].resolve('UIEngine') as ChessUI;
+      const parts = createChessGame(this.playerId);
+      this.game = parts.game;
+      this.ui = parts.ui;
+      this.session = parts.session;
 
-      await this.networkEngine.initialize();
+      await this.session.initialize();
       await this.game.initialize();
 
       this.setupEventHandlers();
@@ -284,12 +299,11 @@ class MultiplayerChessManager {
   }
 
   private async createRoom(): Promise<void> {
-    if (!this.networkEngine || this.roomRequestInFlight) return;
+    if (!this.session || this.roomRequestInFlight) return;
 
     this.roomRequestInFlight = true;
     try {
-      const roomCode = await this.networkEngine.createRoom();
-      this.setLocalColor('w');
+      const roomCode = await this.session.host();
       this.showMessage(null);
       this.showRoomInvite(roomCode);
       await this.generateQRCode(roomCode);
@@ -303,13 +317,13 @@ class MultiplayerChessManager {
   }
 
   private async joinRoom(roomCode: string): Promise<void> {
-    if (!this.networkEngine || this.roomRequestInFlight) return;
+    if (!this.session || this.roomRequestInFlight) return;
 
     this.roomRequestInFlight = true;
     try {
-      await this.networkEngine.joinRoom(roomCode);
-      this.setLocalColor('b');
-      this.showMessage(null);
+      await this.session.join(roomCode);
+      // The colour arrives with the seating, once the host has seated us.
+      this.showMessage('Connecting…');
       this.startGame();
     } catch (error) {
       console.error('Failed to join room:', error);
@@ -331,35 +345,53 @@ class MultiplayerChessManager {
   }
 
   private setupEventHandlers(): void {
-    if (!this.game || !this.networkEngine) return;
+    if (!this.game || !this.session) return;
 
     this.game.on('game:stateChanged', (state) => {
-      this.lastState = state;
+      this.lastState = state as ChessState;
       this.clearSelection();
-      this.ui?.render(state);
+      this.ui?.render(this.lastState);
     });
 
-    this.networkEngine.onMessage((peerId, message) => {
-      this.handleNetworkMessage(peerId, message);
+    // Bind once the registry lands — a joiner does not know its own entity id
+    // before the host has assigned it. Admission order is the side: whoever
+    // joined first takes the opening move.
+    this.session.onRegistry(() => {
+      const mine = this.session!.localEntityOfRole('player');
+      const players = this.session!.entitiesOfRole('player');
+      if (mine && !this.me) {
+        this.me = this.session!.actAs(mine.entityId);
+        // Both players read 'move', this device included, so a move reaches the
+        // engine by exactly one path no matter who made it.
+        this.me.on('move', (payload) => this.game?.dispatchAction(payload as ChessAction));
+        const index = players.findIndex((entity) => entity.entityId === mine.entityId);
+        this.setLocalColor(index === 0 ? 'w' : 'b');
+      }
+      if (players.length === 2) this.beginPlay();
     });
 
-    this.networkEngine.onPeerJoined(() => {
+    this.session.onPeerJoined(() => {
       this.showMessage('Player joined, connecting…');
     });
 
-    this.networkEngine.onPeerConnected(() => {
-      this.showMessage(null);
-      // Both players are connected and this game takes no others, so the
-      // signaling server is done; the rest runs peer-to-peer.
-      this.networkEngine?.closeSignaling();
-      this.startGame();
-    });
-
-    this.networkEngine.onPeerFailed(() => {
+    this.session.onPeerFailed(() => {
       this.showMessage('Could not connect to the other player. If you are both on mobile data, try Wi-Fi.');
     });
 
     this.setupUIEventHandlers();
+  }
+
+  /**
+   * Both seats are filled, which is only knowable once the data channel carried
+   * the seating across. This game takes no further players, so lock the table —
+   * under mesh that drops signaling on both devices and the rest is peer-to-peer.
+   */
+  private beginPlay(): void {
+    if (this.playing) return;
+    this.playing = true;
+    this.showMessage(null);
+    this.session?.lock();
+    this.startGame();
   }
 
   private setupUIEventHandlers(): void {
@@ -400,12 +432,8 @@ class MultiplayerChessManager {
   }
 
   private handleSquareClick(square: string): void {
-    if (!this.game || !this.networkEngine || !this.localColor) return;
+    if (!this.session || !this.playing || !this.localColor) return;
     if (this.lastState.gameOver || this.lastState.turn !== this.localColor) return;
-
-    const hasOpponent = this.networkEngine.getConnections()
-      .some(peerId => this.networkEngine!.isConnected(peerId));
-    if (!hasOpponent) return;
 
     const chess = new Chess(this.lastState.fen);
 
@@ -436,55 +464,21 @@ class MultiplayerChessManager {
   }
 
   private makeMove(from: string, to: string): void {
-    if (!this.game) return;
-
-    const action: ChessAction = {
+    this.me?.write('move', {
       type: 'MOVE',
       playerId: this.playerId,
       timestamp: Date.now(),
       payload: { from, to, promotion: 'q' }
-    };
-
-    this.game.dispatchAction(action);
-    this.broadcastAction(action);
+    });
   }
 
   private restartGame(): void {
-    if (!this.game) return;
-
-    const action: ChessAction = {
+    this.me?.write('move', {
       type: 'RESTART',
       playerId: this.playerId,
       timestamp: Date.now(),
       payload: {}
-    };
-
-    this.game.dispatchAction(action);
-    this.broadcastAction(action);
-  }
-
-  private broadcastAction(action: ChessAction): void {
-    if (!this.networkEngine) return;
-
-    const networkMessage: NetworkMessage = {
-      type: 'GAME_ACTION',
-      from: this.playerId,
-      to: 'all',
-      payload: action,
-      timestamp: Date.now()
-    };
-
-    this.networkEngine.broadcast(networkMessage);
-  }
-
-  private handleNetworkMessage(peerId: string, message: NetworkMessage): void {
-    if (message.type === 'GAME_ACTION' && message.payload) {
-      const action = message.payload as ChessAction;
-
-      if (action.playerId !== this.playerId) {
-        this.game?.dispatchAction(action);
-      }
-    }
+    });
   }
 
   private generatePlayerId(): string {

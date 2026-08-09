@@ -23,7 +23,9 @@ export default defineConfig(({ mode }) => {
           'tic-tac-toe': 'examples/tic-tac-toe/tic-tac-toe.html',
           'connect-four': 'examples/connect-four/connect-four.html',
           chess: 'examples/chess/chess.html',
-          poker: 'examples/poker/poker.html'
+          poker: 'examples/poker/poker.html',
+          'odd-one-out': 'examples/odd-one-out/odd-one-out.html',
+          pong: 'examples/pong/pong.html'
         },
         output: {
           // Keep modules separate for better caching

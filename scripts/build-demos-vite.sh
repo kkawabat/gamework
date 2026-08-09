@@ -30,13 +30,18 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Move the built HTML files to the correct locations
+# Move the built HTML files to the correct locations. The page list is derived
+# from what Vite actually built rather than hardcoded: the `rm -rf` below used
+# to delete any demo missing from a hardcoded list, silently and successfully.
 echo "📝 Moving HTML files to correct locations..."
 mv "$PROJECT_ROOT/demo-build/examples/index.html" "$PROJECT_ROOT/demo-build/index.html"
-GAME_PAGES="tic-tac-toe connect-four chess poker"
-for page in $GAME_PAGES; do
-    mv "$PROJECT_ROOT/demo-build/examples/$page/$page.html" "$PROJECT_ROOT/demo-build/$page.html"
+GAME_PAGES=""
+for html in "$PROJECT_ROOT"/demo-build/examples/*/*.html; do
+    page=$(basename "$html" .html)
+    mv "$html" "$PROJECT_ROOT/demo-build/$page.html"
+    GAME_PAGES="$GAME_PAGES $page"
 done
+echo "   pages:$GAME_PAGES"
 
 # Remove the empty examples directory structure
 rm -rf "$PROJECT_ROOT/demo-build/examples"

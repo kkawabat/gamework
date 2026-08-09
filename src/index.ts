@@ -21,6 +21,11 @@ export {
   createStateError
 } from './core/ErrorHandler';
 
+// Session exports — devices, entities, roles and channels
+export { Session, SessionTransport, EntityHandle } from './session/Session';
+export { SELF, resolveChannel, channelMatches, anyMatches } from './session/channels';
+export * from './session/SessionTypes';
+
 // Engine exports
 export { GameEngine } from './engines/GameEngine';
 export { UIEngine } from './engines/UIEngine';

@@ -1,13 +1,17 @@
 # GameWork
 
-TypeScript framework for peer-to-peer browser board games, plus the demos at
+TypeScript framework for multiplayer browser board games, plus the demos at
 games.kankawabata.com/gamework/. Games run entirely between players' browsers
-over WebRTC data channels — there is no game server, no authoritative state, and
-no game logic anywhere but the players' devices.
+over WebRTC data channels — there is no game server and no game logic anywhere
+but the players' devices. State may be replicated across every device or held by
+one of them, but that node is always another browser, never something we run.
 
 ## Architecture
 
 - **Framework:** TypeScript, no runtime framework; bundled per-demo by Vite
+- **Session layer:** `src/session/` — devices hold entities, entities have roles,
+  roles are channel read/write permissions. Read `docs/session-modes.md` before
+  adding a game or changing how one is wired; a seat is not a primitive here
 - **Transport:** WebRTC data channels (`src/engines/WebRTCNetworkEngine.ts`)
 - **Signaling:** Node + `ws` on Cloud Run (`server/server.ts`), scaled to zero
 - **TURN relay:** coturn on a GCE e2-micro (`infra/turn.tf`)
@@ -27,13 +31,19 @@ production. Three separate things are often collapsed into "the server":
 | TURN | the whole session, if used | no direct path exists | our coturn VM |
 
 **Signaling only introduces peers.** It relays offers, answers and ICE
-candidates, and nothing else — game messages never touch it. Once every data
-channel is open it has no remaining job, so clients call
-`WebRTCNetworkEngine.closeSignaling()` (poker at `beginMatch`, the two-player
-games when their peer connects). This is deliberate and is a one-way door: no
-peer can be dialled or re-dialled afterwards, and nobody can rejoin. Acceptable
-only because no demo attempts an ICE restart or reconnect anyway. If mid-game
-recovery is ever wanted, this is the decision to revisit first.
+candidates, and nothing else — game messages never touch it. Once seating is
+settled it has no remaining job, so games call `Session.lock()` (poker at
+`beginMatch`, the two-player games once the second seat is filled), which drops
+the socket via `WebRTCNetworkEngine.closeSignaling()`. This is deliberate and is
+a one-way door: no peer can be dialled or re-dialled afterwards, and nobody can
+rejoin. Acceptable only because no demo attempts an ICE restart or reconnect
+anyway. If mid-game recovery is ever wanted, this is the decision to revisit
+first.
+
+The one exception is the hub of a `star` session, which keeps its socket open —
+it is the only node a late joiner could be introduced to. That is the foundation
+for late join, but not late join itself: nothing re-seats a device that arrives
+after `lock()`.
 
 **A bare socket close is silent; only `LEAVE_ROOM` announces a departure.**
 Because dropping signaling after connecting is normal and deliberate (above),
@@ -50,6 +60,13 @@ observe.
 **Only the joiner dials.** On `ROOM_JOINED` the joiner offers to every existing
 peer. `PEER_JOINED` tells the members already in the room, but is informational
 only — offering back from it would have both sides offering at once.
+
+**Who the joiner dials depends on the connectivity.** `ROOM_JOINED` carries
+`hostId`, the room's creator, which the server never reassigns. Under `mesh`
+(every demo today) the joiner dials every peer and uses `hostId` only to address
+session control messages. Under `star` it dials the hub and nothing else — which
+is what bounds TURN exposure to hub↔spoke pairs, and what makes the hub a single
+point of failure. See `docs/session-modes.md`.
 
 **STUN is not a fallback for TURN.** STUN answers "what does my address look
 like from outside", then leaves; data never flows through it. TURN is a relay
@@ -184,6 +201,9 @@ A WebSocket appears there as a single `GET 101` whose latency is the connection'
 whole lifetime, not a short request.
 
 ## Known gaps
+
+Reconnect, late join and host migration are specified in `docs/TODO.md`, in the
+order they should be taken and with the open design question each one carries.
 
 - No reconnect and no ICE restart. A dropped peer is gone for the session.
 - No `turns:` (TLS) relay. Fine for cellular; a network blocking both UDP and

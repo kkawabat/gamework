@@ -6,6 +6,8 @@ import { ClientToServer, ServerToClient, IceServerConfig } from '../shared/signa
 
 interface Room {
   code: string;
+  /** The creator. Never reassigned: a star room has no meaning without its hub. */
+  hostId: string;
   members: Map<string, WebSocket>;
 }
 
@@ -100,7 +102,7 @@ export class SignalingServer {
     switch (message.type) {
       case 'CREATE_ROOM': {
         const code = this.newRoomCode();
-        const room: Room = { code, members: new Map([[message.playerId, ws]]) };
+        const room: Room = { code, hostId: message.playerId, members: new Map([[message.playerId, ws]]) };
         this.rooms.set(code, room);
         this.clients.set(ws, { playerId: message.playerId, room });
         this.send(ws, { type: 'ROOM_CREATED', roomCode: code, iceServers: this.iceServers(message.playerId) });
@@ -113,7 +115,10 @@ export class SignalingServer {
         const peers = [...room.members.keys()];
         room.members.set(message.playerId, ws);
         this.clients.set(ws, { playerId: message.playerId, room });
-        this.send(ws, { type: 'ROOM_JOINED', roomCode: room.code, peers, iceServers: this.iceServers(message.playerId) });
+        this.send(ws, {
+          type: 'ROOM_JOINED', roomCode: room.code, peers, hostId: room.hostId,
+          iceServers: this.iceServers(message.playerId)
+        });
         for (const peerId of peers) {
           this.send(room.members.get(peerId)!, { type: 'PEER_JOINED', peerId: message.playerId });
         }

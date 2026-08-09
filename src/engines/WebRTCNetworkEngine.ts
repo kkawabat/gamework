@@ -5,6 +5,14 @@ import { ClientToServer, ServerToClient, SignalData, IceServerConfig } from '../
 
 export interface WebRTCNetworkEngineConfig extends NetworkConfig {
   signalingServerUrl: string;
+  /**
+   * Who a joiner dials when it lands in a room. `all` is the mesh: every peer
+   * gets a data channel, which is what the two-player demos and poker use.
+   * `host` is the star: only the room creator is dialed, so the fan-out is N
+   * connections instead of N²/2 and only hub↔spoke pairs can consume TURN.
+   * Defaults to `all` — the behaviour every existing demo already relies on.
+   */
+  dialPolicy?: 'all' | 'host';
 }
 
 export class WebRTCNetworkEngine extends BaseNetworkEngine {
@@ -12,6 +20,7 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
   private playerId: string;
   private socket: WebSocket | null = null;
   private roomCode: string = '';
+  private hostId: string | null = null;
   private pendingRoom: { resolve: (code: string) => void; reject: (error: Error) => void } | null = null;
   private messageQueue: Promise<void> = Promise.resolve();
   private pendingCandidates = new Map<string, RTCIceCandidateInit[]>();
@@ -48,6 +57,15 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
 
   getRoomCode(): string {
     return this.roomCode;
+  }
+
+  /**
+   * The room's creator, once a room reply has landed. Session control messages
+   * (hello, seating, arbitration requests) are addressed to it, so it matters
+   * under `all` dialing too — not just when it is the only peer we dial.
+   */
+  getHostId(): string | null {
+    return this.hostId;
   }
 
   async connect(peerId: string): Promise<void> {
@@ -133,17 +151,19 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
     switch (message.type) {
       case 'ROOM_CREATED':
         this.roomCode = message.roomCode;
+        this.hostId = this.playerId; // creating the room is what makes us the host
         this.applyIceServers(message.iceServers);
         this.resolveRoom(message.roomCode);
         break;
       case 'ROOM_JOINED':
         this.roomCode = message.roomCode;
+        this.hostId = message.hostId;
         // Must land before connect() below builds the first peer connection.
         this.applyIceServers(message.iceServers);
         // Resolve before dialing peers: a peer-connection failure must not leave the
         // room request pending forever (it blocks every later create/join).
         this.resolveRoom(message.roomCode);
-        for (const peerId of message.peers) {
+        for (const peerId of this.peersToDial(message.peers, message.hostId)) {
           try {
             await this.connect(peerId);
           } catch (error) {
@@ -171,6 +191,17 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
         break;
       }
     }
+  }
+
+  /**
+   * Star dials the hub and nobody else. If the hub is somehow absent from the
+   * peer list the room is unusable, so dialing the rest would only produce a
+   * half-connected session that looks alive — better to dial nothing and let
+   * the caller's connect timeout report it.
+   */
+  private peersToDial(peers: string[], hostId: string): string[] {
+    if (this.networkConfig.dialPolicy !== 'host') return peers;
+    return peers.includes(hostId) ? [hostId] : [];
   }
 
   private async handleSignal(from: string, data: SignalData): Promise<void> {

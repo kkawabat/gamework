@@ -19,17 +19,23 @@
  *    trade-off for a friendly peer-to-peer demo; a trustless game would need a
  *    mental-poker / commitment scheme, which is out of scope.
  *
- * Seats are assigned by the host: it keeps the join order and, on Start,
- * broadcasts a roster (seat -> playerId) alongside the shuffle seed so every
- * peer agrees on the seating. Only the host authors hand-progression actions
- * (DEAL / NEW_MATCH); other players ask the host to advance via a sentinel
- * request so the seed has a single source of truth.
+ * Both of those make this an **arbitrated** session (mesh connectivity — see
+ * docs/session-modes.md): every peer still runs the reducer, but one node is
+ * the sole source of what replay cannot derive.
+ *
+ * The host device carries two entities. `dealer` is the referee: it alone reads
+ * the `request` channel and alone authors the seed-carrying DEAL / NEW_MATCH.
+ * `player` is its seat at the table, with exactly the permissions every other
+ * player has. Sharing a browser tab grants that player nothing — a player
+ * cannot write a deal, and asks for one on `request` like anybody else.
+ *
+ * Moving to an `authoritative` session is what would make the hole cards
+ * genuinely secret, since only the dealer would ever compute them.
  */
 
 import QRCode from 'qrcode';
-import { GameWork, BaseGameState, GameAction, GameConfig } from '../../src';
+import { GameWork, BaseGameState, GameAction, GameConfig, EntityHandle, Role, Session } from '../../src';
 import { WebRTCNetworkEngine } from '../../src/engines/WebRTCNetworkEngine';
-import { NetworkMessage } from '../../src/types/GameTypes';
 import { createNetworkConfig, DATA_CHANNEL_CONFIG } from '../shared/network-config';
 
 // --- Table constants -------------------------------------------------------
@@ -876,7 +882,15 @@ export class PokerUI {
 
 // --- Game factory ----------------------------------------------------------
 
-export function createPokerGame(playerId: string): { game: GameWork<PokerState, PokerAction>; ui: PokerUI; network: WebRTCNetworkEngine } {
+/**
+ * Every player writes moves and reads them; only the dealer reads `request`,
+ * which is what makes "ask the dealer to advance the hand" a routing fact
+ * rather than a convention each client has to honour.
+ */
+const PLAYER_ROLE: Role = { name: 'player', reads: ['move'], writes: ['move', 'request'] };
+const DEALER_ROLE: Role = { name: 'dealer', reads: ['request'], writes: ['move'] };
+
+export function createPokerGame(playerId: string, isDealer: boolean): { game: GameWork<PokerState, PokerAction>; ui: PokerUI; session: Session } {
   const engine = new PokerEngine();
   const ui = new PokerUI();
 
@@ -890,12 +904,22 @@ export function createPokerGame(playerId: string): { game: GameWork<PokerState, 
     debugMode: true
   };
 
+  // Mesh so losing the host does not disconnect the remaining players from each
+  // other; arbitrated because the deck needs a seed, which replay cannot derive.
+  const session = new Session(network, {
+    mode: { connectivity: 'mesh', authority: 'arbitrated' },
+    deviceId: playerId,
+    roles: [PLAYER_ROLE, DEALER_ROLE],
+    entities: isDealer ? [{ role: 'dealer' }, { role: 'player' }] : [{ role: 'player' }],
+    maxEntities: { dealer: 1, player: MAX_PLAYERS }
+  });
+
   const game = new GameWork(config);
   game['container'].register('GameEngine', () => engine);
   game['container'].register('UIEngine', () => ui);
   game['container'].register('NetworkEngine', () => network);
 
-  return { game, ui, network };
+  return { game, ui, session };
 }
 
 // --- Manager (lobby + turn routing) ---------------------------------------
@@ -903,20 +927,20 @@ export function createPokerGame(playerId: string): { game: GameWork<PokerState, 
 type ViewId = 'homeView' | 'inviteView' | 'joinView' | 'waitView' | 'gameView';
 const ALL_VIEWS: ViewId[] = ['homeView', 'inviteView', 'joinView', 'waitView', 'gameView'];
 
-// Lobby / control messages ride alongside game actions but are handled by the
-// manager rather than dispatched to the engine.
-interface LobbyMessage { type: 'LOBBY'; roster: string[]; started: boolean; }
-interface RosterMessage { type: 'START'; roster: string[]; seed: number; }
+// Control inputs that ride through the session alongside game actions but are
+// handled by the manager rather than dispatched to the engine. The roster is
+// gone: seating is the session's, not a message this game has to agree on.
+interface StartMessage { type: 'START'; seed: number; }
 interface RequestMessage { type: 'REQUEST_DEAL' | 'REQUEST_NEW_MATCH'; }
 
 class MultiplayerPokerManager {
   private game: GameWork<PokerState, PokerAction> | null = null;
-  private networkEngine: WebRTCNetworkEngine | null = null;
+  private session: Session | null = null;
   private ui: PokerUI | null = null;
   private playerId: string;
-  private isHost = false;
   private localSeat = 0;
-  private roster: string[] = [];   // seat -> playerId (agreed by all peers)
+  private me: EntityHandle | null = null;
+  private dealer: EntityHandle | null = null;
   private connecting = new Set<string>();  // joined the room, data channel not open yet — not seatable
   private started = false;
   private lastState: PokerState;
@@ -930,34 +954,31 @@ class MultiplayerPokerManager {
 
   async initialize(): Promise<void> {
     try {
-      const built = createPokerGame(this.playerId);
+      // Whether this device brings a dealer entity is decided before the
+      // session exists: a room code in the URL means we are joining someone
+      // else's table, and every table has exactly one dealer.
+      const joining = new URLSearchParams(window.location.search).get('room');
+      const built = createPokerGame(this.playerId, !joining);
       this.game = built.game;
       this.ui = built.ui;
-      this.networkEngine = built.network;
+      this.session = built.session;
 
-      await this.networkEngine.initialize();
+      await this.session.initialize();
       await this.game.initialize();
 
       this.setupEventHandlers();
-      this.handleURLParameters();
+      if (joining && joining.length === 6) this.joinRoom(joining.toUpperCase());
     } catch (error) {
       console.error('Failed to initialize game:', error);
       this.showMessage(`Could not connect: ${(error as Error).message}`);
     }
   }
 
-  private handleURLParameters(): void {
-    const roomCode = new URLSearchParams(window.location.search).get('room');
-    if (roomCode && roomCode.length === 6) this.joinRoom(roomCode.toUpperCase());
-  }
-
   private async createRoom(): Promise<void> {
-    if (!this.networkEngine || this.roomRequestInFlight) return;
+    if (!this.session || this.roomRequestInFlight) return;
     this.roomRequestInFlight = true;
     try {
-      const roomCode = await this.networkEngine.createRoom();
-      this.isHost = true;
-      this.roster = [this.playerId]; // host takes seat 0
+      const roomCode = await this.session.host(); // brings the dealer and seat 0
       this.showMessage(null);
       this.showRoomInvite(roomCode);
       await this.generateQRCode(roomCode);
@@ -972,11 +993,10 @@ class MultiplayerPokerManager {
   }
 
   private async joinRoom(roomCode: string): Promise<void> {
-    if (!this.networkEngine || this.roomRequestInFlight) return;
+    if (!this.session || this.roomRequestInFlight) return;
     this.roomRequestInFlight = true;
     try {
-      await this.networkEngine.joinRoom(roomCode);
-      this.isHost = false;
+      await this.session.join(roomCode);
       this.showMessage(null);
       this.showView('waitView');
       this.renderLobby();
@@ -990,37 +1010,36 @@ class MultiplayerPokerManager {
   }
 
   private setupEventHandlers(): void {
-    if (!this.game || !this.networkEngine) return;
+    if (!this.game || !this.session) return;
 
     this.game.on('game:stateChanged', (state) => {
       this.lastState = state as PokerState;
       this.ui?.render(this.lastState);
     });
 
-    this.networkEngine.onMessage((peerId, message) => this.handleNetworkMessage(peerId, message));
+    this.session.onRegistry(() => {
+      this.bindEntities();
+      this.renderLobby();
+    });
 
     // Show the player the moment the server sees them. They can't take a seat
     // until their data channel opens — they could not be dealt to otherwise.
-    this.networkEngine.onPeerJoined((peerId) => {
-      if (this.isHost && !this.started) {
+    this.session.onPeerJoined((peerId) => {
+      if (this.dealer && !this.started) {
         this.connecting.add(peerId);
         this.renderLobby();
       }
     });
 
-    this.networkEngine.onPeerConnected((peerId) => {
+    this.session.onPeerConnected((peerId) => {
       this.connecting.delete(peerId);
-      if (this.isHost && !this.started && !this.roster.includes(peerId)) {
-        if (this.roster.length < MAX_PLAYERS) this.roster.push(peerId);
-        this.broadcastLobby();
-        this.renderLobby();
-      }
+      this.renderLobby();
     });
 
-    this.networkEngine.onPeerFailed((peerId) => {
+    this.session.onPeerFailed((peerId) => {
       if (!this.awaitingLobbyConnection(peerId)) return;
       this.connecting.delete(peerId);
-      const problem = this.isHost ? 'A player could not connect' : 'Could not connect to the host';
+      const problem = this.dealer ? 'A player could not connect' : 'Could not connect to the host';
       this.showMessage(`${problem}. If you are both on mobile data, try Wi-Fi.`);
       this.renderLobby();
     });
@@ -1059,59 +1078,72 @@ class MultiplayerPokerManager {
 
   private awaitingLobbyConnection(peerId: string): boolean {
     if (this.started) return false;
-    if (!this.isHost) return true;  // a joiner is only ever connecting to the host
+    if (!this.dealer) return true;  // a joiner is only ever connecting to the host
     return this.connecting.has(peerId);
   }
 
-  // --- Host: seating & dealing ---------------------------------------------
-
-  private hostStart(): void {
-    if (!this.isHost || this.started) return;
-    if (this.roster.length < MIN_PLAYERS) return;
-
-    this.started = true;
-    const seed = this.nextSeed();
-    this.beginMatch(this.roster.slice(), seed);
-    this.send<RosterMessage>({ type: 'START', roster: this.roster.slice(), seed });
-    this.broadcastLobby();
+  private get seatCount(): number {
+    return this.session?.entitiesOfRole('player').length ?? 0;
   }
 
-  private beginMatch(roster: string[], seed: number): void {
-    if (!this.game) return;
-    this.roster = roster;
+  /**
+   * Bind whichever entities this device turned out to hold. Waits for the
+   * registry: a joiner does not know its own entity id until the dealer has
+   * admitted it, and the dealer only exists on the device that created the room.
+   */
+  private bindEntities(): void {
+    if (!this.session || this.me) return;
+    const mine = this.session.localEntityOfRole('player');
+    if (!mine) return;
+
+    this.me = this.session.actAs(mine.entityId);
+    this.me.on('move', (payload) => this.handleInput(payload));
+
+    const dealerEntity = this.session.localEntityOfRole('dealer');
+    if (!dealerEntity) return;
+    this.dealer = this.session.actAs(dealerEntity.entityId);
+    this.dealer.on('request', (payload) => {
+      const request = payload as RequestMessage;
+      this.hostDeal(request.type === 'REQUEST_NEW_MATCH');
+    });
+  }
+
+  // --- Arbitration: seating & dealing ---------------------------------------
+
+  private hostStart(): void {
+    if (!this.dealer || this.started) return;
+    if (this.seatCount < MIN_PLAYERS) return;
+    // START goes on the shared `move` channel, so the dealer's own device runs
+    // beginMatch through the same handler as everyone else.
+    this.dealer.write('move', { type: 'START', seed: this.nextSeed() } as StartMessage);
+  }
+
+  private beginMatch(seed: number): void {
+    if (!this.game || !this.session) return;
     this.started = true;
-    // The roster is locked and every seat's data channel is open, so the
-    // signaling server has nothing left to do for this game.
-    this.networkEngine?.closeSignaling();
-    this.localSeat = roster.indexOf(this.playerId); // -1 => spectator
-    const names = roster.map((_, seat) => `Player ${seat + 1}`);
+    // Seating is settled and every seat's data channel is open, so the signaling
+    // server has nothing left to do; under mesh lock() drops it on every device.
+    this.session.lock();
+    const players = this.session.entitiesOfRole('player');
+    this.localSeat = players.findIndex((entity) => entity.entityId === this.me?.id); // -1 => spectator
+    const names = players.map((_, seat) => `Player ${seat + 1}`);
     this.ui?.setSeating(this.localSeat, names);
 
     this.showView('gameView');
-    const action: PokerAction = {
+    this.game.dispatchAction({
       type: 'NEW_MATCH', playerId: this.playerId, timestamp: Date.now(),
-      payload: { seed, numPlayers: roster.length }
-    };
-    this.game.dispatchAction(action);
+      payload: { seed, numPlayers: this.seatCount }
+    } as PokerAction);
   }
 
+  /** Only the dealer entity may write these: the seed needs one source of truth. */
   private hostDeal(newMatch: boolean): void {
-    if (!this.game || !this.isHost) return;
+    if (!this.dealer) return;
     const seed = this.nextSeed();
-    if (newMatch) {
-      const action: PokerAction = {
-        type: 'NEW_MATCH', playerId: this.playerId, timestamp: Date.now(),
-        payload: { seed, numPlayers: this.roster.length }
-      };
-      this.game.dispatchAction(action);
-      this.send<RosterMessage>({ type: 'START', roster: this.roster.slice(), seed });
-    } else {
-      const action: PokerAction = {
-        type: 'DEAL', playerId: this.playerId, timestamp: Date.now(), payload: { seed }
-      };
-      this.game.dispatchAction(action);
-      this.broadcast(action);
-    }
+    if (newMatch) this.dealer.write('move', { type: 'START', seed } as StartMessage);
+    else this.dealer.write('move', {
+      type: 'DEAL', playerId: this.playerId, timestamp: Date.now(), payload: { seed }
+    } as PokerAction);
   }
 
   private nextSeed(): number {
@@ -1122,77 +1154,46 @@ class MultiplayerPokerManager {
   // --- Player actions -------------------------------------------------------
 
   private sendBet(type: PokerActionType, amount?: number): void {
-    if (!this.game || this.localSeat < 0) return;
+    if (!this.me || this.localSeat < 0) return;
     if (this.lastState.toAct !== this.localSeat || this.lastState.handOver) return;
 
-    const action: PokerAction = {
+    this.me.write('move', {
       type, playerId: this.playerId, timestamp: Date.now(),
       payload: { seat: this.localSeat, ...(amount !== undefined ? { amount } : {}) }
-    };
-    this.game.dispatchAction(action);
-    this.broadcast(action);
+    } as PokerAction);
   }
 
+  /**
+   * Advancing the hand needs a fresh seed, so only the dealer may author it.
+   * Every player writes the same request — the dealer is simply the only role
+   * that reads the channel, so there is no host/joiner branch here.
+   */
   private requestDeal(newMatch: boolean): void {
-    if (this.isHost) this.hostDeal(newMatch);
-    else this.send<RequestMessage>({ type: newMatch ? 'REQUEST_NEW_MATCH' : 'REQUEST_DEAL' });
+    this.me?.write('request', { type: newMatch ? 'REQUEST_NEW_MATCH' : 'REQUEST_DEAL' } as RequestMessage);
   }
 
   // --- Networking -----------------------------------------------------------
 
-  private broadcast(action: PokerAction): void {
-    this.send(action);
-  }
-
-  private send<T extends object>(payload: T): void {
-    if (!this.networkEngine) return;
-    this.networkEngine.broadcast({
-      type: 'GAME_ACTION', from: this.playerId, to: 'all',
-      payload, timestamp: Date.now()
-    });
-  }
-
-  private broadcastLobby(): void {
-    if (!this.isHost) return;
-    this.send<LobbyMessage>({ type: 'LOBBY', roster: this.roster.slice(), started: this.started });
-  }
-
-  private handleNetworkMessage(_peerId: string, message: NetworkMessage): void {
-    if (message.type !== 'GAME_ACTION' || !message.payload) return;
-    const payload = message.payload as { type?: string } & Record<string, unknown>;
-
-    switch (payload.type) {
-      case 'LOBBY': {
-        const lobby = payload as unknown as LobbyMessage;
-        if (!this.isHost) { this.roster = lobby.roster; this.renderLobby(); }
-        return;
-      }
-      case 'START': {
-        const start = payload as unknown as RosterMessage;
-        if (!this.isHost) this.beginMatch(start.roster, start.seed);
-        return;
-      }
-      case 'REQUEST_DEAL':
-        if (this.isHost) this.hostDeal(false);
-        return;
-      case 'REQUEST_NEW_MATCH':
-        if (this.isHost) this.hostDeal(true);
-        return;
-      default: {
-        const action = payload as unknown as PokerAction;
-        if (action.playerId === this.playerId) return;
-        this.game?.dispatchAction(action);
-      }
+  /**
+   * Every move arrives here exactly once, this device's own included: the writer
+   * reads `move` too, so there is no "skip my own action" case.
+   */
+  private handleInput(input: unknown): void {
+    const payload = input as { type?: string } & Record<string, unknown>;
+    if (payload.type === 'START') {
+      this.beginMatch((payload as unknown as StartMessage).seed);
+      return;
     }
+    this.game?.dispatchAction(payload as unknown as PokerAction);
   }
 
   // --- Views ----------------------------------------------------------------
 
   private renderLobby(): void {
-    const roster = this.roster.length ? this.roster : [this.playerId];
-    const count = roster.length;
-    const seatedHTML = roster.map((id, i) => {
-      const you = id === this.playerId ? ' (you)' : '';
+    const seats = this.session?.entitiesOfRole('player') ?? [];
+    const count = Math.max(seats.length, 1);
+    const seatedHTML = (seats.length ? seats : [null]).map((seat, i) => {
+      const you = seat && seat.entityId === this.me?.id ? ' (you)' : '';
       const host = i === 0 ? ' — host' : '';
       return `<li>Player ${i + 1}${you}${host}</li>`;
     }).join('');
@@ -1208,11 +1209,11 @@ class MultiplayerPokerManager {
 
     const startBtn = document.getElementById('startBtn') as HTMLButtonElement | null;
     if (startBtn) {
-      startBtn.hidden = !this.isHost;
-      startBtn.disabled = this.roster.length < MIN_PLAYERS;
-      startBtn.textContent = this.roster.length < MIN_PLAYERS
+      startBtn.hidden = !this.dealer;
+      startBtn.disabled = this.seatCount < MIN_PLAYERS;
+      startBtn.textContent = this.seatCount < MIN_PLAYERS
         ? 'Waiting for players…'
-        : `Start Game (${this.roster.length})`;
+        : `Start Game (${this.seatCount})`;
     }
   }
 

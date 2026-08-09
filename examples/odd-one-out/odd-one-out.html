@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GameWork Odd One Out - Shared screen + phones</title>
+    <link rel="icon" type="image/x-icon" href="../../favicon.ico">
+    <link rel="stylesheet" href="../gamework.css">
+    <style>
+        #secretCard {
+            font-size: 2rem;
+            font-weight: 600;
+            padding: 2rem 1rem;
+            margin: 1.5rem 0;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.08);
+            text-align: center;
+        }
+        #secretCard.odd { background: rgba(220, 80, 80, 0.18); }
+        #voteList, #tablePlayers { list-style: none; padding: 0; }
+        #voteList li, #tablePlayers li { margin: 0.4rem 0; }
+        #voteList button { width: 100%; }
+    </style>
+</head>
+<body>
+    <a class="back-link" href="../index.html" title="Back to GameWork demos">←</a>
+
+    <div class="container">
+        <h1>🕵️ Odd One Out</h1>
+
+        <div id="homeView">
+            <p class="muted">Connecting…</p>
+        </div>
+
+        <!-- The PC: shared screen + referee. Shows nothing secret, ever. -->
+        <div id="tableView" hidden>
+            <div class="qr-code" id="qrCodeContainer"></div>
+            <div class="room-code" id="roomCode"></div>
+            <p class="muted">Scan to join as a player.</p>
+
+            <ul id="tablePlayers"></ul>
+            <p id="tableStatus"></p>
+            <button id="startRoundBtn" disabled>Waiting…</button>
+        </div>
+
+        <!-- A phone: one player. Sees its own word and nobody else's. -->
+        <div id="playerView" hidden>
+            <div id="secretCard">Waiting for the round to start…</div>
+            <ul id="voteList"></ul>
+        </div>
+
+        <div id="message" hidden></div>
+    </div>
+
+    <script type="module">
+        import { startOddOneOut } from './OddOneOut.ts';
+        startOddOneOut();
+    </script>
+</body>
+</html>

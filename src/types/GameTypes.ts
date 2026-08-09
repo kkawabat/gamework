@@ -52,9 +52,12 @@ export interface GameRoom {
   createdAt: number;
 }
 
-// Network message types
+// Network message types.
+// SESSION carries the session layer's own envelopes (hello / seating / input /
+// view). It is deliberately distinct from GAME_ACTION so a game can keep
+// sending raw actions during a port without the two streams colliding.
 export interface NetworkMessage {
-  type: 'GAME_ACTION' | 'STATE_UPDATE' | 'PLAYER_JOIN' | 'PLAYER_LEAVE' | 'ROOM_UPDATE';
+  type: 'GAME_ACTION' | 'STATE_UPDATE' | 'PLAYER_JOIN' | 'PLAYER_LEAVE' | 'ROOM_UPDATE' | 'SESSION';
   payload: any;
   from: string;
   to?: string;

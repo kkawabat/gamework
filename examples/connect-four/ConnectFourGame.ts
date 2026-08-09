@@ -7,9 +7,8 @@
  */
 
 import QRCode from 'qrcode';
-import { GameWork, BaseGameState, GameAction, GameConfig } from '../../src';
+import { GameWork, BaseGameState, GameAction, GameConfig, EntityHandle, Role, Session } from '../../src';
 import { WebRTCNetworkEngine } from '../../src/engines/WebRTCNetworkEngine';
-import { NetworkMessage } from '../../src/types/GameTypes';
 import { createNetworkConfig, DATA_CHANNEL_CONFIG } from '../shared/network-config';
 
 export const COLS = 7;
@@ -218,12 +217,31 @@ export class ConnectFourUI {
   }
 }
 
+interface ConnectFourParts {
+  game: GameWork<ConnectFourState, ConnectFourAction>;
+  ui: ConnectFourUI;
+  session: Session;
+}
+
+// One role, one channel: both players write moves and both read them. Nothing
+// is nondeterministic and nothing is hidden, so there is no authority and no
+// private channel — the plainest wiring the session layer allows.
+const PLAYER_ROLE: Role = { name: 'player', reads: ['move'], writes: ['move'] };
+
 // Multiplayer Connect Four Game Factory
-export function createConnectFourGame(playerId: string): GameWork<ConnectFourState, ConnectFourAction> {
+export function createConnectFourGame(playerId: string): ConnectFourParts {
   const engine = new ConnectFourEngine();
   const ui = new ConnectFourUI();
 
   const networkEngine = new WebRTCNetworkEngine(createNetworkConfig(), DATA_CHANNEL_CONFIG, playerId);
+
+  const session = new Session(networkEngine, {
+    mode: { connectivity: 'mesh', authority: 'replicated' },
+    deviceId: playerId,
+    roles: [PLAYER_ROLE],
+    entities: [{ role: 'player' }],
+    maxEntities: { player: 2 }
+  });
 
   const config: GameConfig<ConnectFourState, ConnectFourAction> = {
     initialState: engine.getInitialState(),
@@ -239,7 +257,7 @@ export function createConnectFourGame(playerId: string): GameWork<ConnectFourSta
   game['container'].register('UIEngine', () => ui);
   game['container'].register('NetworkEngine', () => networkEngine);
 
-  return game;
+  return { game, ui, session };
 }
 
 type ViewId = 'homeView' | 'inviteView' | 'joinView' | 'gameView';
@@ -248,11 +266,13 @@ const ALL_VIEWS: ViewId[] = ['homeView', 'inviteView', 'joinView', 'gameView'];
 // Multiplayer Connect Four Game Manager
 class MultiplayerConnectFourManager {
   private game: GameWork<ConnectFourState, ConnectFourAction> | null = null;
-  private networkEngine: WebRTCNetworkEngine | null = null;
+  private session: Session | null = null;
   private ui: ConnectFourUI | null = null;
   private playerId: string;
   private lastState: ConnectFourState;
   private roomRequestInFlight: boolean = false;
+  private playing: boolean = false;
+  private me: EntityHandle | null = null;
 
   constructor() {
     this.playerId = this.generatePlayerId();
@@ -261,11 +281,12 @@ class MultiplayerConnectFourManager {
 
   async initialize(): Promise<void> {
     try {
-      this.game = createConnectFourGame(this.playerId);
-      this.networkEngine = this.game['container'].resolve('NetworkEngine') as WebRTCNetworkEngine;
-      this.ui = this.game['container'].resolve('UIEngine') as ConnectFourUI;
+      const parts = createConnectFourGame(this.playerId);
+      this.game = parts.game;
+      this.ui = parts.ui;
+      this.session = parts.session;
 
-      await this.networkEngine.initialize();
+      await this.session.initialize();
       await this.game.initialize();
 
       this.setupEventHandlers();
@@ -286,12 +307,11 @@ class MultiplayerConnectFourManager {
   }
 
   private async createRoom(): Promise<void> {
-    if (!this.networkEngine || this.roomRequestInFlight) return;
+    if (!this.session || this.roomRequestInFlight) return;
 
     this.roomRequestInFlight = true;
     try {
-      const roomCode = await this.networkEngine.createRoom();
-      this.ui?.setLocalMark('R');
+      const roomCode = await this.session.host();
       this.showMessage(null);
       this.showRoomInvite(roomCode);
       await this.generateQRCode(roomCode);
@@ -305,13 +325,13 @@ class MultiplayerConnectFourManager {
   }
 
   private async joinRoom(roomCode: string): Promise<void> {
-    if (!this.networkEngine || this.roomRequestInFlight) return;
+    if (!this.session || this.roomRequestInFlight) return;
 
     this.roomRequestInFlight = true;
     try {
-      await this.networkEngine.joinRoom(roomCode);
-      this.ui?.setLocalMark('Y');
-      this.showMessage(null);
+      await this.session.join(roomCode);
+      // The mark arrives with the seating, once the host has seated us.
+      this.showMessage('Connecting…');
       this.startGame();
     } catch (error) {
       console.error('Failed to join room:', error);
@@ -328,34 +348,52 @@ class MultiplayerConnectFourManager {
   }
 
   private setupEventHandlers(): void {
-    if (!this.game || !this.networkEngine) return;
+    if (!this.game || !this.session) return;
 
     this.game.on('game:stateChanged', (state) => {
-      this.lastState = state;
-      this.ui?.render(state);
+      this.lastState = state as ConnectFourState;
+      this.ui?.render(this.lastState);
     });
 
-    this.networkEngine.onMessage((peerId, message) => {
-      this.handleNetworkMessage(peerId, message);
+    // Bind once the registry lands — a joiner does not know its own entity id
+    // before the host has assigned it. Admission order is the side: whoever
+    // joined first takes the opening move.
+    this.session.onRegistry(() => {
+      const mine = this.session!.localEntityOfRole('player');
+      const players = this.session!.entitiesOfRole('player');
+      if (mine && !this.me) {
+        this.me = this.session!.actAs(mine.entityId);
+        // Both players read 'move', this device included, so a move reaches the
+        // engine by exactly one path no matter who made it.
+        this.me.on('move', (payload) => this.game?.dispatchAction(payload as ConnectFourAction));
+        const index = players.findIndex((entity) => entity.entityId === mine.entityId);
+        this.ui?.setLocalMark(index === 0 ? 'R' : 'Y');
+      }
+      if (players.length === 2) this.beginPlay();
     });
 
-    this.networkEngine.onPeerJoined(() => {
+    this.session.onPeerJoined(() => {
       this.showMessage('Player joined, connecting…');
     });
 
-    this.networkEngine.onPeerConnected(() => {
-      this.showMessage(null);
-      // Both players are connected and this game takes no others, so the
-      // signaling server is done; the rest runs peer-to-peer.
-      this.networkEngine?.closeSignaling();
-      this.startGame();
-    });
-
-    this.networkEngine.onPeerFailed(() => {
+    this.session.onPeerFailed(() => {
       this.showMessage('Could not connect to the other player. If you are both on mobile data, try Wi-Fi.');
     });
 
     this.setupUIEventHandlers();
+  }
+
+  /**
+   * Both seats are filled, which is only knowable once the data channel carried
+   * the seating across. This game takes no further players, so lock the table —
+   * under mesh that drops signaling on both devices and the rest is peer-to-peer.
+   */
+  private beginPlay(): void {
+    if (this.playing) return;
+    this.playing = true;
+    this.showMessage(null);
+    this.session?.lock();
+    this.startGame();
   }
 
   private setupUIEventHandlers(): void {
@@ -396,59 +434,24 @@ class MultiplayerConnectFourManager {
   }
 
   private makeMove(column: number): void {
-    if (!this.game || !this.networkEngine) return;
+    // Don't play against yourself while the opponent's channel is still connecting
+    if (!this.me || !this.playing) return;
 
-    const hasOpponent = this.networkEngine.getConnections()
-      .some(peerId => this.networkEngine!.isConnected(peerId));
-    if (!hasOpponent) return;
-
-    const action: ConnectFourAction = {
+    this.me.write('move', {
       type: 'MOVE',
       playerId: this.playerId,
       timestamp: Date.now(),
       payload: { column }
-    };
-
-    this.game.dispatchAction(action);
-    this.broadcastAction(action);
+    });
   }
 
   private restartGame(): void {
-    if (!this.game) return;
-
-    const action: ConnectFourAction = {
+    this.me?.write('move', {
       type: 'RESTART',
       playerId: this.playerId,
       timestamp: Date.now(),
       payload: {}
-    };
-
-    this.game.dispatchAction(action);
-    this.broadcastAction(action);
-  }
-
-  private broadcastAction(action: ConnectFourAction): void {
-    if (!this.networkEngine) return;
-
-    const networkMessage: NetworkMessage = {
-      type: 'GAME_ACTION',
-      from: this.playerId,
-      to: 'all',
-      payload: action,
-      timestamp: Date.now()
-    };
-
-    this.networkEngine.broadcast(networkMessage);
-  }
-
-  private handleNetworkMessage(peerId: string, message: NetworkMessage): void {
-    if (message.type === 'GAME_ACTION' && message.payload) {
-      const action = message.payload as ConnectFourAction;
-
-      if (action.playerId !== this.playerId) {
-        this.game?.dispatchAction(action);
-      }
-    }
+    });
   }
 
   private generatePlayerId(): string {

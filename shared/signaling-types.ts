@@ -23,7 +23,11 @@ export type ServerToClient =
   // iceServers ride along with the room reply: both sides need them before they
   // dial, and the joiner dials the moment ROOM_JOINED lands.
   | { type: 'ROOM_CREATED'; roomCode: string; iceServers: IceServerConfig[] }
-  | { type: 'ROOM_JOINED'; roomCode: string; peers: string[]; iceServers: IceServerConfig[] }
+  // hostId is the room's creator. A mesh joiner dials every peer and only needs
+  // it to know who to address session control messages to; a star joiner dials
+  // nothing else, so for star it is the whole point of the reply. The server
+  // never reassigns it — if the host goes, the room is over (no host migration).
+  | { type: 'ROOM_JOINED'; roomCode: string; peers: string[]; hostId: string; iceServers: IceServerConfig[] }
   // Sent to the members already in the room. Informational only: the joiner
   // dials them from ROOM_JOINED, so acting on this would make both sides offer.
   | { type: 'PEER_JOINED'; peerId: string }

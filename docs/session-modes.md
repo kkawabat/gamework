@@ -1,0 +1,190 @@
+# Session modes
+
+## The named modes are not the design
+
+The obvious way to support "peer-to-peer", "hub-and-spoke", "PC plus mobile" and
+"remote co-op" is a `mode` enum with four values. It is the wrong shape: those
+four share nearly all their machinery, vary along axes independent of each
+other, and the fifth mode would arrive as a fifth special case.
+
+The second-most-obvious shape is a **seat** — a player, holding one or more
+devices. That is also wrong, just less obviously. A seat carries a turn-order
+index (game data the session never reads) and a device list (which only answers
+"where do I send this private view"). Strip both and nothing is left. Worse, it
+cannot express a PC that is the dungeon master, or a host that is both a referee
+and a player with different permissions in each capacity.
+
+What is actually primitive is three layers and one declaration.
+
+| Layer | What it is |
+|---|---|
+| **Device** | A browser tab. A connection endpoint, and nothing else. |
+| **Entity** | A named principal with a role. Identity and permission attach here. One device may hold several. |
+| **Role** | What an entity may read and write, as channel patterns. |
+
+| Declaration | Values |
+|---|---|
+| **Connectivity** | `mesh`, `star` — who holds a data channel to whom |
+| **Authority** | `replicated`, `arbitrated`, `authoritative` — where the reducer runs |
+
+A seat is not a primitive. "Player" is simply the most common role.
+
+## Channels
+
+Everything on the wire is a write to a named channel. An input is a write to a
+channel the referee reads; a view is a write to a channel players read. There is
+no separate `submit` and `publish`, and no built-in notion of "public" or
+"private" — those are conventions about which channels a role happens to read.
+
+A role declares the channels it accesses. `{self}` binds to the entity's own id,
+and a trailing `*` matches by prefix:
+
+```ts
+const PLAYER: Role = {
+  name:   'player',
+  reads:  ['public', 'hand:{self}'],   // not hand:* — that would be every hand
+  writes: ['intent:{self}']
+};
+const TABLE: Role = { name: 'table', reads: ['public'], writes: [] };
+const ADMIN: Role = { name: 'admin', reads: ['public', 'intent:*'], writes: ['public', 'hand:*'] };
+```
+
+`{self}` is what makes hidden information a routing fact. Without it a private
+channel is only private by convention.
+
+**Enforcement is a correctness boundary, not a trust boundary.** The authority
+is another browser tab, so an ACL stops a confused client, not a determined one.
+There is no trust boundary in a peer-to-peer browser game, and this system
+should not be described as if there were.
+
+## Where the named modes land
+
+| Asked-for mode | Connectivity | Authority | Entities |
+|---|---|---|---|
+| Peer-to-peer | `mesh` | `replicated` | one `player` per device |
+| Peer-to-peer with a default host | `mesh` | `arbitrated` | host adds a `dealer` |
+| Hub and spoke | `star` | `authoritative` | hub has `admin` + `table` |
+| PC + mobile | `star` | `authoritative` | PC has `table`, phone has `player` |
+| Remote co-op | `star` | `authoritative` | each PC `table`, each phone `player` |
+| Asymmetric (DM, spymaster) | either | `authoritative` | a role of its own |
+| Hot-seat on one device | either | either | two `player` entities, one device |
+
+The last two were never asked for. They need no new mechanism, which is the
+test the seat model failed.
+
+## Choosing a connectivity
+
+Star is cheaper: N connections instead of N²/2, and only hub↔spoke pairs can
+consume a TURN relay. For 4–8 players on phones the N² TURN exposure bites
+first.
+
+Mesh buys one thing: **it is the only connectivity where losing the host is
+survivable**, because the remaining peers already hold channels to each other.
+Under star the hub going away disconnects everyone from everyone — and the hub
+is, in practice, a browser tab. (Host migration is not implemented; mesh is what
+would make it possible.)
+
+Under star a spoke can only reach the hub, so the hub forwards writes to other
+spokes that read the channel. It routes whether or not it reads the channel
+itself: being the only path is a transport fact, not a permission.
+
+## Authority
+
+`authority` is a declaration about where the reducer runs. It is deliberately
+not derived from the ACL graph, because reading a channel and reducing are
+different things — a shared display can read every move and reduce nothing.
+
+- **`replicated`** — every device reduces the same broadcast inputs. Needs full
+  determinism, has no privileged node.
+- **`arbitrated`** — every device still reduces, but one entity is the sole
+  source of what replay cannot derive: seeds, ordering, admission. Cannot keep a
+  secret, since every device computes the whole state.
+- **`authoritative`** — only the authority reduces; everyone else writes intents
+  and reads views. The only mode that can genuinely withhold anything.
+
+There is no `session.isAuthority`. "Do I reduce" is answered by whether this
+device holds the role that reads the game's intent channel, in the game's own
+vocabulary.
+
+## The API
+
+```ts
+const session = new Session(networkEngine, {
+  mode: { connectivity: 'star', authority: 'authoritative' },
+  deviceId,
+  roles: [PLAYER, TABLE, ADMIN],
+  entities: [{ role: 'admin' }, { role: 'table' }],   // one device, two principals
+  maxEntities: { admin: 1, table: 1, player: 8 }
+});
+
+await session.initialize();
+const roomCode = await session.host();          // or: await session.join(code)
+
+session.onRegistry(() => { /* bind once local entities appear */ });
+
+const me = session.actAs('admin-0');
+me.write('hand:player-2', { cards });
+me.on('intent:*', (payload, meta) => { /* meta.author is the entity */ });
+session.lock();                                  // no more entities
+```
+
+Two behaviours worth knowing:
+
+- **A write goes on the wire first, then delivers locally**, so the copy other
+  devices need does not depend on a local handler succeeding. It loops back to
+  the writer's own entities that read the channel, so one code path serves
+  everyone.
+- **Entity ids are assigned by the host and numbered per role** (`player-0`,
+  `player-1`, `dealer-0`). A joiner does not know its own id until the registry
+  arrives, so bind in `onRegistry`, not after `join()`.
+
+### `lock()` and signaling
+
+Locking closes admission and drops the signaling socket — except on the hub of a
+star, which keeps its socket because it is the only node a late joiner could be
+introduced to. One held socket per room beats N.
+
+The shared fact ("the session is locked") and the local action ("I released my
+socket") are tracked separately on purpose. A joiner learns `locked` from the
+host's broadcast *before* it calls `lock()` itself, so a single flag would leave
+that device holding its signaling socket open for the whole game.
+
+## What is implemented
+
+Covered by `tests/unit/Session.test.ts` and `tests/unit/OddOneOut.test.ts`:
+
+- Entity registry, per-role id numbering and caps, multi-entity devices.
+- Channel ACLs with `{self}` binding and `*` prefixes, enforced on write and
+  re-checked on arrival.
+- Delivery to exactly the entities whose role reads a channel, including
+  loopback and wildcard readers.
+- Star routing and hub relay between spokes.
+- `hostId` in `ROOM_JOINED`, so a star joiner dials only the hub.
+
+Demos:
+
+| Demo | Mode | Entities |
+|---|---|---|
+| tic-tac-toe, chess, connect-four | `mesh` / `replicated` | one `player` each |
+| poker | `mesh` / `arbitrated` | host holds `dealer` + `player` |
+| Odd One Out | `star` / `authoritative` | PC holds `admin` + `table`; phones `player` |
+| Tilt Pong | `mesh` / `authoritative` | host holds `referee` + `player` |
+
+Tilt Pong is the only real-time one, and the first `authoritative` session whose
+reason is divergence rather than secrecy: two devices simulating one bouncing
+ball drift apart within seconds however carefully they start.
+
+**No demo has run in a browser since this model landed.** Odd One Out is driven
+end to end across four real sessions in tests, but over a fake transport — see
+CONTEXT.md on why local testing proves nothing about NAT traversal.
+
+## What is not implemented
+
+1. **Reconnect.** A dropped device is gone for the session. The model makes the
+   fix obvious — an entity rebinding to a new device — but nothing does it, and
+   for a phone that locks its screen between turns this is the common path.
+2. **Late join.** The hub keeps its signaling socket, which is the foundation,
+   but `admit()` turns away anyone arriving after `lock()`.
+3. **Host migration.** Only possible under mesh. Nothing implements it.
+4. **A `seats` preset.** Games declare 3–6 lines of roles by hand. That has been
+   clearer than a preset so far; revisit if it starts repeating.
