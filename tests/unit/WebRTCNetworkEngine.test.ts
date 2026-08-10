@@ -1,5 +1,10 @@
 import { WebRTCNetworkEngine } from '../../src/engines/WebRTCNetworkEngine';
 import { ServerToClient } from '../../shared/signaling-types';
+import {
+  RELIABLE_CHANNEL,
+  UNRELIABLE_CHANNEL,
+  UNRELIABLE_CHANNEL_CONFIG
+} from '../../src/types/NetworkTypes';
 
 /**
  * Minimal stand-in for the browser WebSocket: lets a test push server messages
@@ -34,11 +39,17 @@ class FakePeerConnection {
   ondatachannel: ((event: unknown) => void) | null = null;
   iceConnectionState = 'new';
   remoteDescription: unknown = null;
-  createDataChannel = () => ({ close: () => undefined });
+  /** Records what was asked for, so the reliability split can be asserted. */
+  channels: Array<{ label: string; config: Record<string, unknown> }> = [];
+  createDataChannel = (label: string, config: Record<string, unknown>) => {
+    this.channels.push({ label, config });
+    return { label, readyState: 'open', close: () => undefined, send: () => undefined };
+  };
   close = () => undefined;
 }
 
 let socket: FakeWebSocket;
+const peerConnections: FakePeerConnection[] = [];
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 const deliver = (message: ServerToClient) => socket.onmessage?.({ data: JSON.stringify(message) });
 
@@ -52,7 +63,13 @@ describe('WebRTCNetworkEngine signaling', () => {
         socket = this;
       }
     };
-    (globalThis as any).RTCPeerConnection = FakePeerConnection;
+    peerConnections.length = 0;
+    (globalThis as any).RTCPeerConnection = class extends FakePeerConnection {
+      constructor() {
+        super();
+        peerConnections.push(this);
+      }
+    };
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
     engine = new WebRTCNetworkEngine(
@@ -154,5 +171,68 @@ describe('WebRTCNetworkEngine signaling', () => {
     await flush();
 
     expect(joined).toEqual(['player_joiner2']);
+  });
+});
+
+describe('WebRTCNetworkEngine data channels', () => {
+  let engine: WebRTCNetworkEngine;
+
+  beforeEach(async () => {
+    (globalThis as any).WebSocket = class extends FakeWebSocket {
+      constructor(url: string) {
+        super(url);
+        socket = this;
+      }
+    };
+    peerConnections.length = 0;
+    // Only this block dials directly, so only it needs the offer half of the
+    // handshake; the signaling tests above deliberately let connect() fail.
+    (globalThis as any).RTCPeerConnection = class extends FakePeerConnection {
+      createOffer = async () => ({ type: 'offer', sdp: 'fake' });
+      setLocalDescription = async () => undefined;
+      constructor() {
+        super();
+        peerConnections.push(this);
+      }
+    };
+
+    engine = new WebRTCNetworkEngine(
+      { iceServers: [], signalingServerUrl: 'ws://localhost:8080' },
+      { ordered: true },
+      'player_host'
+    );
+    await engine.initialize();
+    await engine.connect('peer-1');
+  });
+
+  it('opens a reliable and an unreliable channel per peer, with the right configs', () => {
+    const [reliable, unreliable] = peerConnections[0].channels;
+
+    expect(peerConnections[0].channels.map((c) => c.label)).toEqual([RELIABLE_CHANNEL, UNRELIABLE_CHANNEL]);
+    // Omitting maxRetransmits is what makes SCTP retransmit until delivered;
+    // setting it to 0 is what makes the sibling lossy on purpose.
+    expect(reliable.config.maxRetransmits).toBeUndefined();
+    expect(reliable.config.ordered).toBe(true);
+    expect(unreliable.config).toEqual(UNRELIABLE_CHANNEL_CONFIG);
+  });
+
+  it('tells the two apart by label when it is the answering side', () => {
+    const peer = engine['connections'].get('peer-1')!;
+    const connected: string[] = [];
+    engine.onPeerConnected((id) => connected.push(id));
+
+    // Arrive out of order: the unreliable one must not be taken for the
+    // reliable one, which is the only channel that reports a peer as connected.
+    peerConnections[0].ondatachannel!({
+      channel: { label: UNRELIABLE_CHANNEL, close: () => undefined }
+    } as never);
+    expect(connected).toEqual([]);
+
+    const reliable: Record<string, unknown> = { label: RELIABLE_CHANNEL, close: () => undefined };
+    peerConnections[0].ondatachannel!({ channel: reliable } as never);
+    (reliable.onopen as () => void)();
+
+    expect(connected).toEqual(['peer-1']);
+    expect(peer.fastChannel).not.toBeNull();
   });
 });

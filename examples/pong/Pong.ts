@@ -53,7 +53,12 @@ class PongManager {
       // The host brings the referee as a second entity; both devices bring a
       // paddle. Two players means mesh and star are the same one connection.
       entities: this.isHost ? [{ role: 'referee' }, { role: 'player' }] : [{ role: 'player' }],
-      maxEntities: { referee: 1, player: 2 }
+      maxEntities: { referee: 1, player: 2 },
+      // Both are absolute-value streams at 30Hz, so a lost write is superseded
+      // 33ms later — far better than blocking the next one behind a retransmit.
+      // `ready` and the registry stay reliable, which is what keeps a dropped
+      // packet from hanging the lobby.
+      unreliable: ['state', 'paddle:*']
     });
 
     this.director = new PongDirector(this.session);

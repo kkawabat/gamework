@@ -138,6 +138,41 @@ Two behaviours worth knowing:
   `player-1`, `dealer-0`). A joiner does not know its own id until the registry
   arrives, so bind in `onRegistry`, not after `join()`.
 
+### Delivery: two data channels
+
+Every peer connection carries two data channels, opened together by the dialer
+and told apart by label:
+
+| | `gamework` | `gamework-fast` |
+|---|---|---|
+| Config | `{ ordered: true }` | `{ ordered: false, maxRetransmits: 0 }` |
+| Guarantee | retransmits until delivered | never retransmits |
+| Carries | control, moves — everything by default | only channels a game declares |
+
+```ts
+new Session(engine, { …, unreliable: ['state', 'paddle:*'] })
+```
+
+**Reliable is the default, and control is never anything else.** `hello`,
+`registry` and one-shot game messages like a ready signal are written once with
+nothing retrying them, so a single lost packet hangs a device in the lobby
+silently. Passing `unreliable: ['*']` still cannot make control lossy — that is
+asserted in the tests, because it is the kind of thing a later refactor breaks
+without noticing.
+
+Only declare a channel unreliable when it carries **absolute** values at a high
+rate, so the next write supersedes a lost one. A replicated game that loses one
+move desyncs permanently; nothing in this layer reconciles.
+
+One consequence worth designing around: a throttled stream that stops sending
+when nothing changes can have its *last* write lost and never repeated. Pong
+resends a stationary paddle every 500ms for exactly this reason.
+
+Only the reliable channel reports a peer as connected. The unreliable one
+negotiates a moment later, and senders fall back to the reliable channel until
+it opens, so a game that starts streaming immediately is briefly slower rather
+than broken.
+
 ### `lock()` and signaling
 
 Locking closes admission and drops the signaling socket — except on the hub of a

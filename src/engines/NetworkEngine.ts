@@ -3,16 +3,18 @@ import {
   ConnectionState,
   ICEConnectionState,
   DataChannelState,
+  Delivery,
   PeerConnection,
   NetworkConfig,
-  DataChannelConfig
+  DataChannelConfig,
+  UNRELIABLE_CHANNEL
 } from '../types/NetworkTypes';
 
 export interface NetworkEngine {
   connect(peerId: string): Promise<void>;
   disconnect(peerId: string): void;
-  sendMessage(peerId: string, message: NetworkMessage): void;
-  broadcast(message: NetworkMessage): void;
+  sendMessage(peerId: string, message: NetworkMessage, delivery?: Delivery): void;
+  broadcast(message: NetworkMessage, delivery?: Delivery): void;
   onMessage(callback: (peerId: string, message: NetworkMessage) => void): () => void;
   onPeerJoined(callback: (peerId: string) => void): () => void;
   onPeerConnected(callback: (peerId: string) => void): () => void;
@@ -39,8 +41,8 @@ export abstract class BaseNetworkEngine implements NetworkEngine {
 
   abstract connect(peerId: string): Promise<void>;
   abstract disconnect(peerId: string): void;
-  abstract sendMessage(peerId: string, message: NetworkMessage): void;
-  abstract broadcast(message: NetworkMessage): void;
+  abstract sendMessage(peerId: string, message: NetworkMessage, delivery?: Delivery): void;
+  abstract broadcast(message: NetworkMessage, delivery?: Delivery): void;
 
   onMessage(callback: (peerId: string, message: NetworkMessage) => void): () => void {
     this.messageHandlers.add(callback);
@@ -90,6 +92,7 @@ export abstract class BaseNetworkEngine implements NetworkEngine {
       id: peerId,
       connection: new RTCPeerConnection(this.config),
       dataChannel: null,
+      fastChannel: null,
       state: ConnectionState.CONNECTING,
       iceState: ICEConnectionState.NEW,
       dataChannelState: DataChannelState.CONNECTING,
@@ -115,7 +118,16 @@ export abstract class BaseNetworkEngine implements NetworkEngine {
       }
     };
 
+    // The offerer opens both channels; we receive them separately and tell
+    // them apart by label. Only the reliable one is allowed to report the peer
+    // as connected — firing that twice would have the session introduce itself
+    // twice, and the unreliable channel may never open at all.
     connection.ondatachannel = (event) => {
+      if (event.channel.label === UNRELIABLE_CHANNEL) {
+        peerConnection.fastChannel = event.channel;
+        this.setupFastChannelHandlers(peerConnection, event.channel);
+        return;
+      }
       peerConnection.dataChannel = event.channel;
       this.setupDataChannelHandlers(peerConnection, event.channel);
     };
@@ -135,18 +147,38 @@ export abstract class BaseNetworkEngine implements NetworkEngine {
     };
   }
 
-  protected sendDataChannelMessage(peerConnection: PeerConnection, message: NetworkMessage): void {
-    const { dataChannel } = peerConnection;
-    if (!dataChannel || dataChannel.readyState !== 'open') {
+  /** Carries only inbound traffic and its own open state; never connection state. */
+  protected setupFastChannelHandlers(peerConnection: PeerConnection, channel: RTCDataChannel): void {
+    channel.onmessage = (event) => {
+      this.notifyMessageHandlers(peerConnection.id, JSON.parse(event.data) as NetworkMessage);
+    };
+  }
+
+  /**
+   * Falls back to the reliable channel whenever the unreliable one is not open
+   * — it negotiates a moment later than its sibling, and a game that starts
+   * streaming immediately should be slightly slower, not broken.
+   */
+  protected sendDataChannelMessage(
+    peerConnection: PeerConnection,
+    message: NetworkMessage,
+    delivery: Delivery = 'reliable'
+  ): void {
+    const { dataChannel, fastChannel } = peerConnection;
+    const preferred = delivery === 'unreliable' && fastChannel?.readyState === 'open'
+      ? fastChannel
+      : dataChannel;
+    if (!preferred || preferred.readyState !== 'open') {
       throw new Error(`Data channel to ${peerConnection.id} not open`);
     }
-    dataChannel.send(JSON.stringify(message));
+    preferred.send(JSON.stringify(message));
   }
 
   protected cleanupConnection(peerId: string): void {
     const connection = this.connections.get(peerId);
     if (!connection) return;
     connection.dataChannel?.close();
+    connection.fastChannel?.close();
     connection.connection.close();
     this.connections.delete(peerId);
   }

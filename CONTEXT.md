@@ -68,6 +68,15 @@ session control messages. Under `star` it dials the hub and nothing else — whi
 is what bounds TURN exposure to hub↔spoke pairs, and what makes the hub a single
 point of failure. See `docs/session-modes.md`.
 
+**Each peer connection carries two data channels, and the default must stay
+reliable.** `gamework` is ordered and retransmits until delivered; `gamework-fast`
+is unordered and never retransmits, and a game opts specific channels into it
+(`unreliable: ['state']`). Specifying `maxRetransmits` at all is what makes an
+SCTP channel lossy — the reliable config once capped it at 3, which quietly meant
+a message could be abandoned. Nothing in the session layer retries or reconciles,
+so that silently hung lobbies and desynced replicated games. See
+`docs/session-modes.md`.
+
 **STUN is not a fallback for TURN.** STUN answers "what does my address look
 like from outside", then leaves; data never flows through it. TURN is a relay
 that stays in the data path for the entire session. They are not tiers of the

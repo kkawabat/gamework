@@ -19,13 +19,13 @@
  * your own paddle feels instant, and the referee's view of it lags by half a
  * round trip, which shows up only as slightly generous collisions.
  *
- * Transport: this runs over the same ordered, reliable data channel as the
- * board games. A real-time stream would rather drop a stale frame than block
- * behind a retransmit, but the session's own control messages — the entity
- * registry above all — must arrive, and there is only one channel today. At 30
- * state writes a second of ~150 bytes that trade is invisible on a decent link;
- * if it rubber-bands on cellular, the fix is a second unreliable channel in
- * WebRTCNetworkEngine, not a change here.
+ * Transport: `state` and `paddle:*` are declared unreliable in the session
+ * options, so they take the unordered, never-retransmitted channel. Both carry
+ * absolute values, so a lost write is superseded by the next one 33ms later —
+ * whereas a retransmit would hold the fresher value behind the stale one.
+ * Everything else — the registry, and `ready`, which is written once and never
+ * repeated — stays on the reliable channel, because losing any of those hangs
+ * the lobby with no retry anywhere.
  */
 
 import { EntityHandle, Role, Session } from '../../src';
@@ -64,6 +64,13 @@ const STATE_INTERVAL = 1 / 30;
 /** Paddle writes are throttled to this, and skipped entirely when nothing moved. */
 const PADDLE_INTERVAL = 1 / 30;
 const PADDLE_EPSILON = 0.002;
+/**
+ * Resend a stationary paddle this often anyway. The paddle stream is
+ * unreliable, so the last write before a player stopped moving may simply never
+ * have arrived — and without a repeat the referee would defend the wrong spot
+ * until they moved again.
+ */
+const PADDLE_KEEPALIVE = 0.5;
 
 export type Phase = 'lobby' | 'countdown' | 'playing' | 'over';
 
@@ -101,6 +108,7 @@ export class PongDirector {
   private speed = BALL.baseSpeed;
   private publishTimer = 0;
   private paddleTimer = 0;
+  private sincePaddleSent = 0;
   private lastSentPaddle = -1;
   private localPaddle = FIELD.width / 2;
 
@@ -175,9 +183,14 @@ export class PongDirector {
       FIELD.width - PADDLE.width / 2
     );
     this.paddleTimer += dt;
+    this.sincePaddleSent += dt;
     if (this.paddleTimer < PADDLE_INTERVAL) return;
-    if (Math.abs(this.localPaddle - this.lastSentPaddle) < PADDLE_EPSILON) return;
+
+    const moved = Math.abs(this.localPaddle - this.lastSentPaddle) >= PADDLE_EPSILON;
+    if (!moved && this.sincePaddleSent < PADDLE_KEEPALIVE) return;
+
     this.paddleTimer = 0;
+    this.sincePaddleSent = 0;
     this.lastSentPaddle = this.localPaddle;
     this.player?.write('paddle:{self}', { x: this.localPaddle });
   }

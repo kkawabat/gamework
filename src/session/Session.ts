@@ -1,4 +1,5 @@
 import { NetworkMessage } from '../types/GameTypes';
+import { Delivery } from '../types/NetworkTypes';
 import { anyMatches, channelMatches, resolveChannel } from './channels';
 import {
   Authority,
@@ -24,8 +25,8 @@ export interface SessionTransport {
   createRoom(): Promise<string>;
   joinRoom(roomCode: string): Promise<boolean>;
   getHostId(): string | null;
-  sendMessage(deviceId: DeviceId, message: NetworkMessage): void;
-  broadcast(message: NetworkMessage): void;
+  sendMessage(deviceId: DeviceId, message: NetworkMessage, delivery?: Delivery): void;
+  broadcast(message: NetworkMessage, delivery?: Delivery): void;
   onMessage(callback: (from: DeviceId, message: NetworkMessage) => void): () => void;
   onPeerJoined(callback: (deviceId: DeviceId) => void): () => void;
   onPeerConnected(callback: (deviceId: DeviceId) => void): () => void;
@@ -91,6 +92,7 @@ export class Session {
   private readonly roles: Map<string, Role>;
   private readonly localSpecs: EntitySpec[];
   private readonly caps: Record<string, number>;
+  private readonly unreliablePatterns: string[];
 
   private registry: Entity[] = [];
   private hostFlag = false;
@@ -111,6 +113,7 @@ export class Session {
     this.roles = new Map(options.roles.map((role) => [role.name, role]));
     this.localSpecs = options.entities;
     this.caps = options.maxEntities ?? {};
+    this.unreliablePatterns = options.unreliable ?? [];
   }
 
   // --- Lifecycle -----------------------------------------------------------
@@ -253,7 +256,7 @@ export class Session {
     const envelope: SessionEnvelope = { kind: 'write', from: this.deviceId, author, channel, payload };
     // On the wire first: a local handler may lock the session or throw, and the
     // copy other devices need must not depend on any of that succeeding.
-    this.routeWrite(envelope, channel);
+    this.routeWrite(envelope, channel, this.deliveryFor(channel, author));
     this.deliver(channel, payload, { channel, author, from: this.deviceId });
   }
 
@@ -294,7 +297,7 @@ export class Session {
           console.warn(`[gamework] dropped unauthorised write to '${envelope.channel}' by ${envelope.author}`);
           break;
         }
-        this.relay(from, envelope, envelope.channel);
+        this.relay(from, envelope, envelope.channel, envelope.author);
         this.deliver(envelope.channel, envelope.payload, {
           channel: envelope.channel, author: envelope.author, from
         });
@@ -309,25 +312,34 @@ export class Session {
    * the hub forwards — the hub is a router regardless of whether it reads the
    * channel itself.
    */
-  private routeWrite(envelope: SessionEnvelope, channel: Channel): void {
+  private routeWrite(envelope: SessionEnvelope, channel: Channel, delivery: Delivery): void {
     if (this.mode.connectivity === 'star' && !this.hostFlag) {
       const hub = this.transport.getHostId();
-      if (hub && this.transport.isConnected(hub)) this.sendEnvelope(hub, envelope);
+      if (hub && this.transport.isConnected(hub)) this.sendEnvelope(hub, envelope, delivery);
       return;
     }
     for (const deviceId of this.devicesReading(channel)) {
       if (deviceId !== this.deviceId && this.transport.isConnected(deviceId)) {
-        this.sendEnvelope(deviceId, envelope);
+        this.sendEnvelope(deviceId, envelope, delivery);
       }
     }
   }
 
+  /**
+   * Control messages are never unreliable — they are one-shot and nothing
+   * retries them, so a lost hello or registry hangs a device silently.
+   */
+  private deliveryFor(channel: Channel, author: EntityId): Delivery {
+    return anyMatches(this.unreliablePatterns, channel, author) ? 'unreliable' : 'reliable';
+  }
+
   /** The hub half of the above: spokes have no path to each other. */
-  private relay(from: DeviceId, envelope: SessionEnvelope, channel: Channel): void {
+  private relay(from: DeviceId, envelope: SessionEnvelope, channel: Channel, author: EntityId): void {
     if (!this.hostFlag || this.mode.connectivity !== 'star') return;
+    const delivery = this.deliveryFor(channel, author);
     for (const deviceId of this.devicesReading(channel)) {
       if (deviceId !== from && deviceId !== this.deviceId && this.transport.isConnected(deviceId)) {
-        this.sendEnvelope(deviceId, envelope);
+        this.sendEnvelope(deviceId, envelope, delivery);
       }
     }
   }
@@ -399,8 +411,8 @@ export class Session {
     this.transport.closeSignaling();
   }
 
-  private sendEnvelope(to: DeviceId, envelope: SessionEnvelope): void {
-    this.transport.sendMessage(to, this.wrap(envelope, to));
+  private sendEnvelope(to: DeviceId, envelope: SessionEnvelope, delivery: Delivery = 'reliable'): void {
+    this.transport.sendMessage(to, this.wrap(envelope, to), delivery);
   }
 
   private broadcastEnvelope(envelope: SessionEnvelope): void {

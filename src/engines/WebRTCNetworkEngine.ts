@@ -1,6 +1,15 @@
 import { BaseNetworkEngine } from './NetworkEngine';
 import { NetworkMessage } from '../types/GameTypes';
-import { ConnectionState, NetworkConfig, DataChannelConfig, PeerConnection } from '../types/NetworkTypes';
+import {
+  ConnectionState,
+  Delivery,
+  NetworkConfig,
+  DataChannelConfig,
+  PeerConnection,
+  RELIABLE_CHANNEL,
+  UNRELIABLE_CHANNEL,
+  UNRELIABLE_CHANNEL_CONFIG
+} from '../types/NetworkTypes';
 import { ClientToServer, ServerToClient, SignalData, IceServerConfig } from '../../shared/signaling-types';
 
 export interface WebRTCNetworkEngineConfig extends NetworkConfig {
@@ -71,8 +80,13 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
   async connect(peerId: string): Promise<void> {
     this.diag(`dial ${peerId}`);
     const peer = this.setupPeer(peerId);
-    peer.dataChannel = peer.connection.createDataChannel('gamework', this.dataChannelConfig);
+    // Both channels are opened by the dialer, in one negotiation. The reliable
+    // one carries control and moves; the unreliable one carries state streams
+    // that would rather be dropped than delivered late behind a retransmit.
+    peer.dataChannel = peer.connection.createDataChannel(RELIABLE_CHANNEL, this.dataChannelConfig);
     this.setupDataChannelHandlers(peer, peer.dataChannel);
+    peer.fastChannel = peer.connection.createDataChannel(UNRELIABLE_CHANNEL, UNRELIABLE_CHANNEL_CONFIG);
+    this.setupFastChannelHandlers(peer, peer.fastChannel);
     const offer = await peer.connection.createOffer();
     await peer.connection.setLocalDescription(offer);
     this.sendToServer({ type: 'SIGNAL', to: peerId, data: { kind: 'offer', sdp: offer } });
@@ -82,14 +96,14 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
     this.cleanupConnection(peerId);
   }
 
-  sendMessage(peerId: string, message: NetworkMessage): void {
-    this.sendDataChannelMessage(this.peer(peerId), message);
+  sendMessage(peerId: string, message: NetworkMessage, delivery: Delivery = 'reliable'): void {
+    this.sendDataChannelMessage(this.peer(peerId), message, delivery);
   }
 
-  broadcast(message: NetworkMessage): void {
+  broadcast(message: NetworkMessage, delivery: Delivery = 'reliable'): void {
     this.connections.forEach(peer => {
       if (peer.state === ConnectionState.CONNECTED) {
-        this.sendDataChannelMessage(peer, message);
+        this.sendDataChannelMessage(peer, message, delivery);
       }
     });
   }

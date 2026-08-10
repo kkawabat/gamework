@@ -21,6 +21,7 @@ const MODE: SessionMode = { connectivity: 'mesh', authority: 'authoritative' };
 interface Phone {
   session: Session;
   director: PongDirector;
+  net: FakeNet;
 }
 
 /** random() = 0.5 serves straight up the middle, which keeps rallies testable. */
@@ -30,14 +31,14 @@ async function makeMatch(random: () => number = () => 0.5): Promise<{ host: Phon
   const build = async (deviceId: string, entities: { role: string }[], isHost: boolean): Promise<Phone> => {
     const transport = new FakeTransport(net, deviceId);
     const session = new Session(transport, { mode: MODE, deviceId, roles: PONG_ROLES, entities,
-      maxEntities: { referee: 1, player: 2 } });
+      maxEntities: { referee: 1, player: 2 }, unreliable: ['state', 'paddle:*'] });
     await session.initialize();
     if (isHost) await session.host();
     else {
       await session.join('ROOM01');
       transport.fireConnected(net.hostId!);
     }
-    return { session, director: new PongDirector(session, { random }) };
+    return { session, director: new PongDirector(session, { random }), net };
   };
 
   const host = await build('host-phone', [{ role: 'referee' }, { role: 'player' }], true);
@@ -223,5 +224,35 @@ describe('Pong — permissions', () => {
     const before = { ...guest.director.state.ball };
     guest.director.step(1);
     expect(guest.director.state.ball).toEqual(before);
+  });
+});
+
+describe('Pong — transport', () => {
+  it('streams state and paddles unreliably, but readies reliably', async () => {
+    const { host, guest } = await makeMatch();
+    startRally(host, guest);
+    guest.director.steer(-1, 0.1);
+
+    const net = host.net;
+    // Losing one of these costs a frame; the next absolute value supersedes it.
+    expect(net.deliveriesFor('state').length).toBeGreaterThan(0);
+    expect(net.deliveriesFor('state').every((d) => d === 'unreliable')).toBe(true);
+    expect(net.deliveriesFor('paddle:player-1').every((d) => d === 'unreliable')).toBe(true);
+
+    // Losing this would hang the lobby forever: it is written once and nothing
+    // retries it.
+    expect(net.deliveriesFor('ready:player-1')).toEqual(['reliable']);
+    expect(net.deliveriesFor('registry').every((d) => d === 'reliable')).toBe(true);
+  });
+
+  it('repeats a stationary paddle so a lost final write cannot strand it', async () => {
+    const { host, guest } = await makeMatch();
+    startRally(host, guest);
+
+    guest.director.steer(-1, 0.2);          // move, then stop
+    const afterMove = host.net.deliveriesFor('paddle:player-1').length;
+    for (let i = 0; i < 60; i += 1) guest.director.steer(0, 1 / 60); // one second still
+
+    expect(host.net.deliveriesFor('paddle:player-1').length).toBeGreaterThan(afterMove);
   });
 });

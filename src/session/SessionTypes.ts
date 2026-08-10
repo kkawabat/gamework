@@ -105,6 +105,16 @@ export interface SessionOptions {
    * entities it brought.
    */
   maxEntities?: Record<string, number>;
+  /**
+   * Channel patterns whose writes take the unreliable transport: unordered, and
+   * never retransmitted. Correct only for high-rate streams of *absolute* state,
+   * where the next write 33ms later supersedes a lost one.
+   *
+   * Never put control or moves here. A replicated game that loses one move
+   * desyncs permanently, and there is no reconciliation anywhere in this layer.
+   * Everything not matched here is fully reliable, which is the right default.
+   */
+  unreliable?: string[];
 }
 
 /** Delivered alongside every channel payload. */

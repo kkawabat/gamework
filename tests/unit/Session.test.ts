@@ -33,10 +33,13 @@ interface Member {
   received: Received[];
 }
 
+const netOf = (member: Member): FakeNet => member.transport.net;
+
 async function makeRoom(
   mode: SessionMode,
   members: EntitySpec[][],
-  maxEntities?: Record<string, number>
+  maxEntities?: Record<string, number>,
+  unreliable?: string[]
 ): Promise<Member[]> {
   const net = new FakeNet(mode.connectivity);
   const built: Member[] = [];
@@ -44,7 +47,7 @@ async function makeRoom(
   for (const [index, entities] of members.entries()) {
     const deviceId = `dev-${index}`;
     const transport = new FakeTransport(net, deviceId);
-    const session = new Session(transport, { mode, deviceId, roles: ROLES, entities, maxEntities });
+    const session = new Session(transport, { mode, deviceId, roles: ROLES, entities, maxEntities, unreliable });
     await session.initialize();
     if (index === 0) await session.host();
     else {
@@ -272,5 +275,49 @@ describe('SessionTransport', () => {
     // session needs, this file stops building.
     const asTransport = (engine: WebRTCNetworkEngine): SessionTransport => engine;
     expect(typeof asTransport).toBe('function');
+  });
+});
+
+describe('Session — delivery', () => {
+  it('sends everything reliably by default', async () => {
+    const members = await makeRoom({ connectivity: 'mesh', authority: 'arbitrated' },
+      [[{ role: 'admin' }], [{ role: 'player' }]]);
+
+    members[1].session.actAs('player-0').write('move', { x: 1 });
+    expect(netOf(members[0]).deliveriesFor('move')).toEqual(['reliable']);
+  });
+
+  it('routes only the declared patterns to the unreliable channel', async () => {
+    const members = await makeRoom({ connectivity: 'mesh', authority: 'authoritative' },
+      [[{ role: 'admin' }], [{ role: 'player' }]], undefined, ['public']);
+
+    members[0].session.actAs('admin-0').write('public', { tick: 1 });
+    members[1].session.actAs('player-0').write('move', { x: 1 });
+
+    expect(netOf(members[0]).deliveriesFor('public')).toEqual(['unreliable']);
+    expect(netOf(members[0]).deliveriesFor('move')).toEqual(['reliable']);
+  });
+
+  it('never lets control messages become unreliable, whatever the patterns say', async () => {
+    // '*' would match every channel if control went through the same decision.
+    // hello and registry are one-shot and nothing retries them, so a lossy
+    // channel would hang a device in the lobby with no error anywhere.
+    const members = await makeRoom({ connectivity: 'mesh', authority: 'authoritative' },
+      [[{ role: 'admin' }], [{ role: 'player' }]], undefined, ['*']);
+
+    const net = netOf(members[0]);
+    expect(net.deliveriesFor('hello')).toEqual(['reliable']);
+    expect(net.deliveriesFor('registry').every((d) => d === 'reliable')).toBe(true);
+    expect(net.deliveriesFor('registry').length).toBeGreaterThan(0);
+  });
+
+  it('relays a spoke write on the same transport it was declared for', async () => {
+    const members = await makeRoom({ connectivity: 'star', authority: 'authoritative' },
+      [[{ role: 'admin' }], [{ role: 'player' }], [{ role: 'player' }]], undefined, ['chat']);
+
+    members[1].session.actAs('player-0').write('chat', { text: 'hi' });
+
+    // One hop to the hub, one relayed hop onward — both unreliable.
+    expect(netOf(members[0]).deliveriesFor('chat')).toEqual(['unreliable', 'unreliable']);
   });
 });

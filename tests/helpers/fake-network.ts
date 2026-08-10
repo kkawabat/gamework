@@ -1,5 +1,6 @@
 import { SessionTransport } from '../../src/session/Session';
 import { Connectivity, DeviceId } from '../../src/session/SessionTypes';
+import { Delivery } from '../../src/types/NetworkTypes';
 import { NetworkMessage } from '../../src/types/GameTypes';
 
 /**
@@ -20,8 +21,18 @@ export class FakeNet {
     return this.hostId ? [this.hostId] : [];
   }
 
-  deliver(from: DeviceId, to: DeviceId, message: NetworkMessage): void {
+  /** Every message that crossed the fake wire, with the channel it took. */
+  readonly sent: Array<{ from: DeviceId; to: DeviceId; delivery: Delivery; channel: string }> = [];
+
+  deliver(from: DeviceId, to: DeviceId, message: NetworkMessage, delivery: Delivery): void {
+    const envelope = message.payload as { kind: string; channel?: string };
+    this.sent.push({ from, to, delivery, channel: envelope.channel ?? envelope.kind });
     this.transports.get(to)?.receive(from, message);
+  }
+
+  /** Which transport a given session channel (or control kind) actually used. */
+  deliveriesFor(channel: string): Delivery[] {
+    return this.sent.filter((entry) => entry.channel === channel).map((entry) => entry.delivery);
   }
 }
 
@@ -47,11 +58,13 @@ export class FakeTransport implements SessionTransport {
   getHostId(): DeviceId | null {
     return this.net.hostId;
   }
-  sendMessage(to: DeviceId, message: NetworkMessage): void {
-    this.net.deliver(this.deviceId, to, message);
+  sendMessage(to: DeviceId, message: NetworkMessage, delivery: Delivery = 'reliable'): void {
+    this.net.deliver(this.deviceId, to, message, delivery);
   }
-  broadcast(message: NetworkMessage): void {
-    for (const peer of this.net.peersOf(this.deviceId)) this.net.deliver(this.deviceId, peer, message);
+  broadcast(message: NetworkMessage, delivery: Delivery = 'reliable'): void {
+    for (const peer of this.net.peersOf(this.deviceId)) {
+      this.net.deliver(this.deviceId, peer, message, delivery);
+    }
   }
   onMessage(cb: (from: DeviceId, m: NetworkMessage) => void): () => void {
     this.messageCbs.add(cb);
