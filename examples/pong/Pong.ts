@@ -133,8 +133,9 @@ class PongManager {
       const steering = tiltState().receiving ? tiltSteering() : this.keyboardSteer;
       this.director.steer(steering, dt);
       this.director.step(dt); // no-op unless this device holds the referee
-      this.draw();
       this.syncView();
+      this.resizeCanvas();
+      this.draw();
     }
     requestAnimationFrame((next) => this.frame(next));
   }
@@ -153,16 +154,25 @@ class PongManager {
   private setupCanvas(): void {
     this.canvas = document.getElementById('pongCanvas') as HTMLCanvasElement | null;
     this.ctx = this.canvas?.getContext('2d') ?? null;
-    const resize = (): void => {
-      if (!this.canvas) return;
-      const ratio = window.devicePixelRatio || 1;
-      const rect = this.canvas.getBoundingClientRect();
-      this.canvas.width = rect.width * ratio;
-      this.canvas.height = rect.height * ratio;
-    };
-    window.addEventListener('resize', resize);
-    window.addEventListener('orientationchange', resize);
-    setTimeout(resize, 0);
+    window.addEventListener('resize', () => this.resizeCanvas());
+    window.addEventListener('orientationchange', () => this.resizeCanvas());
+  }
+
+  /**
+   * `#gameView` starts `hidden`, so a measurement at load is 0×0. Skip that
+   * rather than baking a blank bitmap; the frame loop retries once the view is
+   * shown and laid out.
+   */
+  private resizeCanvas(): void {
+    if (!this.canvas) return;
+    const ratio = window.devicePixelRatio || 1;
+    const rect = this.canvas.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) return;
+    const width = Math.round(rect.width * ratio);
+    const height = Math.round(rect.height * ratio);
+    if (this.canvas.width === width && this.canvas.height === height) return;
+    this.canvas.width = width;
+    this.canvas.height = height;
   }
 
   /**
@@ -284,6 +294,7 @@ class PongManager {
     // otherwise still be scrollable underneath.
     const chrome = document.querySelector<HTMLElement>('.container');
     if (chrome) chrome.hidden = viewId === 'gameView';
+    if (viewId === 'gameView') this.resizeCanvas();
   }
 
   private showMessage(message: string | null): void {
