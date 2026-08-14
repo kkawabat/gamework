@@ -1,5 +1,5 @@
 import { Session } from '../../src/session/Session';
-import { SessionMode } from '../../src/session/SessionTypes';
+import { DeviceId, SessionMode } from '../../src/session/SessionTypes';
 import { FakeNet, FakeTransport } from '../helpers/fake-network';
 import {
   BALL,
@@ -178,6 +178,50 @@ describe('Pong — play', () => {
       expect(host.director.state.ball.x).toBeGreaterThanOrEqual(BALL.radius - 1e-6);
       expect(host.director.state.ball.x).toBeLessThanOrEqual(FIELD.width - BALL.radius + 1e-6);
     }
+  });
+});
+
+describe('Pong — unreliable reordering', () => {
+  const injectWrite = (
+    to: DeviceId,
+    net: FakeNet,
+    from: DeviceId,
+    author: string,
+    channel: string,
+    payload: unknown
+  ): void => {
+    net.transports.get(to)!.receive(from, {
+      type: 'SESSION',
+      from,
+      timestamp: Date.now(),
+      payload: { kind: 'write', from, author, channel, payload }
+    });
+  };
+
+  it('does not rewind the guest scoreboard when a stale state snapshot arrives late', async () => {
+    const { host, guest } = await makeMatch();
+    startRally(host, guest);
+
+    const stale = JSON.parse(JSON.stringify(guest.director.state)) as typeof guest.director.state;
+    guest.session.actAs('player-1').write('paddle:{self}', { x: PADDLE.width / 2 });
+    expect(runUntil(host, () => host.director.state.scores['player-0'] === 1)).toBe(true);
+    expect(guest.director.state.scores['player-0']).toBe(1);
+
+    injectWrite('guest-phone', guest.net, 'host-phone', 'referee-0', 'state', stale);
+    expect(guest.director.state.scores['player-0']).toBe(1);
+    expect(guest.director.state.seq).toBeGreaterThan(stale.seq);
+  });
+
+  it('ignores an older paddle write so a reordered packet cannot yank it back', async () => {
+    const { host, guest } = await makeMatch();
+    startRally(host, guest);
+
+    guest.director.steer(-1, 0.1);
+    const current = host.director.state.paddles['player-1'];
+    expect(current).toBeLessThan(FIELD.width / 2);
+
+    injectWrite('host-phone', host.net, 'guest-phone', 'player-1', 'paddle:player-1', { x: 0.9, seq: 1 });
+    expect(host.director.state.paddles['player-1']).toBeCloseTo(current, 5);
   });
 });
 

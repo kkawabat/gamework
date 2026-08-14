@@ -26,7 +26,7 @@ import {
 type ViewId = 'homeView' | 'lobbyView' | 'gameView';
 const ALL_VIEWS: ViewId[] = ['homeView', 'lobbyView', 'gameView'];
 
-const COLOURS = { mine: '#5ad1a0', theirs: '#e4739a', ball: '#f4f4f5', line: 'rgba(255,255,255,0.16)' };
+const COLOURS = { green: '#5ad1a0', pink: '#e4739a', ball: '#f4f4f5', line: 'rgba(255,255,255,0.16)' };
 
 class PongManager {
   private session: Session | null = null;
@@ -123,6 +123,16 @@ class PongManager {
     this.renderLobby();
   }
 
+  /**
+   * Player 2's field is drawn mirrored so they sit at the visual bottom.
+   * Screen-left is then +x in field space — negate so a left tilt still
+   * moves the paddle left on their screen.
+   */
+  private screenSteering(): number {
+    const raw = tiltState().receiving ? tiltSteering() : this.keyboardSteer;
+    return this.director?.myIndex === 1 ? -raw : raw;
+  }
+
   // --- loop ----------------------------------------------------------------
 
   private frame(time: number): void {
@@ -130,8 +140,7 @@ class PongManager {
     this.lastFrame = time;
 
     if (this.director && dt > 0) {
-      const steering = tiltState().receiving ? tiltSteering() : this.keyboardSteer;
-      this.director.steer(steering, dt);
+      this.director.steer(this.screenSteering(), dt);
       this.director.step(dt); // no-op unless this device holds the referee
       this.syncView();
       this.resizeCanvas();
@@ -213,7 +222,7 @@ class PongManager {
       // player always notices.
       const x = isMine ? director.myPaddle : state.paddles[entityId] ?? FIELD.width / 2;
       const y = state.players.indexOf(entityId) === 0 ? FIELD.height - PADDLE.inset : PADDLE.inset;
-      ctx.fillStyle = isMine ? COLOURS.mine : COLOURS.theirs;
+      ctx.fillStyle = state.players.indexOf(entityId) === 1 ? COLOURS.pink : COLOURS.green;
       ctx.fillRect(
         toX(x) - (PADDLE.width * scale) / 2,
         toY(y) - (PADDLE.thickness * scale) / 2,

@@ -23,6 +23,8 @@
  * options, so they take the unordered, never-retransmitted channel. Both carry
  * absolute values, so a lost write is superseded by the next one 33ms later —
  * whereas a retransmit would hold the fresher value behind the stale one.
+ * Unordered also means a late packet can arrive after a newer one: each stream
+ * carries a seq, and a snapshot older than one already applied is ignored.
  * Everything else — the registry, and `ready`, which is written once and never
  * repeated — stays on the reliable channel, because losing any of those hangs
  * the lobby with no retry anywhere.
@@ -83,12 +85,14 @@ export interface PongState {
   scores: Record<string, number>;
   ready: Record<string, boolean>;
   countdown: number;
+  /** Referee publish counter. Joiners ignore a snapshot older than one they have. */
+  seq: number;
   winner?: string;
 }
 
 const emptyState = (): PongState => ({
   phase: 'lobby', players: [], ball: { x: FIELD.width / 2, y: FIELD.height / 2 },
-  paddles: {}, scores: {}, ready: {}, countdown: 0
+  paddles: {}, scores: {}, ready: {}, countdown: 0, seq: 0
 });
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
@@ -111,6 +115,8 @@ export class PongDirector {
   private sincePaddleSent = 0;
   private lastSentPaddle = -1;
   private localPaddle = FIELD.width / 2;
+  private paddleSeq = 0;
+  private appliedPaddleSeq: Record<string, number> = {};
 
   private stateHandlers = new Set<(state: PongState) => void>();
 
@@ -131,14 +137,17 @@ export class PongDirector {
         // The referee already owns this object — adopting the copy of it that
         // loops back through its own player entity would be harmless but
         // confusing, and would quietly discard anything written since.
-        if (!this.referee) this.state = payload as PongState;
+        if (!this.referee) this.adoptState(payload as PongState);
         this.stateHandlers.forEach((handler) => handler(this.state));
       });
     }
     if (refereeEntity && !this.referee) {
       this.referee = this.session.actAs(refereeEntity.entityId);
       this.referee.on('paddle:*', (payload, meta) => {
-        this.state.paddles[meta.author] = (payload as { x: number }).x;
+        const { x, seq } = payload as { x: number; seq?: number };
+        if (seq !== undefined && seq <= (this.appliedPaddleSeq[meta.author] ?? 0)) return;
+        if (seq !== undefined) this.appliedPaddleSeq[meta.author] = seq;
+        this.state.paddles[meta.author] = x;
       });
       this.referee.on('ready:*', (payload, meta) => {
         this.state.ready[meta.author] = (payload as { ready: boolean }).ready;
@@ -192,7 +201,7 @@ export class PongDirector {
     this.paddleTimer = 0;
     this.sincePaddleSent = 0;
     this.lastSentPaddle = this.localPaddle;
-    this.player?.write('paddle:{self}', { x: this.localPaddle });
+    this.player?.write('paddle:{self}', { x: this.localPaddle, seq: ++this.paddleSeq });
   }
 
   /**
@@ -317,7 +326,14 @@ export class PongDirector {
     this.serve(defender); // the player who conceded receives
   }
 
+  /** Drop a reordered unreliable snapshot rather than rewind the scoreboard. */
+  private adoptState(payload: PongState): void {
+    if ((payload.seq ?? 0) < this.state.seq) return;
+    this.state = payload;
+  }
+
   private publish(): void {
+    this.state.seq += 1;
     this.referee?.write('state', JSON.parse(JSON.stringify(this.state)) as PongState);
   }
 }
