@@ -1,6 +1,5 @@
-import { Session, SessionTransport } from '../../src/session/Session';
+import { Session, SessionTransport, WebRTCNetworkEngine } from '../../src';
 import { Entity, EntitySpec, Role, SessionMode } from '../../src/session/SessionTypes';
-import { WebRTCNetworkEngine } from '../../src/engines/WebRTCNetworkEngine';
 import { FakeNet, FakeTransport } from '../helpers/fake-network';
 
 // A role table exercising every shape: a read-only shared display, a player

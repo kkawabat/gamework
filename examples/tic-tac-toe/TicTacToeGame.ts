@@ -12,8 +12,7 @@
  */
 
 import QRCode from 'qrcode';
-import { GameWork, BaseGameState, GameAction, GameConfig, EntityHandle, Role, Session } from '../../src';
-import { WebRTCNetworkEngine } from '../../src/engines/WebRTCNetworkEngine';
+import { GameWork, BaseGameState, GameAction, GameConfig, EntityHandle, Role, Session, WebRTCNetworkEngine } from '../../src';
 import { createNetworkConfig, DATA_CHANNEL_CONFIG } from '../shared/network-config';
 
 // TicTacToe specific types

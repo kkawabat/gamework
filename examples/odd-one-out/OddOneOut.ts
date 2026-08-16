@@ -9,8 +9,7 @@
  */
 
 import QRCode from 'qrcode';
-import { Session } from '../../src';
-import { WebRTCNetworkEngine } from '../../src/engines/WebRTCNetworkEngine';
+import { Session, WebRTCNetworkEngine } from '../../src';
 import { createNetworkConfig, DATA_CHANNEL_CONFIG } from '../shared/network-config';
 import {
   MIN_PLAYERS,

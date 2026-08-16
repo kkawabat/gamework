@@ -1,5 +1,4 @@
-import { WebRTCNetworkEngineConfig } from '../../src/engines/WebRTCNetworkEngine';
-import { DataChannelConfig } from '../../src/types/NetworkTypes';
+import { DataChannelConfig, WebRTCNetworkEngineConfig } from '../../src';
 
 // Replaced at build time by Vite's `define` (vite.config.ts); undefined in dev.
 declare const __SIGNALING_SERVER_URL__: string | undefined;

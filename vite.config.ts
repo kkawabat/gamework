@@ -47,7 +47,7 @@ export default defineConfig(({ mode }) => {
     },
     // Optimize dependencies
     optimizeDeps: {
-      include: ['uuid', 'qrcode', 'chess.js']
+      include: ['qrcode', 'chess.js']
     },
     // Handle external dependencies properly
     define: {

@@ -30,6 +30,7 @@ export * from './session/SessionTypes';
 export { GameEngine } from './engines/GameEngine';
 export { UIEngine } from './engines/UIEngine';
 export { NetworkEngine, BaseNetworkEngine } from './engines/NetworkEngine';
+export { WebRTCNetworkEngine, WebRTCNetworkEngineConfig } from './engines/WebRTCNetworkEngine';
 
 // Type exports
 export * from './types/GameTypes';

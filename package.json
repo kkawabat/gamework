@@ -2,8 +2,9 @@
   "name": "gamework",
   "version": "1.0.0",
   "description": "A general-purpose framework for online board games with minimal operational cost",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "files": ["dist"],
   "scripts": {
     "build": "tsc",
     "build:client": "tsc",
@@ -36,22 +37,15 @@
     "@types/jest": "^29.0.0",
     "@types/node": "^20.0.0",
     "@types/qrcode": "^1.5.5",
-    "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "@vitejs/plugin-legacy": "^4.1.1",
+    "chess.js": "^1.4.0",
     "eslint": "^8.0.0",
     "jest": "^29.0.0",
+    "qrcode": "^1.5.0",
     "ts-jest": "^29.0.0",
     "typescript": "^5.0.0",
     "vite": "^4.5.14"
-  },
-  "dependencies": {
-    "chess.js": "^1.4.0",
-    "qrcode": "^1.5.0",
-    "uuid": "^9.0.0"
-  },
-  "peerDependencies": {
-    "webrtc-adapter": "^8.0.0"
   }
 }

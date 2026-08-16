@@ -1,14 +1,64 @@
 # GameWork
 
-TypeScript framework for multiplayer browser board games, plus the demos at
-games.kankawabata.com/gamework/. Games run entirely between players' browsers
-over WebRTC data channels — there is no game server and no game logic anywhere
-but the players' devices. State may be replicated across every device or held by
-one of them, but that node is always another browser, never something we run.
+TypeScript framework for multiplayer browser board games. Play happens entirely
+between players' browsers over WebRTC data channels — there is no game server
+and no game logic anywhere but the players' devices. State may be replicated
+across every device or held by one of them, but that node is always another
+browser, never something we run.
+
+This repo is the **library**, the signaling/TURN infrastructure it needs, and
+the **demos** that show how to consume it. The six titles in `examples/` are
+**demos**. A **game** is a title that has been promoted out of this repo.
+
+## Language
+
+**Library**:
+The published GameWork package — session, engines, types. A consumer depends on
+this and nothing else in the repo.
+_Avoid_: engine (too narrow — signaling and TURN are part of making it work)
+
+**Demo**:
+An in-tree example that exists to show how to consume the library. Not a
+dependency of the library; installing GameWork must not pull one in. The
+current titles in `examples/` are demos, including ones people actually play.
+_Avoid_: example (fine as a folder name, not as the kind of thing)
+
+**Game**:
+A title that ships independently of this repo and may depend on the library
+(Moniker, Mora Jai Box). Not a Django app.
+_Avoid_: project (portfolio's word for a Django app or an external card)
+
+## Relationships
+
+- A **Demo** depends on the **Library**; the **Library** must not depend on a **Demo**
+- A **Game** depends on the **Library** the same way a **Demo** does
+- Signaling and TURN are infrastructure for the **Library**, not for any one **Demo** or **Game**
+
+## Where a new idea goes
+
+- Uses GameWork (WebRTC session, rooms, roles) → start it as a **Demo** in
+  `examples/`. Add a portfolio card with a `url` if it should appear on
+  kankawabata.com. Do not add a Django app for it.
+- Single-player, Python, or a page with no GameWork session, and it should
+  live on kankawabata.com → portfolio Django app (Tilt Breakout, not Tilt Pong).
+- Static browser game that does not use GameWork → its own GitHub Pages repo
+  plus cards on the games hub and the portfolio (Moniker).
+
+Promote a **Demo** to a **Game** (own repo) only when it should ship and
+version independently of the library. Until then, keep it here — bloat is the
+package seam, not the git tree.
+
+## Example dialogue
+
+> **Dev:** "I have a new multiplayer idea. Portfolio or GameWork?"
+> **Domain expert:** "Does it need a GameWork session? If yes, it is a **Demo**
+> in this repo. Portfolio can link to it. It does not become a Django app."
 
 ## Architecture
 
-- **Framework:** TypeScript, no runtime framework; bundled per-demo by Vite
+- **Library:** TypeScript, no runtime framework; public surface is `src/index.ts`.
+  Demo-only deps (`chess.js`, `qrcode`) are `devDependencies`. The published
+  package is `dist/` only.
 - **Session layer:** `src/session/` — devices hold entities, entities have roles,
   roles are channel read/write permissions. Read `docs/session-modes.md` before
   adding a game or changing how one is wired; a seat is not a primitive here
@@ -208,6 +258,12 @@ gcloud --configuration=personal logging read \
 
 A WebSocket appears there as a single `GET 101` whose latency is the connection's
 whole lifetime, not a short request.
+
+An idle lobby is fatal: after `ROOM_CREATED` the host sends nothing until a
+joiner arrives, and a NAT or backgrounded tab will drop that silent socket
+(we have seen ~48s, `1006`). The client pings every 20s while the socket is
+open, which keeps a *foreground* QR alive. Leaving the tab still dies — JS
+timers freeze — and Tilt Pong then replaces the QR with "This room expired."
 
 ## Known gaps
 
