@@ -10,7 +10,10 @@ export type ClientToServer =
   // A deliberate departure from the game. This is the only thing that makes the
   // server announce a peer as gone: a bare socket close is ambiguous (clients
   // drop signaling on purpose once connected) so it is treated as silent.
-  | { type: 'LEAVE_ROOM' };
+  | { type: 'LEAVE_ROOM' }
+  // Keepalive so an idle lobby socket is not dropped by NAT or a frozen path.
+  // The client sends these; a missing reply is not fatal — the next one retries.
+  | { type: 'PING' };
 
 /** Matches RTCIceServer, but declared here so the server can build it without DOM types. */
 export interface IceServerConfig {
@@ -35,4 +38,5 @@ export type ServerToClient =
   // The peer deliberately left the game (sent LEAVE_ROOM). Not sent for a bare
   // socket close, which is how a connected peer routinely drops signaling.
   | { type: 'PEER_LEFT'; peerId: string }
+  | { type: 'PONG' }
   | { type: 'ERROR'; message: string };

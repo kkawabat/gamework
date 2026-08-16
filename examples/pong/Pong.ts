@@ -9,8 +9,7 @@
  */
 
 import QRCode from 'qrcode';
-import { Session } from '../../src';
-import { WebRTCNetworkEngine } from '../../src/engines/WebRTCNetworkEngine';
+import { Session, WebRTCNetworkEngine } from '../../src';
 import { createNetworkConfig, DATA_CHANNEL_CONFIG } from '../shared/network-config';
 import { calibrateTilt, enableTilt, tiltState, tiltSteering } from './tilt';
 import {
@@ -38,6 +37,8 @@ class PongManager {
   private attached = false;
   private isHost = false;
   private ready = false;
+  private lobbyExpired = false;
+  private localLevelled = false;
   private lastFrame = 0;
   private keyboardSteer = 0;
 
@@ -46,6 +47,7 @@ class PongManager {
     this.isHost = !roomCode;
 
     const network = new WebRTCNetworkEngine(createNetworkConfig(), DATA_CHANNEL_CONFIG, this.deviceId);
+    network.onSignalingClosed(() => this.onLobbyExpired());
     this.session = new Session(network, {
       mode: { connectivity: 'mesh', authority: 'authoritative' },
       deviceId: this.deviceId,
@@ -86,6 +88,11 @@ class PongManager {
     }
 
     document.getElementById('readyBtn')?.addEventListener('click', () => this.onReady());
+    document.getElementById('newRoomBtn')?.addEventListener('click', () => {
+      window.location.href = window.location.pathname;
+    });
+    document.getElementById('relevelBtn')?.addEventListener('click', () => this.onRelevel());
+    document.getElementById('levelBtn')?.addEventListener('click', () => this.onLevel());
     this.setupKeyboardFallback();
     requestAnimationFrame((time) => this.frame(time));
   }
@@ -123,6 +130,29 @@ class PongManager {
     this.renderLobby();
   }
 
+  /** Signaling died while still in the lobby, so the QR is a lie. */
+  private onLobbyExpired(): void {
+    const phase = this.director?.state.phase;
+    if (this.lobbyExpired || (phase && phase !== 'lobby')) return;
+    this.lobbyExpired = true;
+    this.showView('lobbyView');
+    this.renderLobby();
+  }
+
+  private onRelevel(): void {
+    const phase = this.director?.state.phase;
+    if (phase !== 'playing' && phase !== 'countdown') return;
+    this.director?.requestPause();
+  }
+
+  private onLevel(): void {
+    if (this.director?.state.phase !== 'paused' || this.localLevelled) return;
+    calibrateTilt();
+    this.localLevelled = true;
+    this.director.confirmLevel();
+    this.renderPauseOverlay();
+  }
+
   /**
    * Player 2's field is drawn mirrored so they sit at the visual bottom.
    * Screen-left is then +x in field space — negate so a left tilt still
@@ -140,7 +170,9 @@ class PongManager {
     this.lastFrame = time;
 
     if (this.director && dt > 0) {
-      this.director.steer(this.screenSteering(), dt);
+      if (this.director.state.phase !== 'paused') {
+        this.director.steer(this.screenSteering(), dt);
+      }
       this.director.step(dt); // no-op unless this device holds the referee
       this.syncView();
       this.resizeCanvas();
@@ -153,6 +185,7 @@ class PongManager {
     const inGame = this.director!.state.phase !== 'lobby';
     if (inGame) {
       if (document.getElementById('gameView')?.hidden) this.showView('gameView');
+      this.renderPauseOverlay();
     } else {
       this.renderLobby();
     }
@@ -231,7 +264,7 @@ class PongManager {
       );
     }
 
-    if (state.phase === 'playing' || state.phase === 'countdown') {
+    if (state.phase === 'playing' || state.phase === 'countdown' || state.phase === 'paused') {
       ctx.fillStyle = COLOURS.ball;
       ctx.beginPath();
       ctx.arc(toX(state.ball.x), toY(state.ball.y), BALL.radius * scale, 0, Math.PI * 2);
@@ -267,21 +300,62 @@ class PongManager {
   }
 
   private renderLobby(): void {
-    const players = this.session?.entitiesOfRole('player') ?? [];
+    const expired = document.getElementById('expiredBlock');
+    const invite = document.getElementById('inviteBlock');
+    const hint = document.getElementById('lobbyHint');
+    const button = document.getElementById('readyBtn') as HTMLButtonElement | null;
     const status = document.getElementById('lobbyStatus');
+
+    if (this.lobbyExpired) {
+      if (expired) expired.hidden = false;
+      if (invite) invite.hidden = true;
+      if (hint) hint.hidden = true;
+      if (button) button.hidden = true;
+      if (status) status.hidden = true;
+      return;
+    }
+
+    if (expired) expired.hidden = true;
+    if (status) status.hidden = false;
+    const players = this.session?.entitiesOfRole('player') ?? [];
     if (status) {
       status.textContent = players.length < 2
         ? 'Waiting for the second phone…'
         : this.ready ? 'Waiting for the other player to be ready…'
         : 'Both phones connected. Hold your phone flat and tap Ready.';
     }
-    const button = document.getElementById('readyBtn') as HTMLButtonElement | null;
     if (button) {
+      button.hidden = false;
       button.disabled = players.length < 2 || this.ready;
       button.textContent = this.ready ? 'Ready ✓' : 'Ready';
     }
-    const invite = document.getElementById('inviteBlock');
     if (invite) invite.hidden = !this.isHost || players.length >= 2;
+    if (hint) hint.hidden = false;
+  }
+
+  private renderPauseOverlay(): void {
+    const phase = this.director?.state.phase;
+    const paused = phase === 'paused';
+    const overlay = document.getElementById('pauseOverlay');
+    const relevelBtn = document.getElementById('relevelBtn');
+    const status = document.getElementById('pauseStatus');
+    const levelBtn = document.getElementById('levelBtn') as HTMLButtonElement | null;
+
+    if (relevelBtn) relevelBtn.hidden = phase !== 'playing' && phase !== 'countdown';
+    if (overlay) overlay.hidden = !paused;
+    if (!paused) {
+      this.localLevelled = false;
+      return;
+    }
+    if (status) {
+      status.textContent = this.localLevelled
+        ? 'Waiting for the other player to relevel…'
+        : 'Hold your phone however is comfortable, then tap Level.';
+    }
+    if (levelBtn) {
+      levelBtn.disabled = this.localLevelled;
+      levelBtn.textContent = this.localLevelled ? 'Level ✓' : 'Level';
+    }
   }
 
   /** Desktop fallback so the demo is playable without two phones. */

@@ -139,6 +139,9 @@ export class SignalingServer {
         // actually gone, so it is also the only one that announces PEER_LEFT.
         this.removeFromRoom(ws, { announce: true });
         break;
+      case 'PING':
+        this.send(ws, { type: 'PONG' });
+        break;
       default:
         throw new Error(`Unknown message type: ${(message as { type: string }).type}`);
     }

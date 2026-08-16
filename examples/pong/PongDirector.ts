@@ -7,8 +7,8 @@
  * Wiring: `mesh` + `authoritative`. With two players mesh and star describe the
  * same single connection; mesh is the honest label.
  *
- *   referee   reads paddle:* and ready:*, writes state.  One entity, on the host.
- *   player    reads state, writes paddle:{self} and ready:{self}.
+ *   referee   reads paddle:*, ready:* and pause:*, writes state.  One entity, on the host.
+ *   player    reads state, writes paddle:{self}, ready:{self} and pause:{self}.
  *
  * The host device holds both — the same split poker uses for its dealer, and
  * the reason the referee cannot be steered by the player sharing its tab.
@@ -25,23 +25,23 @@
  * whereas a retransmit would hold the fresher value behind the stale one.
  * Unordered also means a late packet can arrive after a newer one: each stream
  * carries a seq, and a snapshot older than one already applied is ignored.
- * Everything else — the registry, and `ready`, which is written once and never
- * repeated — stays on the reliable channel, because losing any of those hangs
- * the lobby with no retry anywhere.
+ * Everything else — the registry, `ready`, and `pause`, which are written once
+ * and never repeated — stays on the reliable channel, because losing any of
+ * those hangs the lobby (or a relevel) with no retry anywhere.
  */
 
 import { EntityHandle, Role, Session } from '../../src';
 
 export const REFEREE_ROLE: Role = {
   name: 'referee',
-  reads: ['paddle:*', 'ready:*'],
+  reads: ['paddle:*', 'ready:*', 'pause:*'],
   writes: ['state']
 };
 
 export const PLAYER_ROLE: Role = {
   name: 'player',
   reads: ['state'],
-  writes: ['paddle:{self}', 'ready:{self}']
+  writes: ['paddle:{self}', 'ready:{self}', 'pause:{self}']
 };
 
 export const PONG_ROLES = [REFEREE_ROLE, PLAYER_ROLE];
@@ -74,7 +74,7 @@ const PADDLE_EPSILON = 0.002;
  */
 const PADDLE_KEEPALIVE = 0.5;
 
-export type Phase = 'lobby' | 'countdown' | 'playing' | 'over';
+export type Phase = 'lobby' | 'countdown' | 'playing' | 'paused' | 'over';
 
 export interface PongState {
   phase: Phase;
@@ -84,6 +84,8 @@ export interface PongState {
   paddles: Record<string, number>;
   scores: Record<string, number>;
   ready: Record<string, boolean>;
+  /** Who has confirmed a new grip while the rally is paused. */
+  levelled: Record<string, boolean>;
   countdown: number;
   /** Referee publish counter. Joiners ignore a snapshot older than one they have. */
   seq: number;
@@ -92,7 +94,7 @@ export interface PongState {
 
 const emptyState = (): PongState => ({
   phase: 'lobby', players: [], ball: { x: FIELD.width / 2, y: FIELD.height / 2 },
-  paddles: {}, scores: {}, ready: {}, countdown: 0, seq: 0
+  paddles: {}, scores: {}, ready: {}, levelled: {}, countdown: 0, seq: 0
 });
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
@@ -153,6 +155,10 @@ export class PongDirector {
         this.state.ready[meta.author] = (payload as { ready: boolean }).ready;
         this.startIfReady();
       });
+      this.referee.on('pause:*', (payload, meta) => {
+        if ((payload as { paused: boolean }).paused) this.pause();
+        else this.noteLevelled(meta.author);
+      });
     }
   }
 
@@ -181,6 +187,16 @@ export class PongDirector {
 
   setReady(): void {
     this.player?.write('ready:{self}', { ready: true });
+  }
+
+  /** Freeze the rally on both phones so a player can recapture their grip. */
+  requestPause(): void {
+    this.player?.write('pause:{self}', { paused: true });
+  }
+
+  /** Local calibration is the caller's job; this only tells the referee we're done. */
+  confirmLevel(): void {
+    this.player?.write('pause:{self}', { paused: false });
   }
 
   /** Steering in -1..1 from the tilt module, integrated into a field position. */
@@ -243,10 +259,30 @@ export class PongDirector {
 
     this.state.players = players;
     this.state.scores = Object.fromEntries(players.map((id) => [id, 0]));
+    this.state.levelled = {};
     for (const id of players) {
       if (this.state.paddles[id] === undefined) this.state.paddles[id] = FIELD.width / 2;
     }
     this.serve(players[Math.floor(this.random() * players.length)]);
+  }
+
+  private pause(): void {
+    if (this.state.phase !== 'playing' && this.state.phase !== 'countdown') return;
+    this.state.phase = 'paused';
+    this.state.levelled = {};
+    this.publish();
+  }
+
+  private noteLevelled(author: string): void {
+    if (this.state.phase !== 'paused') return;
+    this.state.levelled = { ...this.state.levelled, [author]: true };
+    const players = this.state.players;
+    if (players.length >= 2 && players.every((id) => this.state.levelled[id])) {
+      this.state.levelled = {};
+      this.state.phase = 'countdown';
+      this.state.countdown = COUNTDOWN_SECONDS;
+    }
+    this.publish();
   }
 
   /** Put the ball back in play, heading towards `towards`. */

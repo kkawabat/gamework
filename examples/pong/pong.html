@@ -16,6 +16,32 @@
         }
         #lobbyStatus { margin: 1rem 0; }
         #readyBtn { min-width: 10rem; font-size: 1.1rem; }
+        #relevelBtn {
+            position: absolute;
+            top: 0.75em;
+            right: 0.9em;
+            z-index: 2;
+            margin: 0;
+            padding: 0.4em 0.9em;
+            font-size: 0.85rem;
+            background: rgba(255, 255, 255, 0.12);
+            color: #e6e8ee;
+        }
+        #pauseOverlay {
+            position: absolute;
+            inset: 0;
+            z-index: 3;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            padding: 1.5rem;
+            background: rgba(20, 20, 20, 0.82);
+            text-align: center;
+        }
+        #pauseOverlay[hidden] { display: none; }
+        #pauseStatus { color: #d7dae2; max-width: 18em; }
     </style>
 </head>
 <body>
@@ -37,7 +63,11 @@
 
             <p id="lobbyStatus"></p>
             <button id="readyBtn" disabled>Ready</button>
-            <p class="muted">Tilt left and right to move your paddle. First to 7.</p>
+            <div id="expiredBlock" hidden>
+                <p>This room expired — the other phone can no longer join it.</p>
+                <button type="button" id="newRoomBtn">New room</button>
+            </div>
+            <p class="muted" id="lobbyHint">Tilt left and right to move your paddle. First to 7.</p>
         </div>
 
         <div id="message" hidden></div>
@@ -46,6 +76,11 @@
     <!-- Full-screen once play starts; the container above is the lobby only. -->
     <div id="gameView" hidden>
         <canvas id="pongCanvas"></canvas>
+        <button type="button" id="relevelBtn">Relevel</button>
+        <div id="pauseOverlay" hidden>
+            <p id="pauseStatus">Hold your phone however is comfortable, then tap Level.</p>
+            <button type="button" id="levelBtn">Level</button>
+        </div>
     </div>
 
     <script type="module">

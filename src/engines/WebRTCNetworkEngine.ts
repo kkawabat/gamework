@@ -24,6 +24,8 @@ export interface WebRTCNetworkEngineConfig extends NetworkConfig {
   dialPolicy?: 'all' | 'host';
 }
 
+export const SIGNALING_PING_INTERVAL_MS = 20_000;
+
 export class WebRTCNetworkEngine extends BaseNetworkEngine {
   private networkConfig: WebRTCNetworkEngineConfig;
   private playerId: string;
@@ -34,6 +36,9 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
   private messageQueue: Promise<void> = Promise.resolve();
   private pendingCandidates = new Map<string, RTCIceCandidateInit[]>();
   private diagnostics: string[] = [];
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private closedDeliberately = false;
+  private signalingClosedHandlers = new Set<(code: number) => void>();
 
   constructor(config: WebRTCNetworkEngineConfig, dataChannelConfig: DataChannelConfig, playerId: string) {
     super(config, dataChannelConfig);
@@ -75,6 +80,15 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
    */
   getHostId(): string | null {
     return this.hostId;
+  }
+
+  /**
+   * Unexpected signaling close (NAT idle kill, backgrounded tab). Not fired
+   * for closeSignaling() / destroy(), which are how a connected game hangs up.
+   */
+  onSignalingClosed(callback: (code: number) => void): () => void {
+    this.signalingClosedHandlers.add(callback);
+    return () => this.signalingClosedHandlers.delete(callback);
   }
 
   async connect(peerId: string): Promise<void> {
@@ -122,8 +136,11 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
    * connection. Only destroy() below announces a real departure.
    */
   closeSignaling(): void {
-    this.socket?.close();
+    this.closedDeliberately = true;
+    this.stopPing();
+    const socket = this.socket;
     this.socket = null;
+    socket?.close();
   }
 
   destroy(): void {
@@ -141,15 +158,23 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
   private openSocket(): Promise<WebSocket> {
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(this.networkConfig.signalingServerUrl);
-      socket.onopen = () => { this.diag('ws open'); resolve(socket); };
+      socket.onopen = () => {
+        this.diag('ws open');
+        this.startPing(socket);
+        resolve(socket);
+      };
       socket.onerror = () => reject(new Error(`Could not connect to signaling server at ${this.networkConfig.signalingServerUrl}`));
       socket.onclose = (event) => {
         // The close code is the one thing only the client can see, and the whole
         // question about the ~1.8s socket deaths: 1006 = network/proxy dropped
         // it, 1001 = tab went away, 1000 = we closed it deliberately.
         this.diag(`ws close code=${event.code} clean=${event.wasClean}${event.reason ? ` reason=${event.reason}` : ''}`);
+        this.stopPing();
         this.flushDiagnostics('ws-close');
         this.rejectRoom(new Error('Signaling connection closed'));
+        if (!this.closedDeliberately) {
+          this.signalingClosedHandlers.forEach((handler) => handler(event.code));
+        }
       };
       socket.onmessage = (event) => {
         // Catch per message: a rejected queue skips the callback of every later
@@ -198,6 +223,8 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
         // and tearing down its connection is correct. A peer that merely dropped
         // signaling after connecting no longer reaches here.
         this.cleanupConnection(message.peerId);
+        break;
+      case 'PONG':
         break;
       case 'ERROR': {
         if (this.pendingRoom) this.rejectRoom(new Error(message.message));
@@ -341,6 +368,29 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
       throw new Error('Signaling socket is not open');
     }
     this.socket.send(JSON.stringify(message));
+  }
+
+  /**
+   * Outbound traffic is what refreshes a NAT binding. A lobby QR produces none
+   * after ROOM_CREATED, which is how a ~48s idle wait lost the room.
+   */
+  private startPing(socket: WebSocket): void {
+    this.stopPing();
+    this.pingTimer = setInterval(() => {
+      if (socket.readyState !== WebSocket.OPEN) return;
+      try {
+        socket.send(JSON.stringify({ type: 'PING' } satisfies ClientToServer));
+      } catch {
+        // A failed ping is not worth taking the session down over.
+      }
+    }, SIGNALING_PING_INTERVAL_MS);
+    this.pingTimer.unref?.();
+  }
+
+  private stopPing(): void {
+    if (this.pingTimer === null) return;
+    clearInterval(this.pingTimer);
+    this.pingTimer = null;
   }
 
   private diag(message: string): void {

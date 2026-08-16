@@ -1,4 +1,4 @@
-import { WebRTCNetworkEngine } from '../../src/engines/WebRTCNetworkEngine';
+import { SIGNALING_PING_INTERVAL_MS, WebRTCNetworkEngine } from '../../src/engines/WebRTCNetworkEngine';
 import { ServerToClient } from '../../shared/signaling-types';
 import {
   RELIABLE_CHANNEL,
@@ -80,7 +80,11 @@ describe('WebRTCNetworkEngine signaling', () => {
     await engine.initialize();
   });
 
-  afterEach(() => jest.restoreAllMocks());
+  afterEach(() => {
+    engine.destroy();
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
 
   it('tells the host a peer joined without waiting for a data channel', async () => {
     const joined: string[] = [];
@@ -118,6 +122,35 @@ describe('WebRTCNetworkEngine signaling', () => {
 
     expect(socket.readyState).toBe(3);
     expect(engine.getConnections()).toEqual([]); // no peers here, but none were torn down
+  });
+
+  it('pings while the signaling socket is open so an idle lobby is not dropped', async () => {
+    engine.destroy();
+    jest.useFakeTimers();
+    engine = new WebRTCNetworkEngine(
+      { iceServers: [], signalingServerUrl: 'ws://localhost:8080' },
+      { ordered: true },
+      'player_host'
+    );
+    const opened = engine.initialize();
+    jest.runOnlyPendingTimers();
+    await opened;
+    socket.sent = [];
+    jest.advanceTimersByTime(SIGNALING_PING_INTERVAL_MS);
+    expect(socket.sent.map((m) => JSON.parse(m).type)).toContain('PING');
+  });
+
+  it('reports an unexpected signaling close, but not closeSignaling()', async () => {
+    const codes: number[] = [];
+    engine.onSignalingClosed((code) => codes.push(code));
+
+    (socket as any).onclose?.({ code: 1006, wasClean: false, reason: '' });
+    expect(codes).toEqual([1006]);
+
+    codes.length = 0;
+    engine.closeSignaling();
+    (socket as any).onclose?.({ code: 1000, wasClean: true, reason: '' });
+    expect(codes).toEqual([]);
   });
 
   // A bare socket close is silent by design, so a deliberate teardown has to

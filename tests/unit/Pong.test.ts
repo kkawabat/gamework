@@ -250,6 +250,38 @@ describe('Pong — local paddle', () => {
   });
 });
 
+describe('Pong — relevel', () => {
+  it('pauses the rally on both phones when either player asks', async () => {
+    const { host, guest } = await makeMatch();
+    startRally(host, guest);
+    const ballY = host.director.state.ball.y;
+
+    guest.director.requestPause();
+    expect(host.director.state.phase).toBe('paused');
+    expect(guest.director.state.phase).toBe('paused');
+
+    run(host, 1);
+    expect(host.director.state.ball.y).toBeCloseTo(ballY, 5);
+    expect(host.director.state.phase).toBe('paused');
+  });
+
+  it('resumes only after both players confirm a new grip', async () => {
+    const { host, guest } = await makeMatch();
+    startRally(host, guest);
+    const ball = { ...host.director.state.ball };
+    host.director.requestPause();
+
+    host.director.confirmLevel();
+    expect(host.director.state.phase).toBe('paused');
+    expect(guest.director.state.levelled['player-0']).toBe(true);
+
+    guest.director.confirmLevel();
+    expect(host.director.state.phase).toBe('countdown');
+    expect(guest.director.state.phase).toBe('countdown');
+    expect(host.director.state.ball).toEqual(ball);
+  });
+});
+
 describe('Pong — permissions', () => {
   it('will not let a player author the game state', async () => {
     const { guest } = await makeMatch();
@@ -272,7 +304,7 @@ describe('Pong — permissions', () => {
 });
 
 describe('Pong — transport', () => {
-  it('streams state and paddles unreliably, but readies reliably', async () => {
+    it('streams state and paddles unreliably, but readies and pauses reliably', async () => {
     const { host, guest } = await makeMatch();
     startRally(host, guest);
     guest.director.steer(-1, 0.1);
@@ -287,6 +319,9 @@ describe('Pong — transport', () => {
     // retries it.
     expect(net.deliveriesFor('ready:player-1')).toEqual(['reliable']);
     expect(net.deliveriesFor('registry').every((d) => d === 'reliable')).toBe(true);
+
+    guest.director.requestPause();
+    expect(net.deliveriesFor('pause:player-1')).toEqual(['reliable']);
   });
 
   it('repeats a stationary paddle so a lost final write cannot strand it', async () => {
