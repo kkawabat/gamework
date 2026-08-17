@@ -83,7 +83,7 @@ production. Three separate things are often collapsed into "the server":
 **Signaling only introduces peers.** It relays offers, answers and ICE
 candidates, and nothing else — game messages never touch it. Once seating is
 settled it has no remaining job, so games call `Session.lock()` (poker at
-`beginMatch`, the two-player games once the second seat is filled), which drops
+`startMatch`, the two-player games once the second seat is filled), which drops
 the socket via `WebRTCNetworkEngine.closeSignaling()`. This is deliberate and is
 a one-way door: no peer can be dialled or re-dialled afterwards, and nobody can
 rejoin. Acceptable only because no demo attempts an ICE restart or reconnect

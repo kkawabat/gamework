@@ -186,7 +186,8 @@ that device holding its signaling socket open for the whole game.
 
 ## What is implemented
 
-Covered by `tests/unit/Session.test.ts` and `tests/unit/OddOneOut.test.ts`:
+Covered by `tests/unit/Session.test.ts`, `tests/unit/OddOneOut.test.ts` and
+`tests/unit/Poker.test.ts`:
 
 - Entity registry, per-role id numbering and caps, multi-entity devices.
 - Channel ACLs with `{self}` binding and `*` prefixes, enforced on write and
@@ -201,17 +202,23 @@ Demos:
 | Demo | Mode | Entities |
 |---|---|---|
 | tic-tac-toe, chess, connect-four | `mesh` / `replicated` | one `player` each |
-| poker | `mesh` / `arbitrated` | host holds `dealer` + `player` |
-| Odd One Out | `star` / `authoritative` | PC holds `admin` + `table`; phones `player` |
+| Odd One Out | `mesh` / `authoritative` | host holds `admin` + `player`; others `player` |
+| poker | `star` / `authoritative` | host holds `dealer` + `player` |
 | Tilt Pong | `mesh` / `authoritative` | host holds `referee` + `player` |
+
+Odd One Out is the N-player mesh: every phone holds a channel to every other
+phone, and the word is still a routing fact — `secret:{self}` — so the odd one
+out is never sent it. Poker is the hub-and-spoke: joiners dial only the host,
+and hole cards travel on `hand:{self}`.
 
 Tilt Pong is the only real-time one, and the first `authoritative` session whose
 reason is divergence rather than secrecy: two devices simulating one bouncing
 ball drift apart within seconds however carefully they start.
 
-**No demo has run in a browser since this model landed.** Odd One Out is driven
-end to end across four real sessions in tests, but over a fake transport — see
-CONTEXT.md on why local testing proves nothing about NAT traversal.
+**No demo has run in a browser since this model landed.** Odd One Out and poker
+are driven end to end across several real sessions in tests, but over a fake
+transport — see CONTEXT.md on why local testing proves nothing about NAT
+traversal.
 
 ## What is not implemented
 

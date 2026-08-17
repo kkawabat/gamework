@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GameWork Odd One Out - Shared screen + phones</title>
+    <title>GameWork Odd One Out - N-player peer-to-peer</title>
     <link rel="icon" type="image/x-icon" href="../../favicon.ico">
     <link rel="stylesheet" href="../gamework.css">
     <style>
@@ -17,8 +17,8 @@
             text-align: center;
         }
         #secretCard.odd { background: rgba(220, 80, 80, 0.18); }
-        #voteList, #tablePlayers { list-style: none; padding: 0; }
-        #voteList li, #tablePlayers li { margin: 0.4rem 0; }
+        #voteList, #playerList { list-style: none; padding: 0; }
+        #voteList li, #playerList li { margin: 0.4rem 0; }
         #voteList button { width: 100%; }
     </style>
 </head>
@@ -32,21 +32,21 @@
             <p class="muted">Connecting…</p>
         </div>
 
-        <!-- The PC: shared screen + referee. Shows nothing secret, ever. -->
-        <div id="tableView" hidden>
-            <div class="qr-code" id="qrCodeContainer"></div>
-            <div class="room-code" id="roomCode"></div>
-            <p class="muted">Scan to join as a player.</p>
+        <div id="playView" hidden>
+            <div id="inviteBlock">
+                <div class="qr-code" id="qrCodeContainer"></div>
+                <div class="room-code" id="roomCode"></div>
+                <p class="muted">Scan to join. The host plays too.</p>
+            </div>
 
-            <ul id="tablePlayers"></ul>
-            <p id="tableStatus"></p>
-            <button id="startRoundBtn" disabled>Waiting…</button>
-        </div>
+            <ul class="player-list" id="playerList"></ul>
+            <p id="lobbyStatus"></p>
+            <button id="startRoundBtn" hidden disabled>Waiting…</button>
 
-        <!-- A phone: one player. Sees its own word and nobody else's. -->
-        <div id="playerView" hidden>
-            <div id="secretCard">Waiting for the round to start…</div>
-            <ul id="voteList"></ul>
+            <div id="roundBlock" hidden>
+                <div id="secretCard">Waiting for the round to start…</div>
+                <ul id="voteList"></ul>
+            </div>
         </div>
 
         <div id="message" hidden></div>

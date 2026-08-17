@@ -16,7 +16,7 @@ export interface WebRTCNetworkEngineConfig extends NetworkConfig {
   signalingServerUrl: string;
   /**
    * Who a joiner dials when it lands in a room. `all` is the mesh: every peer
-   * gets a data channel, which is what the two-player demos and poker use.
+   * gets a data channel, which is what the two-player demos and Odd One Out use.
    * `host` is the star: only the room creator is dialed, so the fan-out is N
    * connections instead of N²/2 and only hub↔spoke pairs can consume TURN.
    * Defaults to `all` — the behaviour every existing demo already relies on.

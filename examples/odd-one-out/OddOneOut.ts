@@ -3,9 +3,10 @@
  * OddOneOutDirector, which is driven across real sessions in
  * tests/unit/OddOneOut.test.ts — this file only paints it.
  *
- * The PC opens the page with no room code and becomes the hub: it brings an
- * `admin` entity (the referee) and a `table` entity (the shared screen).
- * Phones open the QR link and bring a single `player`.
+ * Opening the page with no room code hosts: that device brings an `admin`
+ * (the referee) and a `player` (its own seat). Everyone else scans the QR
+ * and brings a single `player`. Mesh, so every phone holds a channel to
+ * every other phone; authoritative, so the word is a routing fact.
  */
 
 import QRCode from 'qrcode';
@@ -19,46 +20,41 @@ import {
   SecretView
 } from './OddOneOutDirector';
 
-type ViewId = 'homeView' | 'tableView' | 'playerView';
-const ALL_VIEWS: ViewId[] = ['homeView', 'tableView', 'playerView'];
+type ViewId = 'homeView' | 'playView';
+const ALL_VIEWS: ViewId[] = ['homeView', 'playView'];
 
 class OddOneOutManager {
   private session: Session | null = null;
   private director: OddOneOutDirector | null = null;
   private readonly deviceId = `device_${Math.random().toString(36).slice(2, 11)}`;
   private attached = false;
-  private isTable = false;
+  private isHost = false;
+  private locked = false;
 
   async initialize(): Promise<void> {
     const roomCode = new URLSearchParams(window.location.search).get('room');
-    this.isTable = !roomCode;
+    this.isHost = !roomCode;
 
-    const network = new WebRTCNetworkEngine(
-      // Star: a phone dials the hub and nothing else.
-      { ...createNetworkConfig(), dialPolicy: 'host' },
-      DATA_CHANNEL_CONFIG,
-      this.deviceId
-    );
+    const network = new WebRTCNetworkEngine(createNetworkConfig(), DATA_CHANNEL_CONFIG, this.deviceId);
 
     this.session = new Session(network, {
-      mode: { connectivity: 'star', authority: 'authoritative' },
+      mode: { connectivity: 'mesh', authority: 'authoritative' },
       deviceId: this.deviceId,
       roles: ODD_ONE_OUT_ROLES,
-      entities: this.isTable ? [{ role: 'admin' }, { role: 'table' }] : [{ role: 'player' }],
-      maxEntities: { admin: 1, table: 1, player: 8 }
+      entities: this.isHost ? [{ role: 'admin' }, { role: 'player' }] : [{ role: 'player' }],
+      maxEntities: { admin: 1, player: 8 }
     });
 
     this.director = new OddOneOutDirector(this.session);
 
-    this.session.onRegistry(() => {
-      // Attach once, when this device's own entities first appear — a joiner
-      // does not know its entity id until the host has assigned it.
-      if (!this.attached && this.session!.localEntities.length > 0) {
+    this.session.onRegistry((_entities, locked) => {
+      if (locked) this.session!.lock();
+      if (!this.attached && this.session!.localEntityOfRole('player')) {
         this.attached = true;
         this.director!.attach();
         this.director!.onPublic(() => this.render());
         this.director!.onSecret(() => this.render());
-        this.showView(this.isTable ? 'tableView' : 'playerView');
+        this.showView('playView');
       }
       this.render();
     });
@@ -67,7 +63,7 @@ class OddOneOutManager {
 
     try {
       await this.session.initialize();
-      if (this.isTable) await this.startTable();
+      if (this.isHost) await this.startHost();
       else await this.session.join(roomCode!.toUpperCase());
     } catch (error) {
       this.showMessage(`Could not connect: ${(error as Error).message}`);
@@ -76,7 +72,7 @@ class OddOneOutManager {
     this.wireControls();
   }
 
-  private async startTable(): Promise<void> {
+  private async startHost(): Promise<void> {
     const roomCode = await this.session!.host();
     const codeElement = document.getElementById('roomCode');
     if (codeElement) codeElement.textContent = roomCode;
@@ -96,6 +92,10 @@ class OddOneOutManager {
   private wireControls(): void {
     document.getElementById('startRoundBtn')?.addEventListener('click', () => {
       try {
+        if (!this.locked) {
+          this.session?.lock();
+          this.locked = true;
+        }
         this.director?.startRound();
       } catch (error) {
         this.showMessage((error as Error).message);
@@ -110,34 +110,40 @@ class OddOneOutManager {
 
   private render(): void {
     if (!this.director) return;
-    if (this.isTable) this.renderTable(this.director.publicView);
-    else this.renderPlayer(this.director.publicView, this.director.secret);
+    this.renderLobby(this.director.publicView);
+    this.renderPlayer(this.director.publicView, this.director.secret);
   }
 
-  private renderTable(view: PublicView): void {
+  private renderLobby(view: PublicView): void {
     const players = this.director!.playerIds();
+    const invite = document.getElementById('inviteBlock');
+    if (invite) invite.hidden = !this.isHost || view.phase !== 'lobby';
 
-    const list = document.getElementById('tablePlayers');
+    const list = document.getElementById('playerList');
     if (list) {
       list.innerHTML = players.length
-        ? view.players.map((player, index) => {
-            const voted = player.voted ? ' ✓' : '';
-            const culprit = view.oddOneOut === player.entityId ? ' — the odd one out' : '';
-            return `<li>Player ${index + 1}${voted}${culprit}</li>`;
+        ? players.map((entityId, index) => {
+            const you = entityId === this.director!.playerId ? ' (you)' : '';
+            const host = index === 0 ? ' — host' : '';
+            const voted = view.players.find((player) => player.entityId === entityId)?.voted ? ' ✓' : '';
+            return `<li>Player ${index + 1}${you}${host}${voted}</li>`;
           }).join('')
         : '<li class="muted">Waiting for players…</li>';
     }
 
-    const status = document.getElementById('tableStatus');
+    const status = document.getElementById('lobbyStatus');
     if (status) {
       status.textContent =
         view.phase === 'reveal' ? `The word was “${view.word}”.`
-        : view.phase === 'voting' ? 'Everyone has a word — except one of you. Vote on your phone.'
-        : `${players.length} player${players.length === 1 ? '' : 's'} joined.`;
+        : view.phase === 'voting' ? 'Everyone has a word — except one of you. Vote below.'
+        : this.isHost
+          ? `${players.length} player${players.length === 1 ? '' : 's'} joined.`
+          : `${players.length} player${players.length === 1 ? '' : 's'} in the room — waiting for the host…`;
     }
 
     const startButton = document.getElementById('startRoundBtn') as HTMLButtonElement | null;
     if (startButton) {
+      startButton.hidden = !this.isHost;
       startButton.disabled = players.length < MIN_PLAYERS;
       startButton.textContent = players.length < MIN_PLAYERS
         ? `Need ${MIN_PLAYERS} players`
@@ -146,6 +152,9 @@ class OddOneOutManager {
   }
 
   private renderPlayer(view: PublicView, secret: SecretView | null): void {
+    const round = document.getElementById('roundBlock');
+    if (round) round.hidden = view.phase === 'lobby';
+
     const card = document.getElementById('secretCard');
     if (card) {
       card.textContent = !secret ? 'Waiting for the round to start…'

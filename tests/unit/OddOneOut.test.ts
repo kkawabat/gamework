@@ -9,13 +9,13 @@ import {
 } from '../../examples/odd-one-out/OddOneOutDirector';
 
 /**
- * Drives the demo across four real Sessions over the fake mesh. This is the
+ * Drives the demo across real Sessions over the fake mesh. This is the
  * check that the model actually withholds what it claims to: no browser is
  * involved, so the assertions are about routing rather than about what a UI
  * chose to draw.
  */
 
-const MODE: SessionMode = { connectivity: 'star', authority: 'authoritative' };
+const MODE: SessionMode = { connectivity: 'mesh', authority: 'authoritative' };
 
 // First call picks the word, second picks the odd one out. 0.5 of three
 // players lands on the middle one, which is a more useful pick than the first.
@@ -32,8 +32,8 @@ interface Device {
   channelsSeen: string[];
 }
 
-async function makeGame(playerCount = 3): Promise<{ pc: Device; phones: Device[] }> {
-  const net = new FakeNet('star');
+async function makeGame(playerCount = 3): Promise<{ host: Device; guests: Device[] }> {
+  const net = new FakeNet('mesh');
   const random = scriptedRandom([0, 0.5]);
 
   const build = async (deviceId: string, entities: { role: string }[], isHost: boolean): Promise<Device> => {
@@ -48,14 +48,14 @@ async function makeGame(playerCount = 3): Promise<{ pc: Device; phones: Device[]
     return { session, transport, director: new OddOneOutDirector(session, { random }), channelsSeen: [] };
   };
 
-  // The PC is both the referee and the shared screen — two entities, one tab.
-  const pc = await build('pc', [{ role: 'admin' }, { role: 'table' }], true);
-  const phones: Device[] = [];
-  for (let index = 0; index < playerCount; index += 1) {
-    phones.push(await build(`phone-${index}`, [{ role: 'player' }], false));
+  // The host is both the referee and a player — two entities, one tab.
+  const host = await build('host', [{ role: 'admin' }, { role: 'player' }], true);
+  const guests: Device[] = [];
+  for (let index = 1; index < playerCount; index += 1) {
+    guests.push(await build(`phone-${index}`, [{ role: 'player' }], false));
   }
 
-  for (const device of [pc, ...phones]) {
+  for (const device of [host, ...guests]) {
     device.director.attach();
     for (const entity of device.session.localEntities) {
       device.session.actAs(entity.entityId).on('*', (_payload, meta) =>
@@ -63,27 +63,28 @@ async function makeGame(playerCount = 3): Promise<{ pc: Device; phones: Device[]
     }
   }
 
-  return { pc, phones };
+  return { host, guests };
 }
 
 describe('Odd One Out — registry', () => {
-  it('gives the PC an admin and a table entity, and each phone a player', async () => {
-    const { pc, phones } = await makeGame();
+  it('gives the host an admin and a player entity, and each guest a player', async () => {
+    const { host, guests } = await makeGame();
 
-    expect(pc.session.localEntities.map((e) => e.entityId)).toEqual(['admin-0', 'table-0']);
-    expect(pc.director.isAdmin).toBe(true);
-    expect(phones.map((p) => p.director.playerId)).toEqual(['player-0', 'player-1', 'player-2']);
-    expect(phones[0].director.isAdmin).toBe(false);
+    expect(host.session.localEntities.map((e) => e.entityId)).toEqual(['admin-0', 'player-0']);
+    expect(host.director.isAdmin).toBe(true);
+    expect(host.director.playerId).toBe('player-0');
+    expect(guests.map((p) => p.director.playerId)).toEqual(['player-1', 'player-2']);
+    expect(guests[0].director.isAdmin).toBe(false);
   });
 });
 
 describe('Odd One Out — a round', () => {
   it('tells each player only their own secret, and the odd one out no word', async () => {
-    const { pc, phones } = await makeGame();
+    const { host, guests } = await makeGame();
 
-    pc.director.startRound();
+    host.director.startRound();
 
-    const secrets = phones.map((phone) => phone.director.secret as SecretView);
+    const secrets = [host, ...guests].map((device) => device.director.secret as SecretView);
     expect(secrets.map((s) => s.oddOneOut)).toEqual([false, true, false]);
     expect(secrets[0].word).toBe('Beach');
     expect(secrets[2].word).toBe('Beach');
@@ -91,34 +92,36 @@ describe('Odd One Out — a round', () => {
     expect(secrets[1].word).toBeNull();
   });
 
-  it('never routes a secret to another player\'s device or to the shared screen', async () => {
-    const { pc, phones } = await makeGame();
+  it('never routes a secret to another player\'s device, including the host\'s admin', async () => {
+    const { host, guests } = await makeGame();
 
-    pc.director.startRound();
+    host.director.startRound();
 
-    expect(phones[0].channelsSeen).toEqual(['player-0:secret:player-0', 'player-0:public']);
-    expect(phones[1].channelsSeen).toEqual(['player-1:secret:player-1', 'player-1:public']);
-    // The table shares a browser tab with the admin that just dealt the
-    // secrets, and still receives none of them.
-    expect(pc.channelsSeen).toEqual(['admin-0:public', 'table-0:public']);
+    // The host's player receives its own secret; the admin that dealt it does not.
+    // Public is delivered in local-entity order: admin first, then player.
+    expect(host.channelsSeen).toEqual([
+      'player-0:secret:player-0', 'admin-0:public', 'player-0:public'
+    ]);
+    expect(guests[0].channelsSeen).toEqual(['player-1:secret:player-1', 'player-1:public']);
+    expect(guests[1].channelsSeen).toEqual(['player-2:secret:player-2', 'player-2:public']);
   });
 
   it('keeps the word off the public channel until the reveal', async () => {
-    const { pc, phones } = await makeGame();
+    const { host, guests } = await makeGame();
 
-    pc.director.startRound();
-    const duringVoting = phones[0].director.publicView;
+    host.director.startRound();
+    const duringVoting = guests[0].director.publicView;
     expect(duringVoting.phase).toBe('voting');
     expect(duringVoting.word).toBeUndefined();
     expect(duringVoting.oddOneOut).toBeUndefined();
 
-    phones[0].director.vote('player-1');
-    phones[1].director.vote('player-2');
-    expect(phones[0].director.publicView.phase).toBe('voting');
+    host.director.vote('player-1');
+    guests[0].director.vote('player-2');
+    expect(guests[0].director.publicView.phase).toBe('voting');
 
-    phones[2].director.vote('player-1');
+    guests[1].director.vote('player-1');
 
-    const revealed: PublicView = phones[0].director.publicView;
+    const revealed: PublicView = guests[0].director.publicView;
     expect(revealed.phase).toBe('reveal');
     expect(revealed.word).toBe('Beach');
     expect(revealed.oddOneOut).toBe('player-1');
@@ -127,41 +130,42 @@ describe('Odd One Out — a round', () => {
     });
   });
 
-  it('shows the shared screen the same public view the phones get', async () => {
-    const { pc, phones } = await makeGame();
-    pc.director.startRound();
+  it('shows every device the same public view', async () => {
+    const { host, guests } = await makeGame();
+    host.director.startRound();
 
-    expect(pc.director.publicView).toEqual(phones[0].director.publicView);
+    expect(host.director.publicView).toEqual(guests[0].director.publicView);
+    expect(guests[0].director.publicView).toEqual(guests[1].director.publicView);
   });
 });
 
 describe('Odd One Out — permissions', () => {
-  it('will not let a player start a round or write the public view', async () => {
-    const { phones } = await makeGame();
+  it('will not let a guest start a round or write the public view', async () => {
+    const { guests } = await makeGame();
 
-    expect(() => phones[0].director.startRound()).toThrow(/Only the admin/);
-    expect(() => phones[0].session.actAs('player-0').write('public', { phase: 'reveal' }))
+    expect(() => guests[0].director.startRound()).toThrow(/Only the admin/);
+    expect(() => guests[0].session.actAs('player-1').write('public', { phase: 'reveal' }))
       .toThrow(/may not write/);
   });
 
-  it('will not let the shared screen write anything, though it shares the admin\'s device', async () => {
-    const { pc } = await makeGame();
+  it('will not let the host\'s player write the public view, though it shares the admin\'s device', async () => {
+    const { host } = await makeGame();
 
-    expect(pc.session.actAs('table-0').canWrite('public')).toBe(false);
-    expect(() => pc.session.actAs('table-0').write('public', {})).toThrow(/may not write/);
+    expect(host.session.actAs('player-0').canWrite('public')).toBe(false);
+    expect(() => host.session.actAs('player-0').write('public', {})).toThrow(/may not write/);
   });
 
   it('refuses a vote from a player impersonating another', async () => {
-    const { phones } = await makeGame();
+    const { guests } = await makeGame();
 
-    // `vote:{self}` binds to the writer, so player-0 simply has no permission
-    // to write player-1's vote channel.
-    expect(() => phones[0].session.actAs('player-0').write('vote:player-1', { target: 'player-2' }))
+    // `vote:{self}` binds to the writer, so player-1 simply has no permission
+    // to write player-2's vote channel.
+    expect(() => guests[0].session.actAs('player-1').write('vote:player-2', { target: 'player-0' }))
       .toThrow(/may not write/);
   });
 
   it('needs a minimum number of players', async () => {
-    const { pc } = await makeGame(2);
-    expect(() => pc.director.startRound()).toThrow(/at least 3/);
+    const { host } = await makeGame(2);
+    expect(() => host.director.startRound()).toThrow(/at least 3/);
   });
 });

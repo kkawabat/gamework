@@ -8,76 +8,92 @@
     <link rel="stylesheet" href="./gamework.css">
 </head>
 <body>
-    <div class="container">
+    <div class="container landing">
         <h1>🎮 GameWork</h1>
 
         <div class="panel">
             <h3>Live Demos</h3>
-            <p class="muted">Choose a demo to see the GameWork framework in action</p>
+            <p class="muted">The same library, four ways to wire a session. Pick a connectivity and play.</p>
         </div>
 
-        <div class="demo-grid">
-            <a href="tic-tac-toe.html" class="demo-card">
-                <div class="demo-icon">⭕</div>
-                <div class="demo-title">Tic-Tac-Toe</div>
-                <div class="demo-description">
-                    Complete Tic-Tac-Toe implementation with game state
-                    management and WebRTC multiplayer.
-                </div>
-            </a>
+        <section class="demo-category">
+            <h2>Two-player peer-to-peer</h2>
+            <p class="muted">Mesh, replicated. Both devices hold the same board and take turns writing moves. Losing the host would still leave a working connection — there is only one.</p>
+            <div class="demo-grid">
+                <a href="tic-tac-toe.html" class="demo-card">
+                    <div class="demo-icon">⭕</div>
+                    <div class="demo-title">Tic-Tac-Toe</div>
+                    <div class="demo-description">
+                        The plainest wiring: one role, one channel, nothing hidden.
+                    </div>
+                </a>
 
-            <a href="connect-four.html" class="demo-card">
-                <div class="demo-icon">🔴</div>
-                <div class="demo-title">Connect Four</div>
-                <div class="demo-description">
-                    Classic Connect Four game with WebRTC multiplayer support.
-                    Drop your pieces to get four in a row!
-                </div>
-            </a>
+                <a href="connect-four.html" class="demo-card">
+                    <div class="demo-icon">🔴</div>
+                    <div class="demo-title">Connect Four</div>
+                    <div class="demo-description">
+                        Same mesh as tic-tac-toe. Drop pieces to get four in a row.
+                    </div>
+                </a>
 
-            <a href="poker.html" class="demo-card">
-                <div class="demo-icon">🃏</div>
-                <div class="demo-title">Poker</div>
-                <div class="demo-description">
-                    Heads-up Texas Hold'em showing how GameWork handles
-                    randomness (a seeded shuffle) and complex game state.
-                </div>
-            </a>
+                <a href="chess.html" class="demo-card">
+                    <div class="demo-icon">♔</div>
+                    <div class="demo-title">Chess</div>
+                    <div class="demo-description">
+                        Full movement, check and checkmate, still just two peers sharing a board.
+                    </div>
+                </a>
+            </div>
+        </section>
 
-            <a href="chess.html" class="demo-card">
-                <div class="demo-icon">♔</div>
-                <div class="demo-title">Chess</div>
-                <div class="demo-description">
-                    Classic chess game with full piece movement, check/checkmate
-                    detection, and multiplayer support.
-                </div>
-            </a>
+        <section class="demo-category">
+            <h2>N-player peer-to-peer</h2>
+            <p class="muted">Mesh, authoritative. Every phone holds a channel to every other phone. The host deals in private — the odd one out is never sent the word.</p>
+            <div class="demo-grid">
+                <a href="odd-one-out.html" class="demo-card">
+                    <div class="demo-icon">🕵️</div>
+                    <div class="demo-title">Odd One Out</div>
+                    <div class="demo-description">
+                        Three to eight phones. Everyone gets a word except one player, who has to bluff.
+                    </div>
+                </a>
+            </div>
+        </section>
 
-            <a href="pong.html" class="demo-card">
-                <div class="demo-icon">🏓</div>
-                <div class="demo-title">Tilt Pong</div>
-                <div class="demo-description">
-                    Two phones, one QR code. Tilt to move your paddle — the host
-                    phone runs the ball, both render themselves at the bottom.
-                </div>
-            </a>
+        <section class="demo-category">
+            <h2>Hub and spoke</h2>
+            <p class="muted">Star, authoritative. Joiners dial only the host. Hole cards are a routing fact: each seat reads <code>hand:{self}</code> and nothing else private.</p>
+            <div class="demo-grid">
+                <a href="poker.html" class="demo-card">
+                    <div class="demo-icon">🃏</div>
+                    <div class="demo-title">Poker</div>
+                    <div class="demo-description">
+                        Texas Hold'em for 2–8. The host is the dealer; everyone else is a spoke.
+                    </div>
+                </a>
+            </div>
+        </section>
 
-            <a href="odd-one-out.html" class="demo-card">
-                <div class="demo-icon">🕵️</div>
-                <div class="demo-title">Odd One Out</div>
-                <div class="demo-description">
-                    Open on a PC for the shared screen, then scan to join on phones.
-                    Everyone gets a word except one player — who never receives it.
-                </div>
-            </a>
-        </div>
+        <section class="demo-category">
+            <h2>Real-time</h2>
+            <p class="muted">Mesh, authoritative — not for secrecy, for physics. Two devices simulating one bouncing ball drift apart within seconds. Paddle and ball ride an unreliable channel at 30Hz.</p>
+            <div class="demo-grid">
+                <a href="pong.html" class="demo-card">
+                    <div class="demo-icon">🏓</div>
+                    <div class="demo-title">Tilt Pong</div>
+                    <div class="demo-description">
+                        Two phones, one QR code. Tilt to move your paddle — the host phone runs the ball, both render themselves at the bottom.
+                    </div>
+                </a>
+            </div>
+        </section>
 
         <div class="panel">
             <h3>About GameWork</h3>
-            <p class="muted">Host-authoritative multiplayer game framework</p>
-            <p class="muted">WebRTC peer-to-peer communication</p>
-            <p class="muted">Serverless architecture with minimal operational cost</p>
-            <p class="muted">TypeScript-based with full type safety</p>
+            <p class="muted">Multiplayer sessions over WebRTC — no game server, no game logic off the players' devices</p>
+            <p class="muted">Mesh or star connectivity; replicated, arbitrated or authoritative reduction</p>
+            <p class="muted">Signaling introduces peers, then gets out of the way</p>
+            <p class="muted">TypeScript, with the published package separate from these demos</p>
         </div>
 
         <div class="panel">
