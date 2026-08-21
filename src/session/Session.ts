@@ -369,7 +369,23 @@ export class Session {
 
   /** Host only. Assigns ids and admits what the caps and the lock allow. */
   private admit(deviceId: DeviceId, specs: EntitySpec[], { announce }: { announce: boolean }): void {
-    if (this.registry.some((entity) => entity.deviceId === deviceId)) return; // duplicate hello
+    if (this.registry.some((entity) => entity.deviceId === deviceId)) {
+      // A device already in the registry saying hello again is one that came
+      // back — a backgrounded tab whose channel died, or a reload that kept its
+      // device id. Its entities are still here and still its own, so there is
+      // nothing to admit; what it has lost is everything it was ever told. Send
+      // the registry again and let the game republish behind it, which under
+      // `authoritative` is the whole of the resync.
+      //
+      // This is not the claim token in docs/TODO.md: a device asserts its own
+      // id rather than proving a right to an entity, so it recovers an accident
+      // and would not stop a peer that claimed someone else's id. That is the
+      // same honesty as the channel ACLs — a correctness boundary, not a trust
+      // boundary — and a returning phone is the case that actually happens.
+      this.sendRegistry(deviceId);
+      this.notifyRegistry();
+      return;
+    }
 
     let admitted = false;
     for (const spec of specs) {
@@ -395,9 +411,16 @@ export class Session {
   }
 
   private broadcastRegistry(): void {
-    this.broadcastEnvelope({
-      kind: 'registry', from: this.deviceId, entities: this.registry, locked: this.lockedFlag
-    });
+    this.broadcastEnvelope(this.registryEnvelope());
+  }
+
+  /** The same announcement, to one device that has just come back. */
+  private sendRegistry(to: DeviceId): void {
+    if (this.transport.isConnected(to)) this.sendEnvelope(to, this.registryEnvelope());
+  }
+
+  private registryEnvelope(): SessionEnvelope {
+    return { kind: 'registry', from: this.deviceId, entities: this.registry, locked: this.lockedFlag };
   }
 
   private notifyRegistry(): void {

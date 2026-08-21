@@ -41,6 +41,14 @@ class Party {
     return this.add(name, [{ role: 'guest' }], false);
   }
 
+  /**
+   * The same phone, after a reload: a new session on the same device id, with
+   * nothing carried over but that id. What it gets back is the test.
+   */
+  async returning(deviceId: string): Promise<Device> {
+    return this.add(deviceId, [{ role: 'guest' }], false);
+  }
+
   private async add(deviceId: string, entities: { role: string }[], isHub: boolean): Promise<Device> {
     const transport = new FakeTransport(this.net, deviceId);
     const session = new Session(transport, { mode: MODE, deviceId, roles: WOULD_YOU_RATHER_ROLES, entities });
@@ -232,6 +240,42 @@ describe('Would You Rather — passing the seat', () => {
     expect(hub.director.isAsker).toBe(true);
     expect(guests[0].director.isAsker).toBe(false);
     expect(guests[0].director.tally).toBeNull();
+  });
+});
+
+describe('Would You Rather — coming back', () => {
+  it('brings a reloaded phone back as the same guest, with its name and the question in play', async () => {
+    const { party, hub, guests } = await makeParty(2);
+    guests[0].director.setName('Ada');
+    hub.director.askNewQuestion();
+    guests[1].director.answer('first');
+
+    const back = await party.returning('phone-1');
+
+    expect(back.director.guestId).toBe('guest-1');
+    expect(back.director.publicView).toMatchObject({ round: 2, asker: 'guest-0' });
+    expect(back.director.publicView.guests.map((guest) => guest.name))
+      .toEqual(['Guest 1', 'Ada', 'Guest 3']);
+    // Nobody was admitted in its place, so the room did not grow a ghost.
+    expect(hub.session.entitiesOfRole('guest')).toHaveLength(3);
+
+    back.director.answer('second');
+    expect(hub.director.tally).toMatchObject({ first: 1, second: 1, eligible: 2 });
+  });
+
+  it('gives the asking seat back to the phone that was holding it, tally and all', async () => {
+    const { party, hub, guests } = await makeParty(2);
+    hub.director.passSeat('guest-1');
+    guests[1].director.answer('first');
+    hub.director.answer('first');
+
+    const back = await party.returning('phone-1');
+
+    expect(back.director.isAsker).toBe(true);
+    // The tally is written to `tally:{asker}`, so re-seating the asker is what
+    // puts the counts back on its screen — nothing replays them.
+    expect(back.director.tally).toMatchObject({ first: 2, second: 0, answered: 2, split: 0 });
+    expect(hub.director.tally).toBeNull();
   });
 });
 

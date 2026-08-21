@@ -218,7 +218,9 @@ under `authoritative` the authority already holds everything a new arrival must
 be told — it republishes `public` on every registry change. It also separates
 the two things called "host": the hub routes and reduces and cannot move, while
 the asking seat is a field of the published state and is passed around by
-writing to it.
+writing to it. And it is the only demo that reconnects: never locking is what
+leaves a socket to reopen, so a tab that reloads keeps its device id, comes back
+to the same entity and is caught up by the same republish a latecomer gets.
 
 Tilt Pong is the only real-time one, and the first `authoritative` session whose
 reason is divergence rather than secrecy: two devices simulating one bouncing
@@ -231,9 +233,12 @@ traversal.
 
 ## What is not implemented
 
-1. **Reconnect.** A dropped device is gone for the session. The model makes the
-   fix obvious — an entity rebinding to a new device — but nothing does it, and
-   for a phone that locks its screen between turns this is the common path.
+1. **Reconnect.** Half of it exists: a device that comes back as *itself* is
+   re-seated on the entities it already had, because `admit()` answers a repeat
+   hello with the registry instead of ignoring it, and the authority republishes
+   behind that. An entity rebinding to a *different* device — the claim token in
+   docs/TODO.md — is still not started, so a phone whose browser killed the tab
+   is a stranger. Only an unlocked session can use any of it.
 2. **Late join.** The hub keeps its signaling socket, which is the foundation,
    but `admit()` turns away anyone arriving after `lock()`. A game that never
    locks — Would You Rather — takes latecomers today; what is missing is

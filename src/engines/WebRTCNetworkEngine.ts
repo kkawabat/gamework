@@ -74,6 +74,54 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
   }
 
   /**
+   * Come back to the room we are already in, as the same device.
+   *
+   * A backgrounded tab freezes its keepalive and its socket dies; a phone may
+   * lose the peer connection with it. Neither is a departure — the server reads
+   * a bare close as silence, and the host's registry still holds this device's
+   * entities — so rejoining is re-dialing, not being admitted again. JOIN_ROOM
+   * with the same playerId replaces the member entry and leaves `hostId`
+   * untouched, and the host answers the resulting hello by re-sending the
+   * registry (see Session.admit).
+   *
+   * Deliberately not automatic on close: Tilt Pong wants an expired lobby to
+   * stay expired, and only the game knows whether coming back is meaningful.
+   * Only a session that never locks can do this at all — after lock() there is
+   * no socket to reopen and the host would turn the returning device away.
+   */
+  async rejoinRoom(): Promise<boolean> {
+    if (!this.roomCode) return false;
+    // Only the dead ones. A hub whose socket died is still talking to most of
+    // the room, and renegotiating those connections would break what works.
+    for (const peerId of [...this.connections.keys()]) {
+      if (!this.isChannelOpen(peerId)) this.cleanupConnection(peerId);
+    }
+    if (this.socket?.readyState !== WebSocket.OPEN) {
+      this.closedDeliberately = false;
+      this.socket = await this.openSocket();
+    }
+    return this.joinRoom(this.roomCode);
+  }
+
+  /**
+   * Whether signaling is still up. Only interesting to a game that never locks:
+   * for everyone else the socket is supposed to be gone.
+   */
+  isSignalingOpen(): boolean {
+    return this.socket?.readyState === WebSocket.OPEN;
+  }
+
+  /**
+   * Whether the reliable channel to a peer is actually open. Narrower than
+   * `isConnected`, which reports the ICE state and so still says yes while the
+   * channel is closing — the difference is exactly the window a returning tab
+   * is in, and the question it needs answered is "can I send".
+   */
+  isChannelOpen(peerId: string): boolean {
+    return this.connections.get(peerId)?.dataChannel?.readyState === 'open';
+  }
+
+  /**
    * The room's creator, once a room reply has landed. Session control messages
    * (hello, seating, arbitration requests) are addressed to it, so it matters
    * under `all` dialing too — not just when it is the only peer we dial.
@@ -301,6 +349,10 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
   }
 
   private setupPeer(peerId: string): PeerConnection {
+    // A fresh offer from a peer we already hold a connection to is a device
+    // that came back, not a second device. Close the corpse rather than let
+    // createPeerConnection overwrite the map entry and leak it.
+    this.cleanupConnection(peerId);
     const peer = this.createPeerConnection(peerId);
     this.setupConnectionHandlers(peer);
     // Trace the ICE outcome so the log shows whether the channel actually came

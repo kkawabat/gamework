@@ -268,6 +268,66 @@ describe('Session — lock', () => {
   });
 });
 
+describe('Session — a device that comes back', () => {
+  const mode: SessionMode = { connectivity: 'star', authority: 'authoritative' };
+
+  /** A tab that reloaded: same device id, everything it was ever told gone. */
+  const returning = async (net: FakeNet, deviceId: string): Promise<Session> => {
+    const transport = new FakeTransport(net, deviceId);
+    const session = new Session(transport, {
+      mode, deviceId, roles: ROLES, entities: [{ role: 'player' }]
+    });
+    await session.initialize();
+    await session.join('ROOM01');
+    transport.fireConnected(net.hostId!);
+    return session;
+  };
+
+  it('re-seats it on the entities it already had, rather than admitting a second device', async () => {
+    const members = await makeRoom(mode, [[{ role: 'admin' }], [{ role: 'player' }], [{ role: 'player' }]]);
+    const [host] = members;
+
+    const back = await returning(netOf(host), 'dev-1');
+
+    expect(host.session.entities).toHaveLength(3);
+    expect(back.localEntities.map((entity) => entity.entityId)).toEqual(['player-0']);
+  });
+
+  it('re-sends the registry, since the returning device has lost the one it was given', async () => {
+    const members = await makeRoom(mode, [[{ role: 'admin' }], [{ role: 'player' }]]);
+    const [host] = members;
+
+    const back = await returning(netOf(host), 'dev-1');
+
+    expect(back.entities.map((entity) => entity.entityId)).toEqual(['admin-0', 'player-0']);
+  });
+
+  it('tells the host, so an authoritative game republishes what the returner missed', async () => {
+    const members = await makeRoom(mode, [[{ role: 'admin' }], [{ role: 'player' }]]);
+    const [host] = members;
+    const republished: number[] = [];
+    host.session.onRegistry(() => republished.push(host.session.entities.length));
+
+    await returning(netOf(host), 'dev-1');
+
+    expect(republished).toEqual([2]);
+  });
+
+  it('still turns away a device it has never seen once locked', async () => {
+    const members = await makeRoom(mode, [[{ role: 'admin' }], [{ role: 'player' }]]);
+    const [host] = members;
+    host.session.lock();
+
+    const back = await returning(netOf(host), 'dev-1');
+    const stranger = await returning(netOf(host), 'dev-stranger');
+
+    // Coming back is not admission, so the lock has no opinion about it; being
+    // new is, and the lock is the whole of the opinion.
+    expect(back.localEntities.map((entity) => entity.entityId)).toEqual(['player-0']);
+    expect(stranger.localEntities).toEqual([]);
+  });
+});
+
 describe('SessionTransport', () => {
   it('is satisfied by WebRTCNetworkEngine', () => {
     // Compile-time assertion: if the engine drifts from the interface the

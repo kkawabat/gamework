@@ -11,7 +11,27 @@ host owns the entity registry.
 
 ## 1. Reconnect
 
-**Status:** not started. The highest-value of the three.
+**Status:** half done. The easy half — a device that comes back as *itself* —
+works and is used by Would You Rather. The half this entry was written about,
+an entity rebinding to a *different* device, is still not started.
+
+What exists now:
+
+- `Session.admit()` treats a hello from a device already in the registry as a
+  return rather than a duplicate: nothing is admitted, the registry is re-sent
+  to that device, and the host's registry handlers fire so an `authoritative`
+  game republishes behind it. Under `authoritative` that is the entire resync.
+- `WebRTCNetworkEngine.rejoinRoom()` reopens signaling and re-JOIN_ROOMs the
+  same room as the same `playerId`, closing only the peer connections whose
+  channel is already shut. Deliberately not automatic: Tilt Pong wants an
+  expired lobby to stay expired.
+- Only a session that never locks can use any of it, since after `lock()` there
+  is no socket to reopen and the host would turn the returning device away.
+
+So the remaining work is precisely the identity half. A device that comes back
+with a new id — a phone the browser killed, a different tab — is still a
+stranger, and the demo works around it by keeping its device id in
+sessionStorage, which is a client convention rather than a session mechanism.
 
 A dropped device is gone for the session. For two players on laptops that is
 tolerable. For a phone that locks its screen between turns it is the common
@@ -25,7 +45,9 @@ so reconnect is re-pointing it rather than a new mechanism.
 What it needs:
 
 - A **claim token** the returning device presents, held in `localStorage`, so it
-  reclaims its own entity instead of being admitted as a new one. Entity ids are
+  reclaims its own entity instead of being admitted as a new one. This is what
+  the device-id rejoin above is standing in for, and its limit: a device asserts
+  its own id, which recovers an accident but proves nothing. Entity ids are
   guessable (`player-1`), so the token has to be separate and unguessable —
   otherwise any device can seize any entity. Note the honest limit: this stops
   an accident, not an attacker, for the same reason the channel ACLs do.
