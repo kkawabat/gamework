@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GameWork Would You Rather - icebreaker for a room</title>
+    <link rel="icon" type="image/x-icon" href="../../favicon.ico">
+    <link rel="stylesheet" href="../gamework.css">
+    <style>
+        .choice-buttons {
+            display: grid;
+            gap: 1em;
+            margin: 1.5em 0;
+        }
+
+        .choice-buttons button {
+            margin: 0;
+            padding: 1.5em 1em;
+            font-size: 1.2em;
+        }
+
+        .choice-buttons button.chosen {
+            outline: 3px solid #fff;
+        }
+
+        .tally {
+            display: flex;
+            justify-content: space-around;
+            gap: 1em;
+            margin: 1em 0 0.5em;
+        }
+
+        .tally div {
+            flex: 1;
+        }
+
+        .tally .count {
+            font-size: 2.5em;
+            font-weight: 700;
+            color: orange;
+        }
+
+        .tally .label {
+            color: #999;
+            font-size: 0.85em;
+        }
+
+        #splitBar {
+            display: flex;
+            height: 0.75em;
+            border-radius: 8px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.15);
+            margin: 0.5em 0;
+        }
+
+        #splitBar::before {
+            content: '';
+            width: var(--first-share, 50%);
+            background: orange;
+            transition: width 0.25s;
+        }
+
+        #splitBar.empty::before { background: rgba(255, 255, 255, 0.15); }
+
+        #splitScore { font-size: 0.9em; color: #ccc; }
+
+        #passList {
+            list-style: none;
+            padding: 0;
+            margin: 0.5em 0;
+        }
+
+        #passList button { width: 100%; }
+
+        #hubBanner {
+            font-size: 0.8em;
+            border-color: rgba(255, 165, 0, 0.5);
+        }
+
+        #nameForm { display: flex; flex-direction: column; align-items: center; }
+    </style>
+</head>
+<body>
+    <a class="back-link" href="../index.html" title="Back to GameWork demos">←</a>
+
+    <div class="container">
+        <h1>🤔 Would You Rather</h1>
+
+        <div id="homeView" hidden>
+            <p class="muted">Connecting…</p>
+        </div>
+
+        <div id="nameView" hidden>
+            <form id="nameForm">
+                <p class="muted" id="nameStatus">Connecting…</p>
+                <input type="text" id="nameInput" placeholder="Guest" autocomplete="off">
+                <button id="continueBtn" type="submit" disabled>Continue</button>
+                <p class="muted">Leave it blank and the room will call you Guest.</p>
+            </form>
+        </div>
+
+        <div id="playView" hidden>
+            <div id="askerPanel" hidden>
+                <div class="qr-code" id="qrCodeContainer"></div>
+                <div class="room-code" id="roomCode"></div>
+                <p class="muted">Your turn. Ask a would-you-rather out loud — the closer to a 50/50 split, the better.</p>
+
+                <div class="panel">
+                    <div id="askerRound" class="muted"></div>
+                    <div class="tally">
+                        <div><div class="count" id="firstCount">0</div><div class="label">first one</div></div>
+                        <div><div class="count" id="secondCount">0</div><div class="label">second one</div></div>
+                    </div>
+                    <div id="splitBar" class="empty"></div>
+                    <p id="splitScore"></p>
+                </div>
+
+                <p class="muted" id="askerStatus"></p>
+                <ul class="player-list" id="askerRoster"></ul>
+
+                <button id="newQuestionBtn">Ask new question</button>
+                <button id="passBtn">Pass the seat</button>
+                <ul id="passList" hidden></ul>
+            </div>
+
+            <div id="guestPanel" hidden>
+                <div id="guestRound" class="muted"></div>
+                <h3 id="askerName"></h3>
+                <div class="choice-buttons">
+                    <button id="answerFirst">First one</button>
+                    <button id="answerSecond">Second one</button>
+                </div>
+                <p class="muted" id="guestStatus"></p>
+                <ul class="player-list" id="guestRoster"></ul>
+            </div>
+
+            <div class="panel" id="hubBanner" hidden>
+                <p class="muted">You started this room, so every answer is routed through this tab — keep it open and
+                    on screen, or nobody new can join. Room <span id="hubRoomCode"></span>.</p>
+                <button id="takeSeatBtn" hidden>Take the asking seat</button>
+            </div>
+        </div>
+
+        <p class="muted" id="message" hidden></p>
+    </div>
+
+    <script type="module">
+        import { startWouldYouRather } from './WouldYouRather.ts';
+        startWouldYouRather();
+    </script>
+</body>
+</html>

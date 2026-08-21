@@ -204,12 +204,21 @@ Demos:
 | tic-tac-toe, chess, connect-four | `mesh` / `replicated` | one `player` each |
 | Odd One Out | `mesh` / `authoritative` | host holds `admin` + `player`; others `player` |
 | poker | `star` / `authoritative` | host holds `dealer` + `player` |
+| Would You Rather | `star` / `authoritative` | hub holds `admin` + `guest`; others `guest` |
 | Tilt Pong | `mesh` / `authoritative` | host holds `referee` + `player` |
 
 Odd One Out is the N-player mesh: every phone holds a channel to every other
 phone, and the word is still a routing fact — `secret:{self}` — so the odd one
 out is never sent it. Poker is the hub-and-spoke: joiners dial only the host,
 and hole cards travel on `hand:{self}`.
+
+Would You Rather is the one that never locks: admission stays open all evening
+so a phone can join at round nine, and the resync that needs is one line, because
+under `authoritative` the authority already holds everything a new arrival must
+be told — it republishes `public` on every registry change. It also separates
+the two things called "host": the hub routes and reduces and cannot move, while
+the asking seat is a field of the published state and is passed around by
+writing to it.
 
 Tilt Pong is the only real-time one, and the first `authoritative` session whose
 reason is divergence rather than secrecy: two devices simulating one bouncing
@@ -226,7 +235,11 @@ traversal.
    fix obvious — an entity rebinding to a new device — but nothing does it, and
    for a phone that locks its screen between turns this is the common path.
 2. **Late join.** The hub keeps its signaling socket, which is the foundation,
-   but `admit()` turns away anyone arriving after `lock()`.
-3. **Host migration.** Only possible under mesh. Nothing implements it.
+   but `admit()` turns away anyone arriving after `lock()`. A game that never
+   locks — Would You Rather — takes latecomers today; what is missing is
+   admitting one *after* the session has closed.
+3. **Host migration.** Only possible under mesh. Nothing implements it. Passing
+   an asking seat, as Would You Rather does, is not this: that seat is game
+   state, and the hub it is passed across stays exactly where it was.
 4. **A `seats` preset.** Games declare 3–6 lines of roles by hand. That has been
    clearer than a preset so far; revisit if it starts repeating.

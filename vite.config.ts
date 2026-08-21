@@ -25,6 +25,7 @@ export default defineConfig(({ mode }) => {
           chess: 'examples/chess/chess.html',
           poker: 'examples/poker/poker.html',
           'odd-one-out': 'examples/odd-one-out/odd-one-out.html',
+          'would-you-rather': 'examples/would-you-rather/would-you-rather.html',
           pong: 'examples/pong/pong.html'
         },
         output: {
