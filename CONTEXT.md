@@ -235,6 +235,10 @@ get there, and both are easy to undo by accident:
 
 Known warts:
 
+- Cloud Run's v2 API defaults `cpu_idle` to false (instance-based billing).
+  Combined with keepalive that billed ~$5/day for a 1 vCPU box sitting idle.
+  Keep `cpu_idle = true`; the deploy action passes `--cpu-throttling` so a
+  later image push cannot revert it.
 - `google_project_service` returns before an API has actually propagated, so a
   first apply on a fresh project fails with `SERVICE_DISABLED` on the compute
   resources. Retrying works; a `time_sleep` would fix it properly.

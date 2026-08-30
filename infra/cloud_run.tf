@@ -46,6 +46,9 @@ resource "google_cloud_run_v2_service" "signaling" {
           cpu    = "1"
           memory = "512Mi"
         }
+        # Request-based billing. The v2 API defaults this to false (protobuf),
+        # which is instance-based: keepalive then bills 1 vCPU 24/7.
+        cpu_idle          = true
         startup_cpu_boost = true
       }
 
