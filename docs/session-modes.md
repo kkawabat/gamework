@@ -204,13 +204,16 @@ Demos:
 | tic-tac-toe, chess, connect-four | `mesh` / `replicated` | one `player` each |
 | Odd One Out | `mesh` / `authoritative` | host holds `admin` + `player`; others `player` |
 | poker | `star` / `authoritative` | host holds `dealer` + `player` |
+| Set | `star` / `authoritative` | host holds `admin` + `player`; others `player` |
 | Would You Rather | `star` / `authoritative` | hub holds `admin` + `guest`; others `guest` |
 | Tilt Pong | `mesh` / `authoritative` | host holds `referee` + `player` |
 
 Odd One Out is the N-player mesh: every phone holds a channel to every other
 phone, and the word is still a routing fact — `secret:{self}` — so the odd one
 out is never sent it. Poker is the hub-and-spoke: joiners dial only the host,
-and hole cards travel on `hand:{self}`.
+and hole cards travel on `hand:{self}`. Set is the same star, for a different
+reason: the board is public, and the hub exists only to serialize who claimed
+a set first. Solo Set never opens a session at all.
 
 Would You Rather is the one that never locks: admission stays open all evening
 so a phone can join at round nine, and the resync that needs is one line, because

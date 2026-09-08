@@ -7,7 +7,7 @@ across every device or held by one of them, but that node is always another
 browser, never something we run.
 
 This repo is the **library**, the signaling/TURN infrastructure it needs, and
-the **demos** that show how to consume it. The six titles in `examples/` are
+the **demos** that show how to consume it. The seven titles in `examples/` are
 **demos**. A **game** is a title that has been promoted out of this repo.
 
 ## Language

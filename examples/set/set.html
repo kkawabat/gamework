@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GameWork Set</title>
+    <link rel="icon" type="image/x-icon" href="../../favicon.ico">
+    <link rel="stylesheet" href="../gamework.css">
+    <style>
+        .container.set-page { max-width: 28em; }
+
+        .set-board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.4em;
+            width: min(92vw, 24em);
+            margin: 0.75em auto;
+        }
+
+        .room-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .set-slot {
+            aspect-ratio: 2 / 3;
+            padding: 0.25em;
+            margin: 0;
+            background: #f3ead8;
+            border: 3px solid transparent;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+            touch-action: manipulation;
+            user-select: none;
+        }
+
+        .set-slot svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .set-slot:hover { color: inherit; }
+
+        .set-slot.selected {
+            border-color: orange;
+            background: #fff4d6;
+        }
+
+        .set-board.wrong .set-slot.selected,
+        .set-board.wrong .set-slot {
+            animation: set-shake 0.25s ease-in-out;
+        }
+
+        @keyframes set-shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-4px); }
+            75% { transform: translateX(4px); }
+        }
+
+        #clock {
+            font-size: 1.6em;
+            font-weight: 700;
+            color: orange;
+            letter-spacing: 0.08em;
+            margin: 0.25em 0;
+        }
+
+        #hud, #result {
+            color: #ccc;
+            font-size: 0.9em;
+            margin: 0.4em 0;
+        }
+
+        #result { color: orange; font-weight: 700; }
+
+        .how {
+            text-align: left;
+            margin: 1em auto;
+            max-width: 28em;
+        }
+    </style>
+</head>
+<body>
+    <a class="back-link" href="../index.html" title="Back to GameWork demos">←</a>
+
+    <div class="container set-page">
+        <h1>Set</h1>
+
+        <div id="homeView">
+            <p class="muted">Three cards are a set when each feature — count, colour, shading, shape — is all the same or all different.</p>
+            <div class="room-buttons">
+                <button id="soloBtn">Play solo</button>
+                <button id="hostBtn">Host a table</button>
+                <button id="joinBtn">Join</button>
+            </div>
+            <p class="muted how">Solo is a timed clear of the 81-card deck. At a table, everyone sees the same board and the fastest valid claim takes the cards.</p>
+        </div>
+
+        <div id="joinView" hidden>
+            <input type="text" id="roomCodeInput" placeholder="Enter room code" maxlength="6" style="text-align: center; letter-spacing: 0.2em;">
+            <button id="joinRoomBtn">Join</button>
+        </div>
+
+        <div id="lobbyView" hidden>
+            <div id="inviteBlock">
+                <div class="qr-code" id="qrCodeContainer"></div>
+                <div class="room-code" id="roomCode"></div>
+                <p class="muted">Scan to join. The host plays too.</p>
+            </div>
+            <ul class="player-list" id="playerList"></ul>
+            <p id="lobbyStatus" class="muted"></p>
+            <button id="startBtn" hidden disabled>Waiting…</button>
+        </div>
+
+        <div id="playView" hidden>
+            <div id="clock" hidden>0:00.0</div>
+            <p id="hud"></p>
+            <div class="set-board" id="board"></div>
+            <p id="result" hidden></p>
+            <button id="againBtn" hidden>Play again</button>
+        </div>
+
+        <p class="muted" id="message" hidden></p>
+    </div>
+
+    <script type="module">
+        import { startSet } from './Set.ts';
+        startSet();
+    </script>
+</body>
+</html>

@@ -26,7 +26,8 @@ export default defineConfig(({ mode }) => {
           poker: 'examples/poker/poker.html',
           'odd-one-out': 'examples/odd-one-out/odd-one-out.html',
           'would-you-rather': 'examples/would-you-rather/would-you-rather.html',
-          pong: 'examples/pong/pong.html'
+          pong: 'examples/pong/pong.html',
+          set: 'examples/set/set.html'
         },
         output: {
           // Keep modules separate for better caching
