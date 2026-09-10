@@ -36,7 +36,8 @@ function playerLabel(entityId: string, index: number, me: string | null): string
 
 function shapePath(shape: number): string {
   if (shape === 0) return 'M 0,-14 L 11,0 L 0,14 L -11,0 Z'; // diamond
-  if (shape === 1) return 'M -8,0 A 8,14 0 1 0 8,0 A 8,14 0 1 0 -8,0 Z'; // oval
+  // Horizontal pill (stadium): short enough that three stacked ones leave a gap.
+  if (shape === 1) return 'M -10,-5 L 10,-5 A 5,5 0 0 1 10,5 L -10,5 A 5,5 0 0 1 -10,-5 Z';
   // squiggle
   return 'M -11,-6 C -4,-14 4,2 11,-6 C 14,-4 14,4 11,6 C 4,14 -4,-2 -11,6 C -14,4 -14,-4 -11,-6 Z';
 }
