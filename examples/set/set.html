@@ -9,12 +9,18 @@
     <style>
         .container.set-page { max-width: 28em; }
 
+        .set-stage {
+            position: relative;
+            width: min(92vw, 24em);
+            margin: 0.75em auto;
+        }
+
         .set-board {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 0.4em;
-            width: min(92vw, 24em);
-            margin: 0.75em auto;
+            width: 100%;
+            margin: 0;
         }
 
         .room-buttons {
@@ -49,9 +55,33 @@
             background: #fff4d6;
         }
 
+        .set-slot.claimed {
+            border-color: #5ad1a0;
+            background: #e8fff4;
+            animation: set-claim 0.5s ease;
+            pointer-events: none;
+        }
+
+        .set-slot.hint {
+            border-color: #f1c40f;
+            box-shadow: 0 0 0 3px rgba(241, 196, 15, 0.45);
+            animation: set-hint 1.2s ease-in-out infinite;
+        }
+
         .set-board.wrong .set-slot.selected,
         .set-board.wrong .set-slot {
             animation: set-shake 0.25s ease-in-out;
+        }
+
+        @keyframes set-claim {
+            0% { transform: scale(1); }
+            35% { transform: scale(1.06); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes set-hint {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.04); }
         }
 
         @keyframes set-shake {
@@ -75,6 +105,34 @@
         }
 
         #result { color: orange; font-weight: 700; }
+
+        #pauseOverlay {
+            position: absolute;
+            inset: 0;
+            z-index: 3;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1em;
+            border-radius: 10px;
+            background: rgba(20, 20, 20, 0.82);
+            text-align: center;
+        }
+
+        #pauseOverlay[hidden] { display: none; }
+
+        #pauseStatus {
+            color: #d7dae2;
+            margin: 0;
+            max-width: 16em;
+        }
+
+        #hintBtn {
+            display: block;
+            margin: 0.5em auto 0;
+        }
+
+        #hintBtn[hidden] { display: none; }
 
         .how {
             text-align: left;
@@ -118,7 +176,13 @@
         <div id="playView" hidden>
             <div id="clock" hidden>0:00.0</div>
             <p id="hud"></p>
-            <div class="set-board" id="board"></div>
+            <div class="set-stage">
+                <div class="set-board" id="board"></div>
+                <div id="pauseOverlay" hidden>
+                    <p id="pauseStatus">Paused</p>
+                </div>
+            </div>
+            <button type="button" id="hintBtn" hidden>Hint</button>
             <p id="result" hidden></p>
             <button id="againBtn" hidden>Play again</button>
         </div>

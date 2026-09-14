@@ -25,9 +25,14 @@ describe('buildIceServers', () => {
   });
 
   it('offers a TCP relay alongside UDP for networks that block UDP', () => {
-    const [, turn] = buildIceServers({ playerId: 'p', host: HOST, secret: SECRET, now: NOW });
+    const servers = buildIceServers({ playerId: 'p', host: HOST, secret: SECRET, now: NOW });
+    const turn = servers.filter((server) => server.urls[0].startsWith('turn:'));
 
-    expect(turn.urls).toEqual([`turn:${HOST}:3478?transport=udp`, `turn:${HOST}:3478?transport=tcp`]);
+    expect(turn.map((server) => server.urls)).toEqual([
+      [`turn:${HOST}:3478?transport=udp`],
+      [`turn:${HOST}:3478?transport=tcp`]
+    ]);
+    expect(turn[0].credential).toBe(turn[1].credential);
   });
 
   it('ties the credential to the player, so one leak is not a shared key', () => {

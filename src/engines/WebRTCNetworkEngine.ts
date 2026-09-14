@@ -1,7 +1,6 @@
 import { BaseNetworkEngine } from './NetworkEngine';
 import { NetworkMessage } from '../types/GameTypes';
 import {
-  ConnectionState,
   Delivery,
   NetworkConfig,
   DataChannelConfig,
@@ -25,6 +24,27 @@ export interface WebRTCNetworkEngineConfig extends NetworkConfig {
 }
 
 export const SIGNALING_PING_INTERVAL_MS = 20_000;
+const DIAGNOSTIC_LIMIT = 80;
+
+/**
+ * Summarise an ICE candidate for the diagnostic beacon. The type is the
+ * question Sunday's logs could not answer: host/srflx means we never reached
+ * the relay, relay means TURN allocated, and a missing relay on a
+ * cellular↔Wi-Fi pair is why ICE sat in `checking` until it disconnected.
+ *
+ * Candidate line: `candidate:foundation component proto priority ip port typ type`
+ */
+export function describeCandidate(candidate: RTCIceCandidateInit | RTCIceCandidate | string | null | undefined): string {
+  if (candidate == null) return 'end';
+  const line = typeof candidate === 'string' ? candidate : candidate.candidate;
+  if (!line) return 'end';
+  const parts = line.split(' ');
+  const proto = (parts[2] ?? '').toLowerCase();
+  const addr = parts[4] ?? '';
+  const typ = parts[7] ?? 'unknown';
+  const ipver = addr.includes(':') ? 'v6' : 'v4';
+  return proto ? `${typ} ${proto} ${ipver}` : `${typ} ${ipver}`;
+}
 
 export class WebRTCNetworkEngine extends BaseNetworkEngine {
   private networkConfig: WebRTCNetworkEngineConfig;
@@ -39,6 +59,12 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private closedDeliberately = false;
   private signalingClosedHandlers = new Set<(code: number) => void>();
+  /** Peers this device offered to. Only the offerer can restart ICE with a new offer. */
+  private offered = new Set<string>();
+  /** One relay-only redial per peer. A loop here would hammer coturn and the lobby. */
+  private relayAttempted = new Set<string>();
+  private iceTransportPolicy: RTCIceTransportPolicy = 'all';
+  private connectedOnce = new Set<string>();
 
   constructor(config: WebRTCNetworkEngineConfig, dataChannelConfig: DataChannelConfig, playerId: string) {
     super(config, dataChannelConfig);
@@ -112,10 +138,9 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
   }
 
   /**
-   * Whether the reliable channel to a peer is actually open. Narrower than
-   * `isConnected`, which reports the ICE state and so still says yes while the
-   * channel is closing — the difference is exactly the window a returning tab
-   * is in, and the question it needs answered is "can I send".
+   * Whether the reliable channel to a peer is actually open. Same question as
+   * `isConnected` — kept as a named alias for the rejoin path, which is asking
+   * "can I send" rather than "did ICE once succeed".
    */
   isChannelOpen(peerId: string): boolean {
     return this.connections.get(peerId)?.dataChannel?.readyState === 'open';
@@ -140,7 +165,8 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
   }
 
   async connect(peerId: string): Promise<void> {
-    this.diag(`dial ${peerId}`);
+    this.offered.add(peerId);
+    this.diag(`dial ${peerId}${this.iceTransportPolicy === 'relay' ? ' relay-only' : ''}`);
     const peer = this.setupPeer(peerId);
     // Both channels are opened by the dialer, in one negotiation. The reliable
     // one carries control and moves; the unreliable one carries state streams
@@ -164,7 +190,7 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
 
   broadcast(message: NetworkMessage, delivery: Delivery = 'reliable'): void {
     this.connections.forEach(peer => {
-      if (peer.state === ConnectionState.CONNECTED) {
+      if (peer.dataChannel?.readyState === 'open') {
         this.sendDataChannelMessage(peer, message, delivery);
       }
     });
@@ -316,8 +342,10 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
           const queued = this.pendingCandidates.get(from) ?? [];
           queued.push(data.candidate as RTCIceCandidateInit);
           this.pendingCandidates.set(from, queued);
+          this.diag(`ice cand ←${from} ${describeCandidate(data.candidate as RTCIceCandidateInit)} queued`);
           break;
         }
+        this.diag(`ice cand ←${from} ${describeCandidate(data.candidate as RTCIceCandidateInit)}`);
         await peer.connection.addIceCandidate(data.candidate as RTCIceCandidateInit);
         break;
       }
@@ -332,6 +360,22 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
   private applyIceServers(iceServers: IceServerConfig[]): void {
     if (!iceServers?.length) return;
     this.config.iceServers = iceServers;
+    const stun = iceServers.filter((server) => server.urls.some((url) => url.startsWith('stun:'))).length;
+    const turn = iceServers.filter((server) => server.urls.some((url) => url.startsWith('turn:'))).length;
+    this.diag(`ice servers stun=${stun} turn=${turn}`);
+  }
+
+  /**
+   * Only ICE fields. `WebRTCNetworkEngineConfig` also carries the signaling URL
+   * and dial policy; passing that object to `RTCPeerConnection` used to work
+   * because browsers ignore unknown keys, but a relay retry has to set
+   * `iceTransportPolicy` without dragging those along.
+   */
+  protected peerConnectionConfig(): RTCConfiguration {
+    return {
+      iceServers: this.config.iceServers,
+      iceTransportPolicy: this.iceTransportPolicy
+    };
   }
 
   private async drainCandidates(peerId: string): Promise<void> {
@@ -361,20 +405,86 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
       peer.connection.addEventListener('iceconnectionstatechange', () => {
         const state = peer.connection.iceConnectionState;
         this.diag(`ice ${peerId} ${state}`);
-        if (state === 'failed' || state === 'connected' || state === 'completed') {
+        if (state === 'connected' || state === 'completed') this.connectedOnce.add(peerId);
+        if (state === 'failed' || state === 'connected' || state === 'completed' || state === 'disconnected') {
+          void this.logSelectedPair(peerId);
           this.flushDiagnostics(`ice-${state}`);
+        }
+        if (state === 'failed' || (state === 'disconnected' && !this.connectedOnce.has(peerId))) {
+          void this.maybeRetryViaRelay(peerId);
         }
       });
     }
+    peer.connection.onicegatheringstatechange = () => {
+      if (peer.connection.iceGatheringState !== 'complete') return;
+      const hadRelay = this.diagnostics.some((event) => event.includes(`→${peerId} relay`));
+      this.diag(`ice gather ${peerId} complete relay=${hadRelay ? 'yes' : 'no'}`);
+      // A LAN pair often connects before TURN has even allocated. Redialing
+      // that as relay-only would tear down a working same-Wi-Fi game.
+      if (!hadRelay && !this.connectedOnce.has(peerId)) {
+        void this.maybeRetryViaRelay(peerId);
+      }
+    };
     peer.connection.onicecandidate = (event) => {
       // Candidates can still trickle in after signaling is closed. There is
       // nowhere to send them and the connection they would improve is already
       // up, so drop them rather than throw inside the event handler.
+      const summary = describeCandidate(event.candidate);
+      this.diag(`ice cand →${peerId} ${summary}`);
       if (event.candidate && this.socket) {
         this.sendToServer({ type: 'SIGNAL', to: peerId, data: { kind: 'ice', candidate: event.candidate.toJSON() } });
       }
     };
     return peer;
+  }
+
+  /**
+   * First attempt uses every candidate (LAN, STUN, TURN). If that never
+   * connects — typical of Wi-Fi↔cellular when ICE prefers a srflx pair that
+   * cannot actually carry data — redial with `iceTransportPolicy: 'relay'`
+   * so the only pair is through coturn. Only the offerer can do this, and
+   * only while signaling is still open.
+   */
+  private async maybeRetryViaRelay(peerId: string): Promise<void> {
+    if (!this.offered.has(peerId) || this.relayAttempted.has(peerId)) return;
+    if (this.connectedOnce.has(peerId)) return;
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    const turn = (this.config.iceServers ?? []).some((server) =>
+      (Array.isArray(server.urls) ? server.urls : [server.urls]).some((url) => String(url).startsWith('turn:'))
+    );
+    if (!turn) return;
+    this.relayAttempted.add(peerId);
+    this.iceTransportPolicy = 'relay';
+    this.diag(`ice ${peerId} retry-relay`);
+    this.flushDiagnostics('ice-retry-relay');
+    try {
+      await this.connect(peerId);
+    } catch (error) {
+      console.error(`Relay retry to ${peerId} failed:`, error);
+    }
+  }
+
+  /** Nominated pair types, so the beacon says whether we actually used the relay. */
+  private async logSelectedPair(peerId: string): Promise<void> {
+    const connection = this.connections.get(peerId)?.connection;
+    if (!connection || typeof connection.getStats !== 'function') return;
+    try {
+      const stats = await connection.getStats();
+      const byId = new Map<string, Record<string, unknown>>();
+      stats.forEach((report) => byId.set(report.id, report as unknown as Record<string, unknown>));
+      for (const report of byId.values()) {
+        if (report.type !== 'candidate-pair' || report.state !== 'succeeded') continue;
+        if (report.nominated === false) continue;
+        const local = byId.get(String(report.localCandidateId));
+        const remote = byId.get(String(report.remoteCandidateId));
+        const localType = String(local?.candidateType ?? local?.type ?? '?');
+        const remoteType = String(remote?.candidateType ?? '?');
+        this.diag(`ice ${peerId} pair local=${localType} remote=${remoteType}`);
+        return;
+      }
+    } catch {
+      // Stats are diagnostic. A missing pair must not take the session down.
+    }
   }
 
   private peer(peerId: string): PeerConnection {
@@ -447,7 +557,7 @@ export class WebRTCNetworkEngine extends BaseNetworkEngine {
 
   private diag(message: string): void {
     this.diagnostics.push(`${Date.now()} ${message}`);
-    if (this.diagnostics.length > 40) this.diagnostics.shift();
+    if (this.diagnostics.length > DIAGNOSTIC_LIMIT) this.diagnostics.shift();
   }
 
   /** The signaling socket's HTTP sibling — ws(s):// becomes http(s)://…/log. */

@@ -6,6 +6,7 @@ import {
   BOARD_MIN,
   DECK_SIZE,
   findSets,
+  firstHintCard,
   formatElapsed,
   fullDeck,
   isSet,
@@ -64,6 +65,11 @@ describe('Set — the rules', () => {
     expect(findSets([0, 1, 2, 3])).toEqual([[0, 1, 2]]);
   });
 
+  it('hints the first card of a set on the board', () => {
+    expect(firstHintCard([0, 1, 2, 3])).toBe(0);
+    expect(firstHintCard([0, 1, 3])).toBeNull();
+  });
+
   it('formats a stopwatch without a leading space', () => {
     expect(formatElapsed(0)).toBe('0:00.0');
     expect(formatElapsed(1_230)).toBe('0:01.2');
@@ -100,6 +106,17 @@ describe('Set — a table', () => {
     expect(table.board.length + table.deck.length + taken).toBe(DECK_SIZE);
   });
 
+  it('replaces the taken slots in place so the rest of the grid does not slide', () => {
+    const table = new SetTable({ deck: fullDeck() });
+    table.start(['solo']);
+    expect(table.board.slice(0, 3)).toEqual([0, 1, 2]);
+    const rest = table.board.slice(3);
+    expect(table.claim('solo', [0, 1, 2])).toBe(true);
+    expect(table.board.slice(0, 3)).toEqual([12, 13, 14]);
+    expect(table.board.slice(3, 3 + rest.length)).toEqual(rest);
+    expect(table.board).toHaveLength(BOARD_MIN);
+  });
+
   it('rejects a claim that is not a set, not on the board, or from a stranger', () => {
     const table = new SetTable({ deck: fullDeck() });
     table.start(['a']);
@@ -109,7 +126,22 @@ describe('Set — a table', () => {
     expect(table.scores.get('a')).toBe(0);
   });
 
-  it('identifies a set by the cards, so a later claim survives the board shifting', () => {
+  it('pauses claims while a player is on another tab, then resumes when they return', () => {
+    const table = new SetTable({ deck: fullDeck() });
+    table.start(['a', 'b']);
+    const [i, j, k] = findSets(table.board)[0];
+    const cards = [table.board[i], table.board[j], table.board[k]];
+    table.setAway('b', true);
+    expect(table.view().paused).toBe(true);
+    expect(table.claim('a', cards)).toBe(false);
+    expect(table.scores.get('a')).toBe(0);
+    table.setAway('b', false);
+    expect(table.view().paused).toBe(false);
+    expect(table.claim('a', cards)).toBe(true);
+    expect(table.scores.get('a')).toBe(3);
+  });
+
+  it('identifies a set by the cards, so a later claim survives replacements in other slots', () => {
     const table = new SetTable({ deck: fullDeck() });
     table.start(['a', 'b']);
     const sets = findSets(table.board);
@@ -238,7 +270,26 @@ describe('Set — a race', () => {
     expect(host.director.publicView.board).not.toEqual(expect.arrayContaining(cards));
   });
 
-  it('lets the second of two disjoint claims still land after the board moves', async () => {
+  it('republishes the board when a device that was already in comes back', async () => {
+    const { host, guests } = await makeGame(2, fullDeck());
+    host.director.startGame();
+    const board = host.director.publicView.board;
+
+    guests[0].director.publicView = {
+      phase: 'idle', board: [], deckRemaining: 0, scores: [], lastClaim: null, paused: false
+    };
+    guests[0].transport.sendMessage('host', {
+      type: 'SESSION',
+      payload: { kind: 'hello', from: 'phone-1', entities: [{ role: 'player' }] },
+      from: 'phone-1',
+      timestamp: Date.now()
+    });
+
+    expect(guests[0].director.publicView.board).toEqual(board);
+    expect(guests[0].director.publicView.phase).toBe('playing');
+  });
+
+  it('lets the second of two disjoint claims still land after other slots are replaced', async () => {
     const first = [0, 1, 2];
     const disjoint = [3, 4, 5];
     const rest = fullDeck().filter((card) => !first.includes(card) && !disjoint.includes(card));
@@ -264,6 +315,35 @@ describe('Set — a race', () => {
     ];
     host.director.claim(cards);
     guests[0].director.claim(cards);
+    expect(host.director.publicView.scores).toEqual([
+      { entityId: 'player-0', cards: 3 },
+      { entityId: 'player-1', cards: 0 }
+    ]);
+  });
+
+  it('pauses every device while a player is away, and rejects claims until they return', async () => {
+    const { host, guests } = await makeGame(2, fullDeck());
+    host.director.startGame();
+    const [i, j, k] = findSets(host.director.publicView.board)[0];
+    const cards = [
+      host.director.publicView.board[i],
+      host.director.publicView.board[j],
+      host.director.publicView.board[k]
+    ];
+
+    guests[0].director.setAway(true);
+    expect(host.director.publicView.paused).toBe(true);
+    expect(guests[0].director.publicView.paused).toBe(true);
+
+    host.director.claim(cards);
+    expect(host.director.publicView.scores).toEqual([
+      { entityId: 'player-0', cards: 0 },
+      { entityId: 'player-1', cards: 0 }
+    ]);
+
+    guests[0].director.setAway(false);
+    expect(host.director.publicView.paused).toBe(false);
+    host.director.claim(cards);
     expect(host.director.publicView.scores).toEqual([
       { entityId: 'player-0', cards: 3 },
       { entityId: 'player-1', cards: 0 }

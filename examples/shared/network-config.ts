@@ -30,12 +30,15 @@ export const DATA_CHANNEL_CONFIG: DataChannelConfig = { ordered: true };
  * credential is ever baked into this public bundle. These STUN entries are only
  * the pre-room default and the local-dev fallback.
  */
-export function createNetworkConfig(): WebRTCNetworkEngineConfig {
+export function createNetworkConfig(
+  overrides: Partial<WebRTCNetworkEngineConfig> = {}
+): WebRTCNetworkEngineConfig {
   return {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' }
     ],
-    signalingServerUrl: defined(__SIGNALING_SERVER_URL__) || 'ws://localhost:8080'
+    signalingServerUrl: defined(__SIGNALING_SERVER_URL__) || 'ws://localhost:8080',
+    ...overrides
   };
 }

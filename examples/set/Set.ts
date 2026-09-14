@@ -15,6 +15,7 @@ import {
 } from './SetDirector';
 import {
   Card,
+  firstHintCard,
   formatElapsed,
   isSet,
   PublicView,
@@ -26,6 +27,12 @@ const ALL_VIEWS: ViewId[] = ['homeView', 'joinView', 'lobbyView', 'playView'];
 
 const COLORS = ['#c0392b', '#1e8449', '#6c3483'];
 const SOLO_ID = 'solo';
+const CLAIM_FLASH_MS = 500;
+const HINT_AFTER_MS = 60_000;
+
+function claimKey(claim: PublicView['lastClaim']): string {
+  return claim ? `${claim.entityId}:${claim.cards.join(',')}` : '';
+}
 
 function playerLabel(entityId: string, index: number, me: string | null): string {
   if (entityId === SOLO_ID) return 'You';
@@ -79,6 +86,16 @@ class SetManager {
   private endedAt: number | null = null;
   private tick: ReturnType<typeof setInterval> | null = null;
   private flashWrong = false;
+  private displayed: Card[] = [];
+  private flashClaim: Card[] | null = null;
+  private flashTimer: ReturnType<typeof setTimeout> | null = null;
+  private seenClaimKey = '';
+  private stuckSince = 0;
+  private hintCard: Card | null = null;
+  private boardKey = '';
+  private onPlayScreen = false;
+  private locallyHidden = false;
+  private pauseStartedAt: number | null = null;
 
   async initialize(): Promise<void> {
     this.wireControls();
@@ -110,6 +127,8 @@ class SetManager {
       const button = (event.target as HTMLElement).closest<HTMLElement>('[data-card]');
       if (button) this.toggle(Number(button.dataset.card));
     });
+    document.getElementById('hintBtn')?.addEventListener('click', () => this.onHint());
+    document.addEventListener('visibilitychange', () => this.onVisibility());
   }
 
   private startSolo(): void {
@@ -119,13 +138,25 @@ class SetManager {
     this.startedAt = Date.now();
     this.endedAt = null;
     this.selected.clear();
+    this.clearFlash();
+    this.onPlayScreen = true;
+    this.resetStuck();
     this.showView('playView');
-    this.startClock();
+    this.startTick();
     this.render();
   }
 
   private async openSession(isHost: boolean): Promise<void> {
-    const network = new WebRTCNetworkEngine(createNetworkConfig(), DATA_CHANNEL_CONFIG, this.deviceId);
+    const network = new WebRTCNetworkEngine(
+      // Star means the joiner dials the hub and nobody else. Without this a
+      // guest dials every other guest: a mesh's N² connections, and its N² TURN
+      // exposure, under a session that routes as a star anyway. Sunday's four
+      // phones did exactly that, ICE-connected to each other, and then played
+      // diverging boards because claims never reached the host.
+      createNetworkConfig({ dialPolicy: 'host' }),
+      DATA_CHANNEL_CONFIG,
+      this.deviceId
+    );
     this.session = new Session(network, {
       mode: { connectivity: 'star', authority: 'authoritative' },
       deviceId: this.deviceId,
@@ -142,7 +173,9 @@ class SetManager {
         this.attached = true;
         this.director!.attach();
         this.director!.onPublic(() => {
-          if (this.director!.publicView.phase !== 'idle') this.enterPlay();
+          const view = this.director!.publicView;
+          if (view.phase !== 'idle') this.enterPlay();
+          this.maybeFlashClaim(view);
           this.render();
         });
       }
@@ -192,6 +225,7 @@ class SetManager {
 
   private hostBegin(): void {
     try {
+      this.clearFlash();
       if (!this.locked) {
         this.session?.lock();
         this.locked = true;
@@ -212,7 +246,39 @@ class SetManager {
 
   private enterPlay(): void {
     this.showView('playView');
+    if (this.onPlayScreen) return;
+    this.onPlayScreen = true;
     this.selected.clear();
+    this.resetStuck();
+    this.startTick();
+  }
+
+  private maybeFlashClaim(view: PublicView): void {
+    const key = claimKey(view.lastClaim);
+    if (!key || key === this.seenClaimKey) return;
+    this.seenClaimKey = key;
+    if (this.displayed.length === 0 || !view.lastClaim) return;
+    this.beginFlash(view.lastClaim.cards, this.displayed);
+  }
+
+  private beginFlash(cards: Card[], board: Card[]): void {
+    this.flashClaim = cards;
+    this.displayed = board.slice();
+    this.selected.clear();
+    if (this.flashTimer) clearTimeout(this.flashTimer);
+    this.flashTimer = setTimeout(() => {
+      this.flashClaim = null;
+      this.flashTimer = null;
+      this.render();
+    }, CLAIM_FLASH_MS);
+  }
+
+  private clearFlash(): void {
+    if (this.flashTimer) clearTimeout(this.flashTimer);
+    this.flashTimer = null;
+    this.flashClaim = null;
+    this.displayed = [];
+    this.seenClaimKey = '';
   }
 
   private currentView(): PublicView | null {
@@ -226,7 +292,8 @@ class SetManager {
 
   private toggle(card: Card): void {
     const view = this.currentView();
-    if (!view || view.phase !== 'playing') return;
+    if (!view || view.phase !== 'playing' || this.flashClaim) return;
+    if (this.isPaused(view)) return;
     if (!view.board.includes(card)) return;
 
     if (this.selected.has(card)) this.selected.delete(card);
@@ -245,20 +312,27 @@ class SetManager {
         return;
       }
       this.selected.clear();
+      const boardBefore = this.solo ? (this.table?.board.slice() ?? []) : this.displayed.slice();
       if (this.solo) this.table?.claim(SOLO_ID, cards);
       else this.director?.claim(cards);
+      if (this.solo) this.beginFlash(cards, boardBefore);
     }
     this.render();
   }
 
-  private startClock(): void {
+  private startTick(): void {
     if (this.tick) clearInterval(this.tick);
-    this.tick = setInterval(() => this.renderClock(), 100);
+    this.tick = setInterval(() => this.tickUi(), 100);
   }
 
-  private stopClock(): void {
+  private stopTick(): void {
     if (this.tick) clearInterval(this.tick);
     this.tick = null;
+  }
+
+  private tickUi(): void {
+    this.renderClock();
+    this.renderChrome();
   }
 
   private renderClock(): void {
@@ -271,16 +345,19 @@ class SetManager {
     }
     clock.hidden = false;
     if (view.phase === 'over' && this.endedAt === null) this.endedAt = Date.now();
-    const end = this.endedAt ?? Date.now();
+    const now = this.pauseStartedAt ?? Date.now();
+    const end = this.endedAt ?? now;
     clock.textContent = formatElapsed(end - this.startedAt);
-    if (view.phase === 'over') this.stopClock();
+    if (view.phase === 'over') this.stopTick();
   }
 
   private render(): void {
     const view = this.currentView();
+    this.syncPauseClock(!!view && view.phase === 'playing' && this.isPaused(view));
     this.renderLobby(view);
     this.renderClock();
     this.renderPlay(view);
+    this.renderChrome();
   }
 
   private renderLobby(view: PublicView | null): void {
@@ -331,9 +408,15 @@ class SetManager {
     const board = document.getElementById('board');
     if (board) {
       board.classList.toggle('wrong', this.flashWrong);
-      board.innerHTML = view.board.map((card) => {
-        const selected = this.selected.has(card) ? ' selected' : '';
-        return `<button type="button" class="set-slot${selected}" data-card="${card}" aria-label="Card ${card}">${cardSvg(card)}</button>`;
+      const cards = this.flashClaim ? this.displayed : view.board;
+      if (!this.flashClaim) this.displayed = view.board.slice();
+      const flashed = new Set(this.flashClaim ?? []);
+      board.innerHTML = cards.map((card) => {
+        const kind = flashed.has(card) ? ' claimed'
+          : this.selected.has(card) ? ' selected'
+          : this.hintCard === card ? ' hint'
+          : '';
+        return `<button type="button" class="set-slot${kind}" data-card="${card}" aria-label="Card ${card}">${cardSvg(card)}</button>`;
       }).join('');
     }
 
@@ -357,6 +440,78 @@ class SetManager {
     } else {
       if (banner) banner.hidden = true;
       if (again) again.hidden = true;
+    }
+
+    if (view.phase === 'playing' && !this.flashClaim) this.noteBoard(view);
+  }
+
+  private isPaused(view: PublicView | null): boolean {
+    return this.locallyHidden || !!view?.paused;
+  }
+
+  private noteBoard(view: PublicView): void {
+    const key = view.board.join(',');
+    if (key === this.boardKey) return;
+    this.boardKey = key;
+    this.resetStuck();
+  }
+
+  private resetStuck(): void {
+    this.stuckSince = Date.now();
+    this.hintCard = null;
+  }
+
+  private stuckMs(): number {
+    const now = this.pauseStartedAt ?? Date.now();
+    return now - this.stuckSince;
+  }
+
+  private syncPauseClock(paused: boolean): void {
+    if (paused && this.pauseStartedAt === null) {
+      this.pauseStartedAt = Date.now();
+    } else if (!paused && this.pauseStartedAt !== null) {
+      const delta = Date.now() - this.pauseStartedAt;
+      this.startedAt += delta;
+      this.stuckSince += delta;
+      this.pauseStartedAt = null;
+    }
+  }
+
+  private onHint(): void {
+    const view = this.currentView();
+    if (!view || view.phase !== 'playing' || this.isPaused(view) || this.flashClaim) return;
+    this.hintCard = firstHintCard(view.board);
+    this.render();
+  }
+
+  private onVisibility(): void {
+    this.locallyHidden = document.hidden;
+    const view = this.currentView();
+    if (view?.phase === 'playing') {
+      if (this.solo) this.table?.setAway(SOLO_ID, this.locallyHidden);
+      else this.director?.setAway(this.locallyHidden);
+    }
+    this.render();
+  }
+
+  private renderChrome(): void {
+    const view = this.currentView();
+    const playing = view?.phase === 'playing';
+    const paused = playing && this.isPaused(view);
+
+    const overlay = document.getElementById('pauseOverlay');
+    if (overlay) overlay.hidden = !paused;
+    const status = document.getElementById('pauseStatus');
+    if (status) {
+      status.textContent = this.locallyHidden
+        ? 'Paused — return to this tab to keep playing.'
+        : 'Paused — waiting for everyone to come back.';
+    }
+
+    const hintBtn = document.getElementById('hintBtn') as HTMLButtonElement | null;
+    if (hintBtn) {
+      hintBtn.hidden = !(playing && !paused && !this.flashClaim && !this.hintCard
+        && this.stuckMs() >= HINT_AFTER_MS);
     }
   }
 

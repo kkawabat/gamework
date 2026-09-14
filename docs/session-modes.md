@@ -78,6 +78,13 @@ Star is cheaper: N connections instead of N²/2, and only hub↔spoke pairs can
 consume a TURN relay. For 4–8 players on phones the N² TURN exposure bites
 first.
 
+**Star session routing is not star dialing.** `mode.connectivity: 'star'` only
+changes who `Session` will send to. The joiner still dials every peer unless
+the engine is constructed with `dialPolicy: 'host'`. Forgetting that is how a
+Set table ICE-connects guest-to-guest, looks "connected", and then plays two
+boards — claims go to the hub, which the guest never dialled. Poker and Would
+You Rather set the flag; Set does now too.
+
 Mesh buys one thing: **it is the only connectivity where losing the host is
 survivable**, because the remaining peers already hold channels to each other.
 Under star the hub going away disconnects everyone from everyone — and the hub

@@ -255,11 +255,11 @@ class MultiplayerPokerManager {
       const joining = new URLSearchParams(window.location.search).get('room');
       const isHost = !joining;
 
-      const network = new WebRTCNetworkEngine(
-        { ...createNetworkConfig(), dialPolicy: 'host' },
-        DATA_CHANNEL_CONFIG,
-        this.deviceId
-      );
+    const network = new WebRTCNetworkEngine(
+      createNetworkConfig({ dialPolicy: 'host' }),
+      DATA_CHANNEL_CONFIG,
+      this.deviceId
+    );
 
       this.session = new Session(network, {
         mode: { connectivity: 'star', authority: 'authoritative' },

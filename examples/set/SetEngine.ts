@@ -24,6 +24,7 @@ export interface PublicView {
   deckRemaining: number;
   scores: Array<{ entityId: string; cards: number }>;
   lastClaim: { entityId: string; cards: Card[] } | null;
+  paused: boolean;
 }
 
 export interface TableOptions {
@@ -71,6 +72,12 @@ export function findSets(board: Card[]): Array<[number, number, number]> {
   return found;
 }
 
+/** One card from a set on the board, or null if there is none to hint. */
+export function firstHintCard(board: Card[]): Card | null {
+  const found = findSets(board);
+  return found.length ? board[found[0][0]] : null;
+}
+
 export function fullDeck(): Card[] {
   return Array.from({ length: DECK_SIZE }, (_, card) => card);
 }
@@ -99,6 +106,7 @@ export class SetTable {
   scores = new Map<string, number>();
   phase: Phase = 'idle';
   lastClaim: PublicView['lastClaim'] = null;
+  private away = new Set<string>();
 
   private readonly random: () => number;
   private readonly presetDeck: Card[] | null;
@@ -115,28 +123,49 @@ export class SetTable {
     this.scores = new Map(playerIds.map((id) => [id, 0]));
     this.phase = 'playing';
     this.lastClaim = null;
+    this.away.clear();
     this.deal(BOARD_MIN);
     this.ensureSet();
   }
 
   /**
    * Take a set identified by the cards themselves, not by board indices — two
-   * claims in flight would otherwise race over a board that shifted under them.
+   * claims in flight would otherwise race over slots that were just replaced.
+   * Each taken card is swapped in place from the deck so the rest of the grid
+   * does not slide up; leftover holes are dropped only when the deck is empty.
    */
   claim(playerId: string, cards: Card[]): boolean {
-    if (this.phase !== 'playing') return false;
+    if (this.phase !== 'playing' || this.paused) return false;
     if (!this.scores.has(playerId)) return false;
     if (cards.length !== 3 || new Set(cards).size !== 3) return false;
     if (cards.some((card) => !this.board.includes(card))) return false;
     if (!isSet(cards[0], cards[1], cards[2])) return false;
 
-    this.board = this.board.filter((card) => !cards.includes(card));
     this.scores.set(playerId, (this.scores.get(playerId) ?? 0) + 3);
     this.lastClaim = { entityId: playerId, cards: cards.slice() };
-    this.replenish();
+    this.replaceInPlace(cards);
     this.ensureSet();
     this.checkOver();
     return true;
+  }
+
+  /** A player left the tab. The table stays paused until every device is back. */
+  setAway(entityId: string, hidden: boolean): void {
+    if (this.phase !== 'playing') return;
+    if (hidden) this.away.add(entityId);
+    else this.away.delete(entityId);
+  }
+
+  get paused(): boolean {
+    return this.phase === 'playing' && this.away.size > 0;
+  }
+
+  /** Drop away flags for seats that left the table, so a closed tab cannot freeze play forever. */
+  retainAway(playerIds: string[]): void {
+    const living = new Set(playerIds);
+    for (const id of [...this.away]) {
+      if (!living.has(id)) this.away.delete(id);
+    }
   }
 
   view(): PublicView {
@@ -145,7 +174,8 @@ export class SetTable {
       board: this.board.slice(),
       deckRemaining: this.deck.length,
       scores: [...this.scores.entries()].map(([entityId, cards]) => ({ entityId, cards })),
-      lastClaim: this.lastClaim
+      lastClaim: this.lastClaim,
+      paused: this.paused
     };
   }
 
@@ -154,8 +184,19 @@ export class SetTable {
     this.board.push(...this.deck.splice(0, take));
   }
 
-  private replenish(): void {
-    if (this.board.length < BOARD_MIN) this.deal(BOARD_MIN - this.board.length);
+  /** Put the next deck card in each taken slot. Skip a slot only if the deck is empty. */
+  private replaceInPlace(taken: Card[]): void {
+    const claimed = new Set(taken);
+    const next: Card[] = [];
+    for (const card of this.board) {
+      if (!claimed.has(card)) {
+        next.push(card);
+        continue;
+      }
+      const replacement = this.deck.shift();
+      if (replacement !== undefined) next.push(replacement);
+    }
+    this.board = next;
   }
 
   private ensureSet(): void {

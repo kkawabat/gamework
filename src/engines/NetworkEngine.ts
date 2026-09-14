@@ -79,18 +79,35 @@ export abstract class BaseNetworkEngine implements NetworkEngine {
     return Array.from(this.connections.keys());
   }
 
+  /**
+   * Whether we can send. ICE `connected` is not enough — the data channel
+   * opens a moment later — and ICE `disconnected` is not fatal: it often
+   * recovers, and the channel can stay open through the blip. Routing must
+   * follow the channel, or a flap silently drops writes while both sides
+   * still believe they are in the same game.
+   */
   isConnected(peerId: string): boolean {
-    return this.connections.get(peerId)?.state === ConnectionState.CONNECTED;
+    return this.connections.get(peerId)?.dataChannel?.readyState === 'open';
   }
 
   protected notifyMessageHandlers(peerId: string, message: NetworkMessage): void {
     this.messageHandlers.forEach(handler => handler(peerId, message));
   }
 
+  /**
+   * What actually goes into `RTCPeerConnection`. Subclasses override this to
+   * strip non-ICE fields (signaling URL, dial policy) and to swap in a
+   * relay-only policy on retry — the constructor otherwise receives the whole
+   * engine config, which is not an `RTCConfiguration`.
+   */
+  protected peerConnectionConfig(): RTCConfiguration {
+    return this.config;
+  }
+
   protected createPeerConnection(peerId: string): PeerConnection {
     const peerConnection: PeerConnection = {
       id: peerId,
-      connection: new RTCPeerConnection(this.config),
+      connection: new RTCPeerConnection(this.peerConnectionConfig()),
       dataChannel: null,
       fastChannel: null,
       state: ConnectionState.CONNECTING,
@@ -109,12 +126,9 @@ export abstract class BaseNetworkEngine implements NetworkEngine {
       const state = connection.iceConnectionState as ICEConnectionState;
       peerConnection.iceState = state;
       console.log(`[gamework] ICE ${peerConnection.id}: ${state}`);
-      if (state === ICEConnectionState.CONNECTED || state === ICEConnectionState.COMPLETED) {
-        peerConnection.state = ConnectionState.CONNECTED;
-      } else if (state === ICEConnectionState.FAILED || state === ICEConnectionState.DISCONNECTED) {
+      if (state === ICEConnectionState.FAILED) {
         peerConnection.state = ConnectionState.FAILED;
-        // 'disconnected' often recovers on its own, so only report the terminal state.
-        if (state === ICEConnectionState.FAILED) this.peerFailedHandlers.forEach(handler => handler(peerConnection.id));
+        this.peerFailedHandlers.forEach(handler => handler(peerConnection.id));
       }
     };
 

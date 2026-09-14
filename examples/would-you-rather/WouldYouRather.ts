@@ -99,7 +99,7 @@ class WouldYouRatherManager {
       // Star means the joiner dials the hub and nobody else. Without this a
       // guest dials every other guest: a mesh's N² connections, and its N² TURN
       // exposure, under a session that routes as a star anyway.
-      { ...createNetworkConfig(), dialPolicy: 'host' },
+      createNetworkConfig({ dialPolicy: 'host' }),
       DATA_CHANNEL_CONFIG,
       this.deviceId
     );

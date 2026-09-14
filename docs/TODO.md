@@ -61,7 +61,9 @@ What it needs:
   **This is the open design question; decide it before writing code.**
 - `WebRTCNetworkEngine` must be able to dial again. Today `closeSignaling()` is
   a one-way door (see CONTEXT.md), so a reconnecting device needs the hub's
-  socket — which is exactly what `lock()` already preserves under star.
+  socket — which is exactly what `lock()` already preserves under star. A
+  lobby-only relay redial (ICE never connected → one `iceTransportPolicy:
+  'relay'` offer) is not this: it still needs the original signaling socket.
 
 **Mesh cannot support this without more work.** Every peer dropped signaling at
 `lock()`, so nobody can be re-dialled. Star first.

@@ -6,13 +6,15 @@
 
 // Core exports
 export { GameWork } from './core/GameWork';
-export { StateStore, Action } from './core/StateStore';
-export { EventBus, EventHandler, EventMiddleware } from './core/EventBus';
-export { DIContainer, SERVICE_TOKENS } from './core/DIContainer';
-export { 
-  ErrorHandler, 
-  GameError, 
-  ErrorType, 
+export type { StateStore, Action } from './core/StateStore';
+export { GameStateStore } from './core/StateStore';
+export type { EventBus, EventHandler, EventMiddleware } from './core/EventBus';
+export { GameEventBus } from './core/EventBus';
+export type { DIContainer } from './core/DIContainer';
+export { GameDIContainer, SERVICE_TOKENS } from './core/DIContainer';
+export type { ErrorHandler, GameError } from './core/ErrorHandler';
+export {
+  ErrorType,
   ErrorSeverity,
   createGameError,
   createNetworkError,
@@ -22,15 +24,18 @@ export {
 } from './core/ErrorHandler';
 
 // Session exports — devices, entities, roles and channels
-export { Session, SessionTransport, EntityHandle } from './session/Session';
+export { Session, EntityHandle } from './session/Session';
+export type { SessionTransport } from './session/Session';
 export { SELF, resolveChannel, channelMatches, anyMatches } from './session/channels';
 export * from './session/SessionTypes';
 
 // Engine exports
 export { GameEngine } from './engines/GameEngine';
 export { UIEngine } from './engines/UIEngine';
-export { NetworkEngine, BaseNetworkEngine } from './engines/NetworkEngine';
-export { WebRTCNetworkEngine, WebRTCNetworkEngineConfig } from './engines/WebRTCNetworkEngine';
+export type { NetworkEngine } from './engines/NetworkEngine';
+export { BaseNetworkEngine } from './engines/NetworkEngine';
+export { WebRTCNetworkEngine } from './engines/WebRTCNetworkEngine';
+export type { WebRTCNetworkEngineConfig } from './engines/WebRTCNetworkEngine';
 
 // Type exports
 export * from './types/GameTypes';

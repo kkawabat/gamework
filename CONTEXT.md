@@ -249,8 +249,20 @@ Known warts:
 
 A failed peer-to-peer connection looks *identical to success* in the Cloud Run
 logs: both players reach the room, sockets stay healthy, no errors. The server
-cannot observe WebRTC outcomes. Check the browser's ICE state
-(`[gamework] ICE <peer>: ...`), not the server.
+cannot observe WebRTC outcomes. The client beacons ICE to `/log`, which lands
+in the same Cloud Run stdout as `[client-log]`.
+
+Read the candidate types, not just `ice connected`:
+
+- `ice cand →<peer> host udp v4` — LAN. Fine on the same Wi-Fi, useless across NATs.
+- `ice cand →<peer> srflx udp v4` — STUN-discovered. Dies on carrier-grade NAT.
+- `ice cand →<peer> relay udp v4` — TURN allocated. This is the pair Wi-Fi↔cellular needs.
+- `ice gather <peer> complete relay=no` — TURN never allocated; a relay-only redial follows.
+- `ice <peer> pair local=relay remote=relay` — ICE actually selected the relay.
+
+A session that only ever logs `host`/`srflx` then `disconnected` is the Sunday
+failure: ICE had no working pair and never reached the relay. The engine now
+redials once with `iceTransportPolicy: 'relay'` while signaling is still open.
 
 Logs (personal gcloud config — the shell wrapper only exists in interactive shells):
 
@@ -274,7 +286,9 @@ timers freeze — and Tilt Pong then replaces the QR with "This room expired."
 Reconnect, late join and host migration are specified in `docs/TODO.md`, in the
 order they should be taken and with the open design question each one carries.
 
-- No reconnect and no ICE restart. A dropped peer is gone for the session.
+- No reconnect and no ICE restart once signaling is closed. A dropped peer is
+  gone for the session. While the lobby socket is still open, a first ICE
+  attempt that never connects redials once through TURN only.
 - No `turns:` (TLS) relay. Fine for cellular; a network blocking both UDP and
   TCP 3478 would need it, which means DNS and a certificate.
 - `docs/mermaid_tictactoe.md` predates the signaling rewrite and describes

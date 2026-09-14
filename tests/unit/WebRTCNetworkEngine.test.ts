@@ -1,4 +1,4 @@
-import { SIGNALING_PING_INTERVAL_MS, WebRTCNetworkEngine } from '../../src/engines/WebRTCNetworkEngine';
+import { describeCandidate, SIGNALING_PING_INTERVAL_MS, WebRTCNetworkEngine } from '../../src/engines/WebRTCNetworkEngine';
 import { ServerToClient } from '../../shared/signaling-types';
 import {
   RELIABLE_CHANNEL,
@@ -36,16 +36,41 @@ class FakeWebSocket {
 class FakePeerConnection {
   onicecandidate: ((event: unknown) => void) | null = null;
   oniceconnectionstatechange: (() => void) | null = null;
+  onicegatheringstatechange: (() => void) | null = null;
   ondatachannel: ((event: unknown) => void) | null = null;
   iceConnectionState = 'new';
+  iceGatheringState = 'new';
   remoteDescription: unknown = null;
   /** Records what was asked for, so the reliability split can be asserted. */
   channels: Array<{ label: string; config: Record<string, unknown> }> = [];
+  readonly config: RTCConfiguration | undefined;
+  private iceStateListeners: Array<() => void> = [];
   createDataChannel = (label: string, config: Record<string, unknown>) => {
     this.channels.push({ label, config });
     return { label, readyState: 'open', close: () => undefined, send: () => undefined };
   };
+  createOffer = async () => ({ type: 'offer', sdp: 'fake' });
+  createAnswer = async () => ({ type: 'answer', sdp: 'fake' });
+  setLocalDescription = async () => undefined;
+  setRemoteDescription = async (sdp: unknown) => { this.remoteDescription = sdp; };
+  addIceCandidate = async () => undefined;
+  addEventListener = (type: string, handler: () => void) => {
+    if (type === 'iceconnectionstatechange') this.iceStateListeners.push(handler);
+  };
+  fireIce(state: string): void {
+    this.iceConnectionState = state;
+    this.oniceconnectionstatechange?.();
+    this.iceStateListeners.forEach((handler) => handler());
+  }
+  fireGathering(state: string): void {
+    this.iceGatheringState = state;
+    this.onicegatheringstatechange?.();
+  }
   close = () => undefined;
+
+  constructor(config?: RTCConfiguration) {
+    this.config = config;
+  }
 }
 
 let socket: FakeWebSocket;
@@ -65,8 +90,8 @@ describe('WebRTCNetworkEngine signaling', () => {
     };
     peerConnections.length = 0;
     (globalThis as any).RTCPeerConnection = class extends FakePeerConnection {
-      constructor() {
-        super();
+      constructor(config?: RTCConfiguration) {
+        super(config);
         peerConnections.push(this);
       }
     };
@@ -205,6 +230,83 @@ describe('WebRTCNetworkEngine signaling', () => {
 
     expect(joined).toEqual(['player_joiner2']);
   });
+
+  const turnServers = [
+    { urls: ['stun:stun.example'] },
+    { urls: ['turn:8.8.8.8:3478?transport=udp'], username: 'u', credential: 'c' }
+  ];
+
+  const joinWith = async (peers: string[], iceServers = turnServers, hostId = 'host') => {
+    const joining = engine.joinRoom('ABC123');
+    deliver({ type: 'ROOM_JOINED', roomCode: 'ABC123', peers, hostId, iceServers });
+    await joining;
+  };
+
+  it('passes TURN servers into the peer connection without the signaling URL', async () => {
+    await joinWith(['host']);
+
+    expect(peerConnections[0].config?.iceServers).toEqual(turnServers);
+    expect(peerConnections[0].config?.iceTransportPolicy).toBe('all');
+    expect(peerConnections[0].config).not.toHaveProperty('signalingServerUrl');
+    expect(peerConnections[0].config).not.toHaveProperty('dialPolicy');
+  });
+
+  it('dials only the host under star dialPolicy', async () => {
+    engine.destroy();
+    engine = new WebRTCNetworkEngine(
+      { iceServers: [], signalingServerUrl: 'ws://localhost:8080', dialPolicy: 'host' },
+      { ordered: true },
+      'player_joiner'
+    );
+    await engine.initialize();
+
+    await joinWith(['host', 'other']);
+
+    const offers = socket.sent
+      .map((m) => JSON.parse(m))
+      .filter((m) => m.type === 'SIGNAL' && m.data?.kind === 'offer');
+    expect(offers.map((offer) => offer.to)).toEqual(['host']);
+  });
+
+  it('redials relay-only when ICE disconnects before ever connecting', async () => {
+    await joinWith(['host']);
+    expect(peerConnections).toHaveLength(1);
+
+    peerConnections[0].fireIce('disconnected');
+    await flush();
+
+    expect(peerConnections).toHaveLength(2);
+    expect(peerConnections[1].config?.iceTransportPolicy).toBe('relay');
+    const offers = socket.sent
+      .map((m) => JSON.parse(m))
+      .filter((m) => m.type === 'SIGNAL' && m.data?.kind === 'offer');
+    expect(offers).toHaveLength(2);
+  });
+
+  it('retries via relay when gathering finishes with no relay candidate', async () => {
+    await joinWith(['host']);
+    peerConnections[0].fireGathering('complete');
+    await flush();
+
+    expect(peerConnections).toHaveLength(2);
+    expect(peerConnections[1].config?.iceTransportPolicy).toBe('relay');
+  });
+
+  it('does not tear down a working pair to force TURN', async () => {
+    await joinWith(['host']);
+    peerConnections[0].fireIce('connected');
+    await flush();
+    peerConnections[0].fireGathering('complete');
+    await flush();
+    expect(peerConnections).toHaveLength(1);
+  });
+
+  it('does not relay-retry when no TURN server was issued', async () => {
+    await joinWith(['host'], [{ urls: ['stun:stun.example'] }]);
+    peerConnections[0].fireIce('disconnected');
+    await flush();
+    expect(peerConnections).toHaveLength(1);
+  });
 });
 
 describe('WebRTCNetworkEngine data channels', () => {
@@ -221,10 +323,8 @@ describe('WebRTCNetworkEngine data channels', () => {
     // Only this block dials directly, so only it needs the offer half of the
     // handshake; the signaling tests above deliberately let connect() fail.
     (globalThis as any).RTCPeerConnection = class extends FakePeerConnection {
-      createOffer = async () => ({ type: 'offer', sdp: 'fake' });
-      setLocalDescription = async () => undefined;
-      constructor() {
-        super();
+      constructor(config?: RTCConfiguration) {
+        super(config);
         peerConnections.push(this);
       }
     };
@@ -267,5 +367,34 @@ describe('WebRTCNetworkEngine data channels', () => {
 
     expect(connected).toEqual(['peer-1']);
     expect(peer.fastChannel).not.toBeNull();
+  });
+
+  it('still reports isConnected through an ICE disconnect while the channel is open', () => {
+    expect(engine.isConnected('peer-1')).toBe(true);
+    const failed: string[] = [];
+    engine.onPeerFailed((id) => failed.push(id));
+
+    peerConnections[0].fireIce('disconnected');
+
+    expect(engine.isConnected('peer-1')).toBe(true);
+    expect(failed).toEqual([]);
+  });
+});
+
+describe('describeCandidate', () => {
+  it('names host, srflx and relay candidates with protocol and IP version', () => {
+    expect(describeCandidate('candidate:1 1 udp 1 192.168.1.2 9 typ host'))
+      .toBe('host udp v4');
+    expect(describeCandidate('candidate:1 1 udp 1 203.0.113.1 9 typ srflx raddr 192.168.1.2 rport 9'))
+      .toBe('srflx udp v4');
+    expect(describeCandidate('candidate:1 1 udp 1 8.231.224.49 9 typ relay raddr 0.0.0.0 rport 0'))
+      .toBe('relay udp v4');
+    expect(describeCandidate('candidate:1 1 tcp 1 2600:1011::1 9 typ host tcptype active'))
+      .toBe('host tcp v6');
+  });
+
+  it('labels the end-of-gathering null candidate', () => {
+    expect(describeCandidate(null)).toBe('end');
+    expect(describeCandidate({ candidate: '' })).toBe('end');
   });
 });

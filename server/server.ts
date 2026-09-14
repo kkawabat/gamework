@@ -35,13 +35,21 @@ export function buildIceServers(options: {
   if (!host || !secret) return STUN_SERVERS;
 
   const username = `${Math.floor(now / 1000) + TURN_CREDENTIAL_TTL_SECONDS}:${playerId}`;
+  const credential = createHmac('sha1', secret).update(username).digest('base64');
   return [
     ...STUN_SERVERS,
+    // Separate entries so Chrome gathers each transport on its own. Bundling
+    // both URLs on one RTCIceServer is legal but some stacks only try the first,
+    // which is how a phone that blocks UDP 3478 never reached the TCP fallback.
     {
-      // UDP first; the TCP entry is the fallback where UDP is blocked outright.
-      urls: [`turn:${host}:3478?transport=udp`, `turn:${host}:3478?transport=tcp`],
+      urls: [`turn:${host}:3478?transport=udp`],
       username,
-      credential: createHmac('sha1', secret).update(username).digest('base64')
+      credential
+    },
+    {
+      urls: [`turn:${host}:3478?transport=tcp`],
+      username,
+      credential
     }
   ];
 }
