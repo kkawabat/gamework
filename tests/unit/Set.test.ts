@@ -4,6 +4,7 @@ import { FakeNet, FakeTransport } from '../helpers/fake-network';
 import {
   attribute,
   BOARD_MIN,
+  BOARD_STEP,
   DECK_SIZE,
   findSets,
   firstHintCard,
@@ -114,6 +115,23 @@ describe('Set — a table', () => {
     expect(table.claim('solo', [0, 1, 2])).toBe(true);
     expect(table.board.slice(0, 3)).toEqual([12, 13, 14]);
     expect(table.board.slice(3, 3 + rest.length)).toEqual(rest);
+    expect(table.board).toHaveLength(BOARD_MIN);
+  });
+
+  it('collapses the extra row after a claim when the leftover twelve hold a set', () => {
+    const packed = cap(12);
+    const rest = fullDeck().filter((card) => !packed.includes(card));
+    const table = new SetTable({ deck: [...packed, ...rest] });
+    table.start(['solo']);
+    expect(table.board).toHaveLength(BOARD_MIN + BOARD_STEP);
+
+    const [i, j, k] = findSets(table.board)[0];
+    const cards = [table.board[i], table.board[j], table.board[k]];
+    const leftover = table.board.filter((card) => !cards.includes(card));
+    expect(findSets(leftover).length).toBeGreaterThan(0);
+
+    expect(table.claim('solo', cards)).toBe(true);
+    expect(table.board).toEqual(leftover);
     expect(table.board).toHaveLength(BOARD_MIN);
   });
 

@@ -131,8 +131,10 @@ export class SetTable {
   /**
    * Take a set identified by the cards themselves, not by board indices — two
    * claims in flight would otherwise race over slots that were just replaced.
-   * Each taken card is swapped in place from the deck so the rest of the grid
-   * does not slide up; leftover holes are dropped only when the deck is empty.
+   * On a twelve-card board each taken card is swapped in place from the deck
+   * so the rest of the grid does not slide. On a larger board the three cards
+   * are dropped and not replaced, so the extra row collapses once a set is
+   * still on the leftover twelve.
    */
   claim(playerId: string, cards: Card[]): boolean {
     if (this.phase !== 'playing' || this.paused) return false;
@@ -184,19 +186,29 @@ export class SetTable {
     this.board.push(...this.deck.splice(0, take));
   }
 
-  /** Put the next deck card in each taken slot. Skip a slot only if the deck is empty. */
+  /**
+   * On twelve cards, fill each taken slot from the deck so the other nine stay
+   * put. On more than twelve, drop the holes instead — the extra row was only
+   * there because twelve held no set, and it should go away as soon as the
+   * leftover cards do. Refill only if that collapse left fewer than twelve.
+   */
   private replaceInPlace(taken: Card[]): void {
     const claimed = new Set(taken);
+    const extras = this.board.length > BOARD_MIN;
     const next: Card[] = [];
     for (const card of this.board) {
       if (!claimed.has(card)) {
         next.push(card);
         continue;
       }
+      if (extras) continue;
       const replacement = this.deck.shift();
       if (replacement !== undefined) next.push(replacement);
     }
     this.board = next;
+    while (this.board.length < BOARD_MIN && this.deck.length > 0) {
+      this.board.push(this.deck.shift()!);
+    }
   }
 
   private ensureSet(): void {
