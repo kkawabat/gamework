@@ -3,12 +3,29 @@ import { createServer, Server, IncomingMessage, ServerResponse } from 'http';
 import { AddressInfo } from 'net';
 import { createHmac } from 'crypto';
 import { ClientToServer, ServerToClient, IceServerConfig } from '../shared/signaling-types';
+import {
+  DEFAULT_ALLOWED_ORIGINS,
+  SlidingWindowLimiter,
+  clientIp,
+  originAllowed,
+  parseOrigins
+} from './abuse';
 
 interface Room {
   code: string;
   /** The creator. Never reassigned: a star room has no meaning without its hub. */
   hostId: string;
   members: Map<string, WebSocket>;
+}
+
+export interface SignalingOptions {
+  maxRooms?: number;
+  maxMembers?: number;
+  createRoomLimit?: { max: number; windowMs: number };
+  joinRoomLimit?: { max: number; windowMs: number };
+  logLimit?: { max: number; windowMs: number };
+  allowedOrigins?: string[];
+  enforceOrigin?: boolean;
 }
 
 const STUN_SERVERS: IceServerConfig[] = [
@@ -18,6 +35,9 @@ const STUN_SERVERS: IceServerConfig[] = [
 // Long enough that a game started now still has working credentials later; short
 // enough that a leaked pair is worthless by tomorrow.
 const TURN_CREDENTIAL_TTL_SECONDS = 12 * 60 * 60;
+const DEFAULT_MAX_ROOMS = 40;
+const DEFAULT_MAX_MEMBERS = 16;
+const TEN_MINUTES = 10 * 60 * 1000;
 
 /**
  * coturn's `use-auth-secret` mode: the username is an expiry timestamp and the
@@ -61,11 +81,38 @@ export class SignalingServer {
   /** Resolves with the bound port once listening (port 0 picks a free one). */
   readonly ready: Promise<number>;
 
-  constructor(port: number = 8080) {
+  private readonly maxRooms: number;
+  private readonly maxMembers: number;
+  private readonly allowedOrigins: string[];
+  private readonly enforceOrigin: boolean;
+  private readonly createLimiter: SlidingWindowLimiter;
+  private readonly joinLimiter: SlidingWindowLimiter;
+  private readonly logLimiter: SlidingWindowLimiter;
+  private readonly wss: WebSocketServer;
+
+  constructor(port: number = 8080, options: SignalingOptions = {}) {
+    this.maxRooms = options.maxRooms ?? DEFAULT_MAX_ROOMS;
+    this.maxMembers = options.maxMembers ?? DEFAULT_MAX_MEMBERS;
+    this.allowedOrigins = options.allowedOrigins
+      ?? parseOrigins(process.env.ALLOWED_ORIGINS, DEFAULT_ALLOWED_ORIGINS);
+    this.enforceOrigin = options.enforceOrigin ?? Boolean(process.env.K_SERVICE);
+    this.createLimiter = new SlidingWindowLimiter(
+      options.createRoomLimit?.max ?? 20,
+      options.createRoomLimit?.windowMs ?? TEN_MINUTES
+    );
+    this.joinLimiter = new SlidingWindowLimiter(
+      options.joinRoomLimit?.max ?? 40,
+      options.joinRoomLimit?.windowMs ?? TEN_MINUTES
+    );
+    this.logLimiter = new SlidingWindowLimiter(
+      options.logLimit?.max ?? 120,
+      options.logLimit?.windowMs ?? TEN_MINUTES
+    );
+
     const server = createServer((req, res) => {
       if (req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'healthy', rooms: this.rooms.size, clients: this.clients.size }));
+        res.end(JSON.stringify({ status: 'healthy' }));
         return;
       }
       if (req.method === 'POST' && req.url === '/log') {
@@ -76,11 +123,18 @@ export class SignalingServer {
       res.end();
     });
 
-    const wss = new WebSocketServer({ server });
-    wss.on('connection', (ws: WebSocket) => {
+    const wss = new WebSocketServer({
+      server,
+      maxPayload: 64 * 1024,
+      verifyClient: (info: { origin: string }) =>
+        originAllowed(info.origin, this.allowedOrigins, this.enforceOrigin)
+    });
+    this.wss = wss;
+    wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
+      const ip = clientIp(req.headers, req.socket.remoteAddress);
       ws.on('message', (data: Buffer) => {
         try {
-          this.handleMessage(ws, JSON.parse(data.toString()));
+          this.handleMessage(ws, JSON.parse(data.toString()), ip);
         } catch (error) {
           const message = String(error instanceof Error ? error.message : error);
           console.warn(`Signaling error from ${this.clients.get(ws)?.playerId ?? 'unknown client'}: ${message}`);
@@ -102,13 +156,23 @@ export class SignalingServer {
 
   /** Stop listening and release the port. For tests and graceful shutdown. */
   close(): Promise<void> {
-    return new Promise((resolve, reject) =>
-      this.httpServer.close((err) => (err ? reject(err) : resolve())));
+    return new Promise((resolve, reject) => {
+      this.wss.close();
+      this.httpServer.close((err) => (err ? reject(err) : resolve()));
+    });
   }
 
-  private handleMessage(ws: WebSocket, message: ClientToServer): void {
+  private handleMessage(ws: WebSocket, message: ClientToServer, ip: string): void {
     switch (message.type) {
       case 'CREATE_ROOM': {
+        if (!this.createLimiter.allow(`create:${ip}`)) {
+          this.send(ws, { type: 'ERROR', message: 'Too many rooms from this network' });
+          return;
+        }
+        if (this.rooms.size >= this.maxRooms) {
+          this.send(ws, { type: 'ERROR', message: 'Server is full' });
+          return;
+        }
         const code = this.newRoomCode();
         const room: Room = { code, hostId: message.playerId, members: new Map([[message.playerId, ws]]) };
         this.rooms.set(code, room);
@@ -118,8 +182,16 @@ export class SignalingServer {
         break;
       }
       case 'JOIN_ROOM': {
+        if (!this.joinLimiter.allow(`join:${ip}`)) {
+          this.send(ws, { type: 'ERROR', message: 'Too many joins from this network' });
+          return;
+        }
         const room = this.rooms.get(message.roomCode);
         if (!room) throw new Error(`Room ${message.roomCode} not found`);
+        if (room.members.size >= this.maxMembers && !room.members.has(message.playerId)) {
+          this.send(ws, { type: 'ERROR', message: 'Room is full' });
+          return;
+        }
         const peers = [...room.members.keys()];
         room.members.set(message.playerId, ws);
         this.clients.set(ws, { playerId: message.playerId, room });
@@ -180,12 +252,21 @@ export class SignalingServer {
     }
   }
 
-  // Temporary diagnostic sink. Browsers POST their WebRTC/socket-close trace
-  // here over HTTP — a separate channel from the signaling socket, so it still
-  // arrives when that socket is what died — and it lands in the Cloud Run logs.
-  // Capped and unauthenticated: fine as a probe, wants a rate limit before it
-  // stays. Remove once the ~1.8s socket deaths are understood.
+  // Diagnostic ICE beacon. Unauthenticated on purpose (the socket may already
+  // be dead), but origin-checked and rate-limited so it cannot be a log cannon.
   private handleClientLog(req: IncomingMessage, res: ServerResponse): void {
+    const origin = Array.isArray(req.headers.origin) ? req.headers.origin[0] : req.headers.origin;
+    if (!originAllowed(origin, this.allowedOrigins, this.enforceOrigin)) {
+      res.writeHead(403);
+      res.end();
+      return;
+    }
+    const ip = clientIp(req.headers, req.socket.remoteAddress);
+    if (!this.logLimiter.allow(`log:${ip}`)) {
+      res.writeHead(429, { 'Retry-After': '60', ...this.corsHeaders(origin) });
+      res.end();
+      return;
+    }
     let body = '';
     req.on('data', (chunk) => {
       body += chunk;
@@ -193,10 +274,17 @@ export class SignalingServer {
     });
     req.on('end', () => {
       if (body) console.log(`[client-log] ${body}`);
-      res.writeHead(204, { 'Access-Control-Allow-Origin': '*' });
+      res.writeHead(204, this.corsHeaders(origin));
       res.end();
     });
     req.on('error', () => undefined); // best-effort; a dropped probe is not an error
+  }
+
+  private corsHeaders(origin: string | undefined): Record<string, string> {
+    if (origin && this.allowedOrigins.includes(origin)) {
+      return { 'Access-Control-Allow-Origin': origin };
+    }
+    return {};
   }
 
   private iceServers(playerId: string): IceServerConfig[] {

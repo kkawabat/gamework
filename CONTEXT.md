@@ -275,6 +275,13 @@ gcloud --configuration=personal logging read \
 A WebSocket appears there as a single `GET 101` whose latency is the connection's
 whole lifetime, not a short request.
 
+The GitHub repo is public. That does **not** leak `TURN_SECRET` or WIF (Secret
+Manager / GitHub secrets). The signaling `wss://` URL is already in the Pages
+bundle, so obscurity is not an access control. Room create/join and `POST /log`
+are rate-limited per IP, concurrent rooms are capped, and on Cloud Run the
+socket must present an Origin of `games.kankawabata.com` or `kkawabat.github.io`.
+`/health` returns only `{ status }` so it cannot be used to watch load.
+
 An idle lobby is fatal: after `ROOM_CREATED` the host sends nothing until a
 joiner arrives, and a NAT or backgrounded tab will drop that silent socket
 (we have seen ~48s, `1006`). The client pings every 20s while the socket is
